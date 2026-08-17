@@ -87,17 +87,17 @@ export function renderShelf(containerId, items) {
 
 // ─── SEARCH RESULTS ──────────────────────────────────────────────────────────
 
-export function renderSearchResults(items, libraryByTmdbKey) {
+export function renderSearchResults(items, libraryMap) {
   return items.map(item => {
     const key = `${item.media_type}_${item.id}`;
-    const already = libraryByTmdbKey.has(key);
+    const libId = libraryMap.get(key);
     return `
       <div class="poster-card">
         <div class="poster-card__img" style="background-image:url('${posterUrl(item.poster_path)}')">
           <span class="badge ${mediaBadgeClass(item)}">${mediaLabel(item)}</span>
           <div class="poster-card__overlay">
-            ${already
-              ? `<span class="btn--icon" style="text-align:center;opacity:.85;">✓ Già in lista</span>`
+            ${libId
+              ? `<button class="btn--icon open-detail" data-id="${libId}">✓ Apri scheda / vota</button>`
               : `
                 <button class="btn--icon action-add" data-id="${item.id}" data-type="${item.media_type}" data-status="watchlist">
                   ♡ Watchlist

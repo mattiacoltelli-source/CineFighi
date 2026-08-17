@@ -183,8 +183,8 @@ async function doSearch(q) {
     }
 
     empty.classList.add("hidden");
-    const libraryKeys = new Set(db.map(x => `${x.media_type}_${x.tmdb_id}`));
-    res.innerHTML = renderSearchResults(normalized, libraryKeys);
+    const libraryMap = new Map(db.map(x => [`${x.media_type}_${x.tmdb_id}`, x.id]));
+    res.innerHTML = renderSearchResults(normalized, libraryMap);
     res.dataset.cache = JSON.stringify(normalized);
   } catch (e) {
     console.error(e);
