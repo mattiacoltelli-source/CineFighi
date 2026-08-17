@@ -4,20 +4,20 @@
 
 import {
   uniqueKey, average, escapeHtml, decadeOf
-} from "./cine-core.js?v=3";
+} from "./cine-core.js?v=4";
 import {
   getCurrentUser, setCurrentUser, MAX_USERS,
   fetchUsers, addUser,
   fetchLibrary, addTitle, updateTitleStatus, removeTitle,
   upsertVote, removeVote
-} from "./storage.js?v=3";
-import { tmdbFetchDetail, tmdbSearch, tmdbFetchDiscoverLevel, buildFallbackQueries } from "./tmdb.js?v=3";
+} from "./storage.js?v=4";
+import { tmdbFetchDetail, tmdbSearch, tmdbFetchDiscoverLevel, buildFallbackQueries } from "./tmdb.js?v=4";
 import {
   showToast, avatarHtml, initScreens, switchScreen,
   renderShelf, renderSearchResults, renderLibraryList, renderGenreFilters,
   renderGenreBars, renderRanking, renderTonightList,
   renderDetailFacts, renderVotesList
-} from "./ui.js?v=3";
+} from "./ui.js?v=4";
 
 let currentUser = null;
 let users = [];
@@ -216,17 +216,19 @@ async function handleAddFromSearch(tmdbId, type, status) {
 
 let pendingQuickAdd = null;
 
-function openQuickAdd(tmdbId, type) {
-  const cache = JSON.parse(document.getElementById("results").dataset.cache || "[]");
-  const item = cache.find(x => String(x.id) === String(tmdbId) && x.media_type === type);
-  if (!item) return;
-
+function showQuickAddModal(item) {
   pendingQuickAdd = item;
   document.getElementById("quickAddPoster").style.backgroundImage = item.poster_path
     ? `url('https://image.tmdb.org/t/p/w500${item.poster_path}')` : "";
   document.getElementById("quickAddTitle").textContent = item.title;
   document.getElementById("quickAddMeta").textContent = `${item.year} · ${item.media_type === "movie" ? "Film" : "Serie TV"}`;
   document.getElementById("quickAddOverlay").classList.remove("hidden");
+}
+
+function openQuickAddFromTonight(tmdbId, type) {
+  const cache = JSON.parse(document.getElementById("tonightResult").dataset.cache || "[]");
+  const item = cache.find(x => String(x.id) === String(tmdbId) && x.media_type === type);
+  if (item) showQuickAddModal(item);
 }
 
 function closeQuickAdd() {
@@ -597,23 +599,6 @@ async function handleRemove() {
   switchScreen("home");
 }
 
-// Apre il dettaglio partendo da un titolo consigliato in "Stasera" (non ancora in libreria)
-async function openTonightDetail(tmdbId, type) {
-  const area = document.getElementById("tonightResult");
-  const cache = JSON.parse(area.dataset.cache || "[]");
-  const item = cache.find(x => String(x.id) === String(tmdbId) && x.media_type === type);
-  if (!item) return;
-
-  const res = await addTitle(item, "watchlist", currentUser);
-  if (!res.ok && res.reason !== "duplicate") {
-    showToast("Errore, riprova", "error");
-    return;
-  }
-  await reloadLibrary();
-  const saved = db.find(x => x.tmdb_id === item.id && x.media_type === type);
-  if (saved) openDetail(saved.id);
-}
-
 // ─── EVENTI ──────────────────────────────────────────────────────────────────
 
 function bindGlobalEvents() {
@@ -650,8 +635,8 @@ function bindGlobalEvents() {
     });
   });
   document.getElementById("results").addEventListener("click", e => {
-    const quickAdd = e.target.closest(".open-quick-add");
-    if (quickAdd) { openQuickAdd(quickAdd.dataset.id, quickAdd.dataset.type); return; }
+    const btn = e.target.closest(".action-add");
+    if (btn) { handleAddFromSearch(btn.dataset.id, btn.dataset.type, btn.dataset.status); return; }
   });
 
   document.getElementById("quickAddClose").addEventListener("click", closeQuickAdd);
@@ -681,7 +666,7 @@ function bindGlobalEvents() {
   document.getElementById("tonightBtn").addEventListener("click", runTonight);
   document.getElementById("tonightResult").addEventListener("click", e => {
     const card = e.target.closest(".open-tonight-detail");
-    if (card) openTonightDetail(card.dataset.id, card.dataset.type);
+    if (card) openQuickAddFromTonight(card.dataset.id, card.dataset.type);
   });
 
   document.getElementById("detailBackBtn").addEventListener("click", () => switchScreen("home"));

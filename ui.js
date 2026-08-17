@@ -5,7 +5,7 @@
 import {
   escapeHtml, mediaLabel, mediaBadgeClass, posterUrl, uniqueKey,
   average, voteCount, rawNumberToFixed
-} from "./cine-core.js?v=3";
+} from "./cine-core.js?v=4";
 
 // ─── TOAST ───────────────────────────────────────────────────────────────────
 
@@ -93,11 +93,21 @@ export function renderSearchResults(items, libraryMap) {
     const libId = libraryMap.get(key);
     return `
       <div class="poster-card">
-        <div class="poster-card__img ${libId ? "open-detail" : "open-quick-add"}"
-             data-id="${libId || item.id}" data-type="${item.media_type}"
+        <div class="poster-card__img ${libId ? "open-detail" : ""}" data-id="${libId || ""}"
              style="background-image:url('${posterUrl(item.poster_path)}')">
           <span class="badge ${mediaBadgeClass(item)}">${mediaLabel(item)}</span>
-          ${libId ? `<span class="poster-card__tag">✓ Già in libreria</span>` : ""}
+          ${libId
+            ? `<span class="poster-card__tag">✓ Già in libreria · tocca per votare</span>`
+            : `
+              <div class="poster-card__actions">
+                <button class="poster-btn poster-btn--watch action-add" data-id="${item.id}" data-type="${item.media_type}" data-status="watchlist">
+                  ♡ Watchlist
+                </button>
+                <button class="poster-btn poster-btn--seen action-add" data-id="${item.id}" data-type="${item.media_type}" data-status="seen">
+                  ✓ Già visto
+                </button>
+              </div>
+            `}
         </div>
         <div class="poster-card__info">
           <div class="poster-card__title">${escapeHtml(item.title)}</div>
