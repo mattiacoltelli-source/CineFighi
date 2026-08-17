@@ -153,11 +153,12 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .poster-card { background: var(--surface); border:1px solid var(--border); border-radius: var(--radius-lg); overflow:hidden; }
 .poster-card__img { aspect-ratio:2/3; background: var(--surface2) center/cover no-repeat; position:relative; }
 .poster-card__overlay {
-  position:absolute; inset:0; background: linear-gradient(to top, rgba(0,0,0,.92), rgba(0,0,0,.1) 50%);
-  display:flex; flex-direction:column; justify-content:flex-end; gap:6px; padding:10px;
+  position:absolute; left:0; right:0; bottom:0; padding:8px;
+  display:flex; flex-direction:column; gap:6px;
+  background: linear-gradient(to top, rgba(0,0,0,.96) 55%, transparent);
 }
 .poster-card__overlay .btn--icon, .poster-card__overlay span.btn--icon {
-  background: rgba(255,255,255,.12); color:#fff; border:1px solid rgba(255,255,255,.2); padding:8px 10px;
+  background: rgba(255,255,255,.14); color:#fff; border:1px solid rgba(255,255,255,.22); padding:7px 10px;
   border-radius: var(--radius-sm); font-size:12px; font-weight:700; text-align:center;
 }
 .poster-card__info { padding:12px; }
