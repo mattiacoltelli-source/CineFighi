@@ -4,20 +4,20 @@
 
 import {
   uniqueKey, average, escapeHtml, decadeOf
-} from "./cine-core.js?v=4";
+} from "./cine-core.js?v=5";
 import {
   getCurrentUser, setCurrentUser, MAX_USERS,
   fetchUsers, addUser,
   fetchLibrary, addTitle, updateTitleStatus, removeTitle,
   upsertVote, removeVote
-} from "./storage.js?v=4";
-import { tmdbFetchDetail, tmdbSearch, tmdbFetchDiscoverLevel, buildFallbackQueries } from "./tmdb.js?v=4";
+} from "./storage.js?v=5";
+import { tmdbFetchDetail, tmdbSearch, tmdbFetchDiscoverLevel, buildFallbackQueries } from "./tmdb.js?v=5";
 import {
   showToast, avatarHtml, initScreens, switchScreen,
   renderShelf, renderSearchResults, renderLibraryList, renderGenreFilters,
   renderGenreBars, renderRanking, renderTonightList,
   renderDetailFacts, renderVotesList
-} from "./ui.js?v=4";
+} from "./ui.js?v=5";
 
 let currentUser = null;
 let users = [];
@@ -238,9 +238,19 @@ function closeQuickAdd() {
 
 async function confirmQuickAdd(status) {
   if (!pendingQuickAdd) return;
-  const { id, media_type } = pendingQuickAdd;
+  const item = pendingQuickAdd;
   closeQuickAdd();
-  await handleAddFromSearch(id, media_type, status);
+
+  const fullItem = await tmdbFetchDetail(item.media_type, item.id).catch(() => item);
+  const res = await addTitle(fullItem, status, currentUser);
+
+  if (!res.ok) {
+    showToast(res.reason === "duplicate" ? "Già in libreria" : "Errore, riprova", "error");
+    return;
+  }
+  showToast(`${fullItem.title} aggiunto`, "success");
+  await reloadLibrary();
+  openDetail(res.title.id);
 }
 
 // ─── LIBRERIA (raggiunta solo dai "Vedi tutto" della home) ───────────────────

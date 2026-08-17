@@ -171,6 +171,7 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .poster-btn--watch { background: rgba(17,24,32,.92); color:#dbe6f0; border-color: rgba(77,163,255,.55); }
 .poster-btn--seen { background: rgba(45,217,163,.94); color:#04140f; border-color: rgba(45,217,163,.9); }
 .poster-btn:active { transform: scale(.96); }
+.poster-btn--big { min-height:52px; font-size:15px; border-radius: var(--radius-md); }
 
 .quick-add {
   position:fixed; inset:0; background: rgba(0,0,0,.7); z-index:300;
