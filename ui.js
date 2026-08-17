@@ -5,7 +5,7 @@
 import {
   escapeHtml, mediaLabel, mediaBadgeClass, posterUrl, uniqueKey,
   average, voteCount, rawNumberToFixed
-} from "./cine-core.js?v=5";
+} from "./cine-core.js?v=6";
 
 // ─── TOAST ───────────────────────────────────────────────────────────────────
 
@@ -222,15 +222,24 @@ export function renderTonightList(entries) {
     return `<p class="tonight__hint">Vota qualche titolo prima: mi serve per capire i tuoi gusti.</p>`;
   }
   return `
-    <div class="tonight-list">
+    <div class="results-grid">
       ${entries.map(({ item, affinity, reasons }) => `
-        <div class="tonight-card open-tonight-detail" data-id="${item.id}" data-type="${item.media_type}">
-          <div class="tonight-card__poster" style="background-image:url('${posterUrl(item.poster_path)}')">
-            <div class="tonight-card__affinity">${affinity}%</div>
+        <div class="poster-card">
+          <div class="poster-card__img" style="background-image:url('${posterUrl(item.poster_path)}')">
+            <span class="badge ${mediaBadgeClass(item)}">${mediaLabel(item)}</span>
+            <span class="tonight-card__affinity">${affinity}%</span>
+            <div class="poster-card__actions">
+              <button class="poster-btn poster-btn--watch action-add-tonight" data-id="${item.id}" data-type="${item.media_type}" data-status="watchlist">
+                ♡ Watchlist
+              </button>
+              <button class="poster-btn poster-btn--seen action-add-tonight" data-id="${item.id}" data-type="${item.media_type}" data-status="seen">
+                ✓ Già visto
+              </button>
+            </div>
           </div>
-          <div class="tonight-card__body">
-            <div class="tonight-card__title">${escapeHtml(item.title)}</div>
-            <div class="tonight-card__meta">${item.year} · ${mediaLabel(item)} · ★ ${rawNumberToFixed(item.vote_average, 1)} TMDB</div>
+          <div class="poster-card__info">
+            <div class="poster-card__title">${escapeHtml(item.title)}</div>
+            <div class="poster-card__meta">${item.year} · ${mediaLabel(item)} · ★ ${rawNumberToFixed(item.vote_average, 1)} TMDB</div>
             <div class="tonight-card__reason">
               ${reasons.length ? `🎯 ${escapeHtml(reasons.join(" · "))}` : "🎯 Consigliato in base ai tuoi gusti"}
             </div>

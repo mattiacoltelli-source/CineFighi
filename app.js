@@ -4,20 +4,20 @@
 
 import {
   uniqueKey, average, escapeHtml, decadeOf
-} from "./cine-core.js?v=5";
+} from "./cine-core.js?v=6";
 import {
   getCurrentUser, setCurrentUser, MAX_USERS,
   fetchUsers, addUser,
   fetchLibrary, addTitle, updateTitleStatus, removeTitle,
   upsertVote, removeVote
-} from "./storage.js?v=5";
-import { tmdbFetchDetail, tmdbSearch, tmdbFetchDiscoverLevel, buildFallbackQueries } from "./tmdb.js?v=5";
+} from "./storage.js?v=6";
+import { tmdbFetchDetail, tmdbSearch, tmdbFetchDiscoverLevel, buildFallbackQueries } from "./tmdb.js?v=6";
 import {
   showToast, avatarHtml, initScreens, switchScreen,
   renderShelf, renderSearchResults, renderLibraryList, renderGenreFilters,
   renderGenreBars, renderRanking, renderTonightList,
   renderDetailFacts, renderVotesList
-} from "./ui.js?v=5";
+} from "./ui.js?v=6";
 
 let currentUser = null;
 let users = [];
@@ -214,34 +214,12 @@ async function handleAddFromSearch(tmdbId, type, status) {
 
 // ─── CONFERMA AGGIUNTA (si apre toccando la locandina, prima di aggiungere) ──
 
-let pendingQuickAdd = null;
-
-function showQuickAddModal(item) {
-  pendingQuickAdd = item;
-  document.getElementById("quickAddPoster").style.backgroundImage = item.poster_path
-    ? `url('https://image.tmdb.org/t/p/w500${item.poster_path}')` : "";
-  document.getElementById("quickAddTitle").textContent = item.title;
-  document.getElementById("quickAddMeta").textContent = `${item.year} · ${item.media_type === "movie" ? "Film" : "Serie TV"}`;
-  document.getElementById("quickAddOverlay").classList.remove("hidden");
-}
-
-function openQuickAddFromTonight(tmdbId, type) {
+async function handleAddFromTonight(tmdbId, type, status) {
   const cache = JSON.parse(document.getElementById("tonightResult").dataset.cache || "[]");
   const item = cache.find(x => String(x.id) === String(tmdbId) && x.media_type === type);
-  if (item) showQuickAddModal(item);
-}
+  if (!item) return;
 
-function closeQuickAdd() {
-  pendingQuickAdd = null;
-  document.getElementById("quickAddOverlay").classList.add("hidden");
-}
-
-async function confirmQuickAdd(status) {
-  if (!pendingQuickAdd) return;
-  const item = pendingQuickAdd;
-  closeQuickAdd();
-
-  const fullItem = await tmdbFetchDetail(item.media_type, item.id).catch(() => item);
+  const fullItem = await tmdbFetchDetail(type, tmdbId).catch(() => item);
   const res = await addTitle(fullItem, status, currentUser);
 
   if (!res.ok) {
@@ -649,13 +627,6 @@ function bindGlobalEvents() {
     if (btn) { handleAddFromSearch(btn.dataset.id, btn.dataset.type, btn.dataset.status); return; }
   });
 
-  document.getElementById("quickAddClose").addEventListener("click", closeQuickAdd);
-  document.getElementById("quickAddOverlay").addEventListener("click", e => {
-    if (e.target.id === "quickAddOverlay") closeQuickAdd();
-  });
-  document.getElementById("quickAddWatchlistBtn").addEventListener("click", () => confirmQuickAdd("watchlist"));
-  document.getElementById("quickAddSeenBtn").addEventListener("click", () => confirmQuickAdd("seen"));
-
   document.body.addEventListener("click", e => {
     const card = e.target.closest(".open-detail");
     if (card) openDetail(card.dataset.id);
@@ -675,8 +646,8 @@ function bindGlobalEvents() {
 
   document.getElementById("tonightBtn").addEventListener("click", runTonight);
   document.getElementById("tonightResult").addEventListener("click", e => {
-    const card = e.target.closest(".open-tonight-detail");
-    if (card) openQuickAddFromTonight(card.dataset.id, card.dataset.type);
+    const btn = e.target.closest(".action-add-tonight");
+    if (btn) handleAddFromTonight(btn.dataset.id, btn.dataset.type, btn.dataset.status);
   });
 
   document.getElementById("detailBackBtn").addEventListener("click", () => switchScreen("home"));

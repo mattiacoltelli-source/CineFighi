@@ -171,23 +171,7 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .poster-btn--watch { background: rgba(17,24,32,.92); color:#dbe6f0; border-color: rgba(77,163,255,.55); }
 .poster-btn--seen { background: rgba(45,217,163,.94); color:#04140f; border-color: rgba(45,217,163,.9); }
 .poster-btn:active { transform: scale(.96); }
-.poster-btn--big { min-height:52px; font-size:15px; border-radius: var(--radius-md); }
 
-.quick-add {
-  position:fixed; inset:0; background: rgba(0,0,0,.7); z-index:300;
-  display:flex; align-items:center; justify-content:center; padding:24px;
-}
-.quick-add__card {
-  width:100%; max-width:340px; background: var(--surface); border:1px solid var(--border);
-  border-radius: var(--radius-xl); padding:20px; position:relative; text-align:center;
-}
-.quick-add__poster {
-  width:120px; height:180px; margin:0 auto 14px; border-radius: var(--radius-md);
-  background: var(--surface2) center/cover no-repeat; border:1px solid var(--border);
-}
-.quick-add__title { font-family: var(--font-display); font-weight:800; font-size:17px; margin-bottom:4px; }
-.quick-add__meta { font-size:13px; color: var(--text3); margin-bottom:18px; }
-.quick-add__actions { display:flex; flex-direction:column; gap:10px; }
 .poster-card__info { padding:12px; }
 .poster-card__title { font-family: var(--font-display); font-size:14px; font-weight:700; line-height:1.2;
   display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; min-height:32px; }
@@ -262,10 +246,12 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .tonight-list { display:flex; flex-direction:column; gap:12px; }
 .tonight-card { display:grid; grid-template-columns:72px 1fr; gap:14px; background: var(--surface); border:1px solid var(--border);
   border-radius: var(--radius-lg); overflow:hidden; cursor:pointer; }
-.tonight-card__poster { width:72px; min-height:108px; background: var(--surface2) center/cover no-repeat; border-right:1px solid var(--border); position:relative; }
-.tonight-card__affinity { position:absolute; bottom:6px; left:50%; transform:translateX(-50%); background: rgba(0,0,0,.75);
+.tonight-card__affinity {
+  position:absolute; top:8px; right:8px; background: rgba(0,0,0,.75);
   color: var(--acc2); font-family: var(--font-display); font-size:11px; font-weight:800; padding:3px 7px;
-  border-radius: var(--radius-pill); white-space:nowrap; border:1px solid rgba(45,217,163,.3); }
+  border-radius: var(--radius-pill); white-space:nowrap; border:1px solid rgba(45,217,163,.3); z-index:2;
+}
+.tonight-card__reason { font-size:12px; color: var(--text2); margin-top:6px; line-height:1.4; }
 .tonight-card__body { padding:12px 14px 12px 0; }
 .tonight-card__title { font-family: var(--font-display); font-size:15px; font-weight:700; }
 .tonight-card__meta { font-size:12px; color: var(--text3); margin:4px 0 6px; }
