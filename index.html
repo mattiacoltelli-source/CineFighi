@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>CineFighi</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#080c12">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- ─── SELEZIONE UTENTE (schermata "chi sei") ─────────────────────────── -->
+  <div id="userPickerOverlay" class="user-picker hidden">
+    <div class="user-picker__card">
+      <button id="userPickerClose" class="user-picker__close hidden">✕</button>
+      <div class="user-picker__icon">🎬</div>
+      <h1 class="user-picker__title">CineFighi</h1>
+      <p class="user-picker__sub">Chi sei tu?</p>
+
+      <div id="userPickerList" class="user-picker__list"></div>
+
+      <p id="userPickerFullNote" class="user-picker__note hidden">
+        Gruppo al completo (15/15). Seleziona un nome esistente.
+      </p>
+
+      <div id="userPickerAddRow" class="user-picker__add-row">
+        <div class="user-picker__divider"><span>oppure</span></div>
+        <div class="user-picker__add">
+          <input id="userPickerInput" type="text" placeholder="Scrivi il tuo nome" maxlength="24" />
+          <button id="userPickerAddBtn" class="btn">Entra</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── APP ─────────────────────────────────────────────────────────────── -->
+  <div id="app" class="app hidden">
+
+    <div class="topbar">
+      <div>
+        <div class="topbar__title">CineFighi</div>
+        <div class="topbar__sub">Film e serie TV, insieme</div>
+      </div>
+      <button id="userChip" class="user-chip"></button>
+    </div>
+
+    <!-- HOME -->
+    <section id="screen-home">
+      <div class="search-box">
+        <div class="search-row">
+          <input id="searchInput" type="text" placeholder="Cerca film o serie…" />
+        </div>
+        <div class="tabs">
+          <button class="tab active" data-type="multi">Tutto</button>
+          <button class="tab" data-type="movie">Film</button>
+          <button class="tab" data-type="tv">Serie TV</button>
+        </div>
+      </div>
+
+      <div id="resultsSection" class="section hidden">
+        <h2 class="section__title">Risultati</h2>
+        <div id="results" class="results-grid"></div>
+        <div id="resultsEmpty" class="empty-state">Nessun risultato.</div>
+      </div>
+
+      <div class="section">
+        <div class="section__header">
+          <h2 class="section__title">Watchlist</h2>
+          <span id="openWatchAll" class="see-all">Vedi tutto →</span>
+        </div>
+        <div id="watchShelf" class="shelf"></div>
+        <div id="watchShelfEmpty" class="empty-state">La watchlist del gruppo è vuota.</div>
+      </div>
+
+      <div class="section">
+        <div class="section__header">
+          <h2 class="section__title">🎬 Ultimi film visti</h2>
+          <span id="openSeenMovies" class="see-all">Vedi tutto →</span>
+        </div>
+        <div id="seenMovieShelf" class="shelf"></div>
+        <div id="seenMovieShelfEmpty" class="empty-state">Nessun film segnato come visto.</div>
+      </div>
+
+      <div class="section">
+        <div class="section__header">
+          <h2 class="section__title">📺 Ultime serie viste</h2>
+          <span id="openSeenSeries" class="see-all">Vedi tutto →</span>
+        </div>
+        <div id="seenSeriesShelf" class="shelf"></div>
+        <div id="seenSeriesShelfEmpty" class="empty-state">Nessuna serie segnata come vista.</div>
+      </div>
+    </section>
+
+    <!-- LIBRERIA (si apre solo dai "Vedi tutto" della home) -->
+    <section id="screen-library" class="hidden">
+      <button id="libraryBackBtn" class="detail-back-btn">← Torna alla home</button>
+      <h2 id="libraryTitle" class="section__title" style="margin-bottom:14px;">Libreria</h2>
+      <div class="filter-bar">
+        <button class="filter-pill active" data-filter="all">Tutti</button>
+        <button class="filter-pill" data-filter="movie">Film</button>
+        <button class="filter-pill" data-filter="tv">Serie TV</button>
+      </div>
+      <div id="libraryGenreFilters" class="filter-bar hidden"></div>
+      <div id="libraryList" class="list"></div>
+      <div id="libraryEmpty" class="empty-state hidden">Nessun titolo con questo filtro.</div>
+    </section>
+
+    <!-- STATISTICHE -->
+    <section id="screen-stats" class="hidden">
+      <div class="stats-toggle">
+        <button class="stats-toggle-btn active" data-mode="group">Gruppo</button>
+        <button class="stats-toggle-btn" data-mode="me">Io</button>
+      </div>
+
+      <div class="section">
+        <div class="taste-block">
+          <div class="taste-block__title">Generi più votati</div>
+          <div id="genreBars"></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+          <h3 class="section__title" style="margin:0;">🏆 Classifica</h3>
+          <span id="rankingCountBadge" class="count-badge">0</span>
+        </div>
+        <div id="rankingPodium" class="podium-grid"></div>
+        <div id="rankingList" class="ranking-list"></div>
+      </div>
+    </section>
+
+    <!-- STASERA -->
+    <section id="screen-tonight" class="hidden">
+      <h2 class="section__title" style="margin-bottom:6px;">Stasera cosa guardo?</h2>
+      <p id="tonightIntro" class="tonight__intro">Consigli basati sui tuoi voti.</p>
+      <button id="tonightBtn" class="tonight-main-btn">✨ Dammi 5 consigli</button>
+      <div id="tonightResult" class="tonight-result">
+        <p class="tonight__hint">Premi il pulsante per ricevere dei consigli.</p>
+      </div>
+    </section>
+
+    <!-- DETTAGLIO -->
+    <section id="screen-detail" class="hidden">
+      <button id="detailBackBtn" class="detail-back-btn">← Indietro</button>
+
+      <div class="detail-top">
+        <div id="detailPoster" class="detail-poster"></div>
+        <div>
+          <div id="detailTitle" class="detail-title">Titolo</div>
+          <div class="detail-year-type">
+            <span id="detailYear"></span>
+            <span id="detailType" class="detail-type-badge"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="detail-body">
+        <div class="detail-card">
+          <div class="detail-card__title">Trama</div>
+          <div id="detailOverview" class="detail-overview"></div>
+        </div>
+
+        <div class="detail-card">
+          <div class="detail-card__title">Dati</div>
+          <div id="detailFacts" class="detail-facts"></div>
+        </div>
+
+        <div class="detail-card">
+          <div class="detail-card__title">Il tuo voto</div>
+          <div class="vote-slider-row">
+            <input id="detailVoteSlider" type="range" min="0" max="10" step="0.5" value="7" />
+            <span id="detailVoteValue" class="vote-slider-value">7.0</span>
+          </div>
+          <textarea id="detailCommentInput" placeholder="Un commento? (facoltativo)"></textarea>
+          <div class="detail-actions-row">
+            <button id="detailSaveVoteBtn" class="btn btn--ok">Salva voto</button>
+            <button id="detailClearVoteBtn" class="btn btn--ghost hidden">Rimuovi voto</button>
+          </div>
+        </div>
+
+        <div class="detail-card">
+          <div class="detail-card__title">Voti del gruppo</div>
+          <div id="detailVotesList" class="votes-list"></div>
+        </div>
+
+        <div class="detail-actions-row">
+          <button id="detailStatusBtn" class="btn btn--secondary">✓ Segna come visto</button>
+          <button id="detailRemoveBtn" class="btn btn--danger">Rimuovi</button>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <nav class="bottom-nav">
+    <div class="bottom-nav__inner">
+      <button class="nav__btn active" data-screen="home"><strong>Home</strong></button>
+      <button class="nav__btn" data-screen="stats"><strong>Statistiche</strong></button>
+      <button class="nav__btn" data-screen="tonight"><strong>Stasera</strong></button>
+    </div>
+  </nav>
+
+  <div id="toastWrap"></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
