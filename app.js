@@ -4,20 +4,20 @@
 
 import {
   uniqueKey, average, escapeHtml, decadeOf
-} from "./cine-core.js?v=6";
+} from "./cine-core.js?v=8";
 import {
   getCurrentUser, setCurrentUser, MAX_USERS,
   fetchUsers, addUser,
   fetchLibrary, addTitle, updateTitleStatus, removeTitle,
   upsertVote, removeVote
-} from "./storage.js?v=6";
-import { tmdbFetchDetail, tmdbSearch, tmdbFetchDiscoverLevel, buildFallbackQueries } from "./tmdb.js?v=6";
+} from "./storage.js?v=8";
+import { tmdbFetchDetail, tmdbSearch, tmdbFetchDiscoverLevel, buildFallbackQueries } from "./tmdb.js?v=8";
 import {
   showToast, avatarHtml, initScreens, switchScreen,
   renderShelf, renderSearchResults, renderLibraryList, renderGenreFilters,
   renderGenreBars, renderRanking, renderTonightList,
   renderDetailFacts, renderVotesList
-} from "./ui.js?v=6";
+} from "./ui.js?v=8";
 
 let currentUser = null;
 let users = [];
@@ -27,6 +27,7 @@ let libraryFilter = "all"; // all | movie | tv
 let libraryGenre = "all";
 let statsMode = "group";   // group | me
 let currentDetailId = null;
+let detailReturnScreen = "home";
 let currentType = "multi"; // per la ricerca
 
 const SUGGEST_HISTORY_MAX = 40;
@@ -36,6 +37,13 @@ const SUGGEST_HISTORY_MAX = 40;
 async function init() {
   initScreens();
   bindGlobalEvents();
+
+  try { history.replaceState({ screen: "home" }, "", location.href); } catch {}
+  window.addEventListener("popstate", e => {
+    const screen = (e.state && e.state.screen) || "home";
+    switchScreen(screen);
+    if (screen === "stats") renderStats();
+  });
 
   currentUser = getCurrentUser();
   users = await fetchUsers();
@@ -520,10 +528,24 @@ async function runTonight() {
 
 // ─── DETTAGLIO ───────────────────────────────────────────────────────────────
 
+function getVisibleScreen() {
+  const ids = ["home", "library", "stats", "tonight"];
+  for (const id of ids) {
+    const el = document.getElementById(`screen-${id}`);
+    if (el && !el.classList.contains("hidden")) return id;
+  }
+  return "home";
+}
+
+function pushHistoryState(screen) {
+  try { history.pushState({ screen }, "", location.href); } catch {}
+}
+
 function openDetail(id) {
   const item = byId(id);
   if (!item) return;
   currentDetailId = id;
+  detailReturnScreen = getVisibleScreen();
 
   document.getElementById("detailPoster").style.backgroundImage = item.poster_path ? `url('https://image.tmdb.org/t/p/w500${item.poster_path}')` : "";
   document.getElementById("detailTitle").textContent = item.title;
@@ -547,6 +569,7 @@ function openDetail(id) {
     item.status === "watchlist" ? "✓ Segna come visto" : "★ Sposta in watchlist";
 
   switchScreen("detail");
+  pushHistoryState("detail");
 }
 
 async function handleSaveVote() {
@@ -604,14 +627,15 @@ function bindGlobalEvents() {
   document.querySelectorAll(".nav__btn[data-screen]").forEach(btn => {
     btn.addEventListener("click", () => {
       switchScreen(btn.dataset.screen);
+      pushHistoryState(btn.dataset.screen);
       if (btn.dataset.screen === "stats") renderStats();
     });
   });
 
-  document.getElementById("openWatchAll").addEventListener("click", () => openLibrarySection("watchlist", "all"));
-  document.getElementById("openSeenMovies").addEventListener("click", () => openLibrarySection("seen", "movie"));
-  document.getElementById("openSeenSeries").addEventListener("click", () => openLibrarySection("seen", "tv"));
-  document.getElementById("libraryBackBtn").addEventListener("click", () => switchScreen("home"));
+  document.getElementById("openWatchAll").addEventListener("click", () => { openLibrarySection("watchlist", "all"); pushHistoryState("library"); });
+  document.getElementById("openSeenMovies").addEventListener("click", () => { openLibrarySection("seen", "movie"); pushHistoryState("library"); });
+  document.getElementById("openSeenSeries").addEventListener("click", () => { openLibrarySection("seen", "tv"); pushHistoryState("library"); });
+  document.getElementById("libraryBackBtn").addEventListener("click", () => history.back());
 
   document.getElementById("searchInput").addEventListener("input", onSearchInput);
   document.querySelectorAll(".tab[data-type]").forEach(tab => {
@@ -650,7 +674,7 @@ function bindGlobalEvents() {
     if (btn) handleAddFromTonight(btn.dataset.id, btn.dataset.type, btn.dataset.status);
   });
 
-  document.getElementById("detailBackBtn").addEventListener("click", () => switchScreen("home"));
+  document.getElementById("detailBackBtn").addEventListener("click", () => history.back());
   document.getElementById("detailVoteSlider").addEventListener("input", e => {
     document.getElementById("detailVoteValue").textContent = Number(e.target.value).toFixed(1);
   });
