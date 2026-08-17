@@ -5,7 +5,7 @@
 import {
   escapeHtml, mediaLabel, mediaBadgeClass, posterUrl, uniqueKey,
   average, voteCount, rawNumberToFixed
-} from "./cine-core.js";
+} from "./cine-core.js?v=3";
 
 // ─── TOAST ───────────────────────────────────────────────────────────────────
 
