@@ -11,6 +11,20 @@
 </head>
 <body>
 
+  <!-- ─── CONFERMA AGGIUNTA (si apre toccando una locandina nei risultati) ── -->
+  <div id="quickAddOverlay" class="quick-add hidden">
+    <div class="quick-add__card">
+      <button id="quickAddClose" class="user-picker__close">✕</button>
+      <div id="quickAddPoster" class="quick-add__poster"></div>
+      <div id="quickAddTitle" class="quick-add__title"></div>
+      <div id="quickAddMeta" class="quick-add__meta"></div>
+      <div class="quick-add__actions">
+        <button id="quickAddWatchlistBtn" class="btn btn--secondary">♡ Aggiungi a Watchlist</button>
+        <button id="quickAddSeenBtn" class="btn btn--ok">✓ Segna come già visto</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ─── SELEZIONE UTENTE (schermata "chi sei") ─────────────────────────── -->
   <div id="userPickerOverlay" class="user-picker hidden">
     <div class="user-picker__card">

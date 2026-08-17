@@ -93,20 +93,11 @@ export function renderSearchResults(items, libraryMap) {
     const libId = libraryMap.get(key);
     return `
       <div class="poster-card">
-        <div class="poster-card__img" style="background-image:url('${posterUrl(item.poster_path)}')">
+        <div class="poster-card__img ${libId ? "open-detail" : "open-quick-add"}"
+             data-id="${libId || item.id}" data-type="${item.media_type}"
+             style="background-image:url('${posterUrl(item.poster_path)}')">
           <span class="badge ${mediaBadgeClass(item)}">${mediaLabel(item)}</span>
-          <div class="poster-card__overlay">
-            ${libId
-              ? `<button class="btn--icon open-detail" data-id="${libId}">✓ Apri scheda / vota</button>`
-              : `
-                <button class="btn--icon action-add" data-id="${item.id}" data-type="${item.media_type}" data-status="watchlist">
-                  ♡ Watchlist
-                </button>
-                <button class="btn--icon action-add" data-id="${item.id}" data-type="${item.media_type}" data-status="seen">
-                  ✓ Già visto
-                </button>
-              `}
-          </div>
+          ${libId ? `<span class="poster-card__tag">✓ Già in libreria</span>` : ""}
         </div>
         <div class="poster-card__info">
           <div class="poster-card__title">${escapeHtml(item.title)}</div>

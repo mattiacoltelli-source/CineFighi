@@ -212,6 +212,35 @@ async function handleAddFromSearch(tmdbId, type, status) {
   openDetail(res.title.id);
 }
 
+// ─── CONFERMA AGGIUNTA (si apre toccando la locandina, prima di aggiungere) ──
+
+let pendingQuickAdd = null;
+
+function openQuickAdd(tmdbId, type) {
+  const cache = JSON.parse(document.getElementById("results").dataset.cache || "[]");
+  const item = cache.find(x => String(x.id) === String(tmdbId) && x.media_type === type);
+  if (!item) return;
+
+  pendingQuickAdd = item;
+  document.getElementById("quickAddPoster").style.backgroundImage = item.poster_path
+    ? `url('https://image.tmdb.org/t/p/w500${item.poster_path}')` : "";
+  document.getElementById("quickAddTitle").textContent = item.title;
+  document.getElementById("quickAddMeta").textContent = `${item.year} · ${item.media_type === "movie" ? "Film" : "Serie TV"}`;
+  document.getElementById("quickAddOverlay").classList.remove("hidden");
+}
+
+function closeQuickAdd() {
+  pendingQuickAdd = null;
+  document.getElementById("quickAddOverlay").classList.add("hidden");
+}
+
+async function confirmQuickAdd(status) {
+  if (!pendingQuickAdd) return;
+  const { id, media_type } = pendingQuickAdd;
+  closeQuickAdd();
+  await handleAddFromSearch(id, media_type, status);
+}
+
 // ─── LIBRERIA (raggiunta solo dai "Vedi tutto" della home) ───────────────────
 
 function openLibrarySection(status, mediaFilter) {
@@ -621,9 +650,16 @@ function bindGlobalEvents() {
     });
   });
   document.getElementById("results").addEventListener("click", e => {
-    const btn = e.target.closest(".action-add");
-    if (btn) handleAddFromSearch(btn.dataset.id, btn.dataset.type, btn.dataset.status);
+    const quickAdd = e.target.closest(".open-quick-add");
+    if (quickAdd) { openQuickAdd(quickAdd.dataset.id, quickAdd.dataset.type); return; }
   });
+
+  document.getElementById("quickAddClose").addEventListener("click", closeQuickAdd);
+  document.getElementById("quickAddOverlay").addEventListener("click", e => {
+    if (e.target.id === "quickAddOverlay") closeQuickAdd();
+  });
+  document.getElementById("quickAddWatchlistBtn").addEventListener("click", () => confirmQuickAdd("watchlist"));
+  document.getElementById("quickAddSeenBtn").addEventListener("click", () => confirmQuickAdd("seen"));
 
   document.body.addEventListener("click", e => {
     const card = e.target.closest(".open-detail");
