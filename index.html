@@ -7,9 +7,22 @@
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#080c12">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=8">
+  <link rel="stylesheet" href="styles.css?v=9">
 </head>
 <body>
+
+  <!-- ─── CONFERMA AZIONE PERICOLOSA (es. eliminare un utente) ────────────── -->
+  <div id="confirmOverlay" class="user-picker hidden">
+    <div class="user-picker__card" style="max-width:320px;">
+      <div class="user-picker__icon">⚠️</div>
+      <h1 class="user-picker__title" style="font-size:19px;">Sei sicuro?</h1>
+      <p class="user-picker__sub" id="confirmText">Questa azione non si può annullare.</p>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-top:6px;">
+        <button id="confirmYesBtn" class="btn btn--danger">Elimina definitivamente</button>
+        <button id="confirmNoBtn" class="btn btn--ghost">Annulla</button>
+      </div>
+    </div>
+  </div>
 
   <!-- ─── SELEZIONE UTENTE (schermata "chi sei") ─────────────────────────── -->
   <div id="userPickerOverlay" class="user-picker hidden">
@@ -109,9 +122,18 @@
 
     <!-- STATISTICHE -->
     <section id="screen-stats" class="hidden">
-      <div class="stats-toggle">
+      <div class="stats-toggle" id="statsIoGruppoToggle">
         <button class="stats-toggle-btn active" data-mode="group">Gruppo</button>
         <button class="stats-toggle-btn" data-mode="me">Io</button>
+      </div>
+
+      <div class="section">
+        <div class="stats-grid">
+          <div class="stat-card"><div class="stat-card__num" id="statSeen">0</div><div class="stat-card__label">Titoli visti</div></div>
+          <div class="stat-card"><div class="stat-card__num" id="statWatch">0</div><div class="stat-card__label">In watchlist</div></div>
+          <div class="stat-card"><div class="stat-card__num" id="statMovies">0</div><div class="stat-card__label">Film visti</div></div>
+          <div class="stat-card"><div class="stat-card__num" id="statSeries">0</div><div class="stat-card__label">Serie viste</div></div>
+        </div>
       </div>
 
       <div class="section">
@@ -125,6 +147,10 @@
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
           <h3 class="section__title" style="margin:0;">🏆 Classifica</h3>
           <span id="rankingCountBadge" class="count-badge">0</span>
+        </div>
+        <div class="stats-toggle" id="rankingMediaToggle" style="margin-bottom:16px;">
+          <button class="stats-toggle-btn active" data-media="movie">🎬 Film</button>
+          <button class="stats-toggle-btn" data-media="tv">📺 Serie TV</button>
         </div>
         <div id="rankingPodium" class="podium-grid"></div>
         <div id="rankingList" class="ranking-list"></div>
@@ -204,6 +230,6 @@
 
   <div id="toastWrap"></div>
 
-  <script type="module" src="app.js?v=8"></script>
+  <script type="module" src="app.js?v=9"></script>
 </body>
 </html>

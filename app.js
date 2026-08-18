@@ -4,20 +4,20 @@
 
 import {
   uniqueKey, average, escapeHtml, decadeOf
-} from "./cine-core.js?v=8";
+} from "./cine-core.js?v=9";
 import {
-  getCurrentUser, setCurrentUser, MAX_USERS,
-  fetchUsers, addUser,
+  getCurrentUser, setCurrentUser, clearCurrentUser, MAX_USERS,
+  fetchUsers, addUser, deleteUser,
   fetchLibrary, addTitle, updateTitleStatus, removeTitle,
   upsertVote, removeVote
-} from "./storage.js?v=8";
-import { tmdbFetchDetail, tmdbSearch, tmdbFetchDiscoverLevel, buildFallbackQueries } from "./tmdb.js?v=8";
+} from "./storage.js?v=9";
+import { tmdbFetchDetail, tmdbSearch, tmdbFetchDiscoverLevel, buildFallbackQueries } from "./tmdb.js?v=9";
 import {
   showToast, avatarHtml, initScreens, switchScreen,
   renderShelf, renderSearchResults, renderLibraryList, renderGenreFilters,
   renderGenreBars, renderRanking, renderTonightList,
   renderDetailFacts, renderVotesList
-} from "./ui.js?v=8";
+} from "./ui.js?v=9";
 
 let currentUser = null;
 let users = [];
@@ -26,9 +26,12 @@ let libraryStatus = "all"; // all | watchlist | seen  (impostato dai "Vedi tutto
 let libraryFilter = "all"; // all | movie | tv
 let libraryGenre = "all";
 let statsMode = "group";   // group | me
+let rankingMedia = "movie"; // movie | tv
 let currentDetailId = null;
+let previewItem = null;    // titolo TMDB non ancora salvato, aperto solo per consultazione
 let detailReturnScreen = "home";
 let currentType = "multi"; // per la ricerca
+let confirmYesAction = null;
 
 const SUGGEST_HISTORY_MAX = 40;
 
@@ -91,14 +94,48 @@ async function renderUserPickerList() {
   users = await fetchUsers();
   const list = document.getElementById("userPickerList");
   list.innerHTML = users.map(u => `
-    <button class="user-pick-btn" data-user="${escapeHtml(u)}">
-      ${avatarHtml(u, 32)}<span>${escapeHtml(u)}</span>
-    </button>
+    <div class="user-pick-row">
+      <button class="user-pick-btn" data-user="${escapeHtml(u)}">
+        ${avatarHtml(u, 32)}<span>${escapeHtml(u)}</span>
+      </button>
+      <button class="user-delete-btn" data-user="${escapeHtml(u)}" title="Elimina utente">🗑</button>
+    </div>
   `).join("");
 
   const full = users.length >= MAX_USERS;
   document.getElementById("userPickerFullNote").classList.toggle("hidden", !full);
   document.getElementById("userPickerAddRow").classList.toggle("hidden", full);
+}
+
+// ─── CONFERMA AZIONI PERICOLOSE (es. eliminare un utente) ────────────────────
+
+function askConfirm(text, onYes) {
+  document.getElementById("confirmText").textContent = text;
+  confirmYesAction = onYes;
+  document.getElementById("confirmOverlay").classList.remove("hidden");
+}
+
+function closeConfirm() {
+  document.getElementById("confirmOverlay").classList.add("hidden");
+  confirmYesAction = null;
+}
+
+async function handleDeleteUser(name) {
+  askConfirm(
+    `Eliminare "${name}" dal gruppo? I voti già dati restano nella classifica, ma non potrà più votare finché non si aggiunge di nuovo.`,
+    async () => {
+      const res = await deleteUser(name);
+      if (!res.ok) { showToast("Errore, riprova", "error"); return; }
+      showToast(`${name} eliminato dal gruppo`, "success");
+      if (name === currentUser) {
+        currentUser = null;
+        clearCurrentUser();
+        document.getElementById("app").classList.add("hidden");
+      }
+      await renderUserPickerList();
+      if (!currentUser) openUserPicker(true);
+    }
+  );
 }
 
 async function handleAddUser() {
@@ -220,7 +257,7 @@ async function handleAddFromSearch(tmdbId, type, status) {
   openDetail(res.title.id);
 }
 
-// ─── CONFERMA AGGIUNTA (si apre toccando la locandina, prima di aggiungere) ──
+// ─── AGGIUNTA DA STASERA (rimane in pagina, sparisce dai consigliati) ────────
 
 async function handleAddFromTonight(tmdbId, type, status) {
   const cache = JSON.parse(document.getElementById("tonightResult").dataset.cache || "[]");
@@ -235,8 +272,48 @@ async function handleAddFromTonight(tmdbId, type, status) {
     return;
   }
   showToast(`${fullItem.title} aggiunto`, "success");
+
+  // Rimuove la card dai consigliati senza lasciare la schermata "Stasera"
+  const key = `${type}_${tmdbId}`;
+  document.querySelector(`#tonightResult [data-tonight-key="${key}"]`)?.remove();
+  const newCache = cache.filter(x => !(String(x.id) === String(tmdbId) && x.media_type === type));
+  document.getElementById("tonightResult").dataset.cache = JSON.stringify(newCache);
+
   await reloadLibrary();
-  openDetail(res.title.id);
+}
+
+// ─── SCHEDA DI CONSULTAZIONE (per titoli non ancora salvati) ─────────────────
+
+async function openPreview(tmdbId, type) {
+  const existing = db.find(x => x.tmdb_id === Number(tmdbId) && x.media_type === type);
+  if (existing) { openDetail(existing.id); return; }
+
+  const fullItem = await tmdbFetchDetail(type, tmdbId).catch(() => null);
+  if (!fullItem) { showToast("Errore nel caricare la scheda", "error"); return; }
+
+  currentDetailId = null;
+  previewItem = fullItem;
+  detailReturnScreen = getVisibleScreen();
+
+  document.getElementById("detailPoster").style.backgroundImage = fullItem.poster_path ? `url('https://image.tmdb.org/t/p/w500${fullItem.poster_path}')` : "";
+  document.getElementById("detailTitle").textContent = fullItem.title;
+  document.getElementById("detailYear").textContent = fullItem.year;
+  document.getElementById("detailType").textContent = fullItem.media_type === "movie" ? "Film" : "Serie TV";
+  document.getElementById("detailOverview").textContent = fullItem.overview || "Nessuna trama disponibile.";
+  document.getElementById("detailFacts").innerHTML = renderDetailFacts(fullItem);
+  document.getElementById("detailVotesList").innerHTML = renderVotesList({}, currentUser);
+
+  document.getElementById("detailVoteSlider").value = 7;
+  document.getElementById("detailVoteValue").textContent = "7.0";
+  document.getElementById("detailCommentInput").value = "";
+
+  document.getElementById("detailSaveVoteBtn").textContent = "✓ Salva voto (segna come visto)";
+  document.getElementById("detailClearVoteBtn").classList.add("hidden");
+  document.getElementById("detailStatusBtn").textContent = "♡ Aggiungi a watchlist";
+  document.getElementById("detailRemoveBtn").classList.add("hidden");
+
+  switchScreen("detail");
+  pushHistoryState("detail");
 }
 
 // ─── LIBRERIA (raggiunta solo dai "Vedi tutto" della home) ───────────────────
@@ -285,9 +362,21 @@ function renderLibraryScreen() {
 // ─── STATISTICHE (generi + classifica, con toggle Io/Gruppo) ─────────────────
 
 function renderStats() {
-  document.querySelectorAll(".stats-toggle-btn").forEach(btn => {
+  document.querySelectorAll("#statsIoGruppoToggle .stats-toggle-btn").forEach(btn => {
     btn.classList.toggle("active", btn.dataset.mode === statsMode);
   });
+  document.querySelectorAll("#rankingMediaToggle .stats-toggle-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.media === rankingMedia);
+  });
+
+  // Le 4 card numeriche riflettono sempre il gruppo intero (watchlist/visto
+  // sono concetti condivisi, non personali)
+  const seenAll = db.filter(x => x.status === "seen");
+  const watchAll = db.filter(x => x.status === "watchlist");
+  document.getElementById("statSeen").textContent = String(seenAll.length);
+  document.getElementById("statWatch").textContent = String(watchAll.length);
+  document.getElementById("statMovies").textContent = String(seenAll.filter(x => x.media_type === "movie").length);
+  document.getElementById("statSeries").textContent = String(seenAll.filter(x => x.media_type === "tv").length);
 
   const relevant = statsMode === "me"
     ? db.filter(x => x.votes && x.votes[currentUser])
@@ -303,6 +392,7 @@ function renderStats() {
   renderGenreBars(topGenres);
 
   const ranked = relevant
+    .filter(item => item.media_type === rankingMedia)
     .map(item => {
       const score = statsMode === "me" ? item.votes[currentUser].vote : average(item.votes);
       return { ...item, __score: score };
@@ -310,7 +400,7 @@ function renderStats() {
     .filter(item => Number.isFinite(item.__score))
     .sort((a, b) => b.__score - a.__score);
 
-  renderRanking(ranked);
+  renderRanking(ranked, rankingMedia === "movie" ? "Film" : "Serie TV");
 }
 
 // ─── STASERA COSA GUARDO — algoritmo completo (come CineTracker) ─────────────
@@ -544,6 +634,7 @@ function pushHistoryState(screen) {
 function openDetail(id) {
   const item = byId(id);
   if (!item) return;
+  previewItem = null;
   currentDetailId = id;
   detailReturnScreen = getVisibleScreen();
 
@@ -567,16 +658,33 @@ function openDetail(id) {
 
   document.getElementById("detailStatusBtn").textContent =
     item.status === "watchlist" ? "✓ Segna come visto" : "★ Sposta in watchlist";
+  document.getElementById("detailRemoveBtn").classList.remove("hidden");
 
   switchScreen("detail");
   pushHistoryState("detail");
 }
 
 async function handleSaveVote() {
-  const item = byId(currentDetailId);
-  if (!item) return;
   const vote = Number(document.getElementById("detailVoteSlider").value);
   const comment = document.getElementById("detailCommentInput").value.trim();
+
+  if (previewItem) {
+    // Un voto significa sempre "l'ho già visto": lo salviamo come visto, mai in watchlist
+    const res = await addTitle(previewItem, "seen", currentUser);
+    const savedId = res.ok
+      ? res.title.id
+      : db.find(x => x.tmdb_id === previewItem.id && x.media_type === previewItem.media_type)?.id;
+    if (!savedId) { showToast("Errore, riprova", "error"); return; }
+    await upsertVote(savedId, currentUser, vote, comment);
+    showToast("Voto salvato", "success");
+    previewItem = null;
+    await reloadLibrary();
+    openDetail(savedId);
+    return;
+  }
+
+  const item = byId(currentDetailId);
+  if (!item) return;
   await upsertVote(item.id, currentUser, vote, comment);
   showToast("Voto salvato", "success");
   await reloadLibrary();
@@ -592,6 +700,20 @@ async function handleClearVote() {
 }
 
 async function handleToggleStatus() {
+  if (previewItem) {
+    // Modalità consultazione: unico pulsante disponibile è "Aggiungi a watchlist"
+    const res = await addTitle(previewItem, "watchlist", currentUser);
+    if (!res.ok && res.reason !== "duplicate") { showToast("Errore, riprova", "error"); return; }
+    const savedId = res.ok
+      ? res.title.id
+      : db.find(x => x.tmdb_id === previewItem.id && x.media_type === previewItem.media_type)?.id;
+    showToast(`${previewItem.title} aggiunto alla watchlist`, "success");
+    previewItem = null;
+    await reloadLibrary();
+    if (savedId) openDetail(savedId);
+    return;
+  }
+
   const item = byId(currentDetailId);
   if (!item) return;
   const nextStatus = item.status === "watchlist" ? "seen" : "watchlist";
@@ -620,9 +742,18 @@ function bindGlobalEvents() {
     if (e.key === "Enter") handleAddUser();
   });
   document.getElementById("userPickerList").addEventListener("click", e => {
+    const delBtn = e.target.closest(".user-delete-btn");
+    if (delBtn) { handleDeleteUser(delBtn.dataset.user); return; }
     const btn = e.target.closest(".user-pick-btn");
     if (btn) selectUser(btn.dataset.user);
   });
+
+  document.getElementById("confirmYesBtn").addEventListener("click", async () => {
+    const action = confirmYesAction;
+    closeConfirm();
+    if (action) await action();
+  });
+  document.getElementById("confirmNoBtn").addEventListener("click", closeConfirm);
 
   document.querySelectorAll(".nav__btn[data-screen]").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -653,7 +784,9 @@ function bindGlobalEvents() {
 
   document.body.addEventListener("click", e => {
     const card = e.target.closest(".open-detail");
-    if (card) openDetail(card.dataset.id);
+    if (card) { openDetail(card.dataset.id); return; }
+    const previewBtn = e.target.closest(".open-preview");
+    if (previewBtn) { openPreview(previewBtn.dataset.id, previewBtn.dataset.type); return; }
   });
 
   document.querySelectorAll(".filter-pill[data-filter]").forEach(btn => {
@@ -664,8 +797,11 @@ function bindGlobalEvents() {
     if (btn) { libraryGenre = btn.dataset.genreFilter; renderLibraryScreen(); }
   });
 
-  document.querySelectorAll(".stats-toggle-btn").forEach(btn => {
+  document.querySelectorAll("#statsIoGruppoToggle .stats-toggle-btn").forEach(btn => {
     btn.addEventListener("click", () => { statsMode = btn.dataset.mode; renderStats(); });
+  });
+  document.querySelectorAll("#rankingMediaToggle .stats-toggle-btn").forEach(btn => {
+    btn.addEventListener("click", () => { rankingMedia = btn.dataset.media; renderStats(); });
   });
 
   document.getElementById("tonightBtn").addEventListener("click", runTonight);

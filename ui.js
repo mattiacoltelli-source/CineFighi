@@ -5,7 +5,7 @@
 import {
   escapeHtml, mediaLabel, mediaBadgeClass, posterUrl, uniqueKey,
   average, voteCount, rawNumberToFixed
-} from "./cine-core.js?v=8";
+} from "./cine-core.js?v=9";
 
 // ─── TOAST ───────────────────────────────────────────────────────────────────
 
@@ -112,6 +112,7 @@ export function renderSearchResults(items, libraryMap) {
         <div class="poster-card__info">
           <div class="poster-card__title">${escapeHtml(item.title)}</div>
           <div class="poster-card__meta">${item.year} · ${mediaLabel(item)}</div>
+          ${!libId ? `<button class="poster-card__scheda open-preview" data-id="${item.id}" data-type="${item.media_type}">Scheda →</button>` : ""}
         </div>
       </div>
     `;
@@ -176,7 +177,7 @@ export function renderGenreBars(entries) {
 
 const MEDALS = ["🥇", "🥈", "🥉"];
 
-export function renderRanking(items) {
+export function renderRanking(items, typeLabel) {
   const podiumEl = document.getElementById("rankingPodium");
   const listEl = document.getElementById("rankingList");
   const badgeEl = document.getElementById("rankingCountBadge");
@@ -184,7 +185,7 @@ export function renderRanking(items) {
   badgeEl.textContent = String(items.length);
 
   if (!items.length) {
-    podiumEl.innerHTML = `<p class="empty-hint">Vota qualcosa per vedere la classifica.</p>`;
+    podiumEl.innerHTML = `<p class="empty-hint">Vota qualche ${typeLabel === "Film" ? "film" : "serie"} per vedere la classifica.</p>`;
     listEl.innerHTML = "";
     return;
   }
@@ -197,7 +198,7 @@ export function renderRanking(items) {
       <div class="podium-card__medal">${MEDALS[i]}</div>
       <div class="podium-card__poster" style="background-image:url('${posterUrl(item.poster_path)}')"></div>
       <div class="podium-card__title">${escapeHtml(item.title)}</div>
-      <div class="podium-card__meta">${item.year} · ${mediaLabel(item)}</div>
+      <div class="podium-card__meta">${item.year} · ${typeLabel}</div>
       <div class="podium-card__vote">★ ${item.__score.toFixed(1)}</div>
     </div>
   `).join("");
@@ -208,7 +209,7 @@ export function renderRanking(items) {
       <div class="rank-row__poster" style="background-image:url('${posterUrl(item.poster_path)}')"></div>
       <div class="rank-row__info">
         <div class="rank-row__title">${escapeHtml(item.title)}</div>
-        <div class="rank-row__meta">${item.year} · ${mediaLabel(item)}</div>
+        <div class="rank-row__meta">${item.year} · ${typeLabel}</div>
       </div>
       <div class="rank-row__vote">★ ${item.__score.toFixed(1)}</div>
     </div>
@@ -224,7 +225,7 @@ export function renderTonightList(entries) {
   return `
     <div class="results-grid">
       ${entries.map(({ item, affinity, reasons }) => `
-        <div class="poster-card">
+        <div class="poster-card" data-tonight-key="${item.media_type}_${item.id}">
           <div class="poster-card__img" style="background-image:url('${posterUrl(item.poster_path)}')">
             <span class="badge ${mediaBadgeClass(item)}">${mediaLabel(item)}</span>
             <span class="tonight-card__affinity">${affinity}%</span>
@@ -243,6 +244,7 @@ export function renderTonightList(entries) {
             <div class="tonight-card__reason">
               ${reasons.length ? `🎯 ${escapeHtml(reasons.join(" · "))}` : "🎯 Consigliato in base ai tuoi gusti"}
             </div>
+            <button class="poster-card__scheda open-preview" data-id="${item.id}" data-type="${item.media_type}">Scheda →</button>
           </div>
         </div>
       `).join("")}
@@ -253,12 +255,15 @@ export function renderTonightList(entries) {
 // ─── DETAIL ──────────────────────────────────────────────────────────────────
 
 export function renderDetailFacts(item) {
+  const statusFact = item.status === "watchlist" ? "★ In watchlist"
+    : item.status === "seen" ? "✓ Visto"
+    : "Non ancora salvato";
   const facts = [
     mediaLabel(item),
     item.year,
     item.genre_names?.length ? item.genre_names.join(", ") : null,
     item.director ? `Regia: ${item.director}` : null,
-    item.status === "watchlist" ? "★ In watchlist" : "✓ Visto"
+    statusFact
   ].filter(Boolean);
   return facts.map(f => `<span class="detail-fact">${escapeHtml(f)}</span>`).join("");
 }
