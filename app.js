@@ -4,20 +4,20 @@
 
 import {
   uniqueKey, average, escapeHtml, decadeOf
-} from "./cine-core.js?v=9";
+} from "./cine-core.js?v=11";
 import {
   getCurrentUser, setCurrentUser, clearCurrentUser, MAX_USERS,
   fetchUsers, addUser, deleteUser,
   fetchLibrary, addTitle, updateTitleStatus, removeTitle,
   upsertVote, removeVote
-} from "./storage.js?v=9";
-import { tmdbFetchDetail, tmdbSearch, tmdbFetchDiscoverLevel, buildFallbackQueries } from "./tmdb.js?v=9";
+} from "./storage.js?v=11";
+import { tmdbFetchDetail, tmdbSearch, tmdbFetchDiscoverLevel, buildFallbackQueries } from "./tmdb.js?v=11";
 import {
   showToast, avatarHtml, initScreens, switchScreen,
   renderShelf, renderSearchResults, renderLibraryList, renderGenreFilters,
   renderGenreBars, renderRanking, renderTonightList,
   renderDetailFacts, renderVotesList
-} from "./ui.js?v=9";
+} from "./ui.js?v=11";
 
 let currentUser = null;
 let users = [];
@@ -259,6 +259,21 @@ async function handleAddFromSearch(tmdbId, type, status) {
 
 // ─── AGGIUNTA DA STASERA (rimane in pagina, sparisce dai consigliati) ────────
 
+// Rimuove (se presente) la card dai consigli di "Stasera" — usata sia quando
+// si aggiunge direttamente dai tasti sulla card, sia quando si salva un voto
+// o si aggiunge a watchlist passando dalla "Scheda" di consultazione.
+function removeFromTonightCard(tmdbId, mediaType) {
+  const area = document.getElementById("tonightResult");
+  if (!area) return;
+  const key = `${mediaType}_${tmdbId}`;
+  area.querySelector(`[data-tonight-key="${key}"]`)?.remove();
+  try {
+    const cache = JSON.parse(area.dataset.cache || "[]");
+    const newCache = cache.filter(x => !(String(x.id) === String(tmdbId) && x.media_type === mediaType));
+    area.dataset.cache = JSON.stringify(newCache);
+  } catch {}
+}
+
 async function handleAddFromTonight(tmdbId, type, status) {
   const cache = JSON.parse(document.getElementById("tonightResult").dataset.cache || "[]");
   const item = cache.find(x => String(x.id) === String(tmdbId) && x.media_type === type);
@@ -272,13 +287,7 @@ async function handleAddFromTonight(tmdbId, type, status) {
     return;
   }
   showToast(`${fullItem.title} aggiunto`, "success");
-
-  // Rimuove la card dai consigliati senza lasciare la schermata "Stasera"
-  const key = `${type}_${tmdbId}`;
-  document.querySelector(`#tonightResult [data-tonight-key="${key}"]`)?.remove();
-  const newCache = cache.filter(x => !(String(x.id) === String(tmdbId) && x.media_type === type));
-  document.getElementById("tonightResult").dataset.cache = JSON.stringify(newCache);
-
+  removeFromTonightCard(tmdbId, type);
   await reloadLibrary();
 }
 
@@ -369,14 +378,25 @@ function renderStats() {
     btn.classList.toggle("active", btn.dataset.media === rankingMedia);
   });
 
-  // Le 4 card numeriche riflettono sempre il gruppo intero (watchlist/visto
-  // sono concetti condivisi, non personali)
-  const seenAll = db.filter(x => x.status === "seen");
-  const watchAll = db.filter(x => x.status === "watchlist");
-  document.getElementById("statSeen").textContent = String(seenAll.length);
-  document.getElementById("statWatch").textContent = String(watchAll.length);
-  document.getElementById("statMovies").textContent = String(seenAll.filter(x => x.media_type === "movie").length);
-  document.getElementById("statSeries").textContent = String(seenAll.filter(x => x.media_type === "tv").length);
+  // Le 4 card numeriche: di gruppo in modalità "Gruppo", personali in "Io".
+  // "In watchlist" personale conta solo i titoli che HAI aggiunto tu e che
+  // sono ancora in watchlist in questo momento (si aggiorna da solo quando
+  // li segni visti o li rimuovi).
+  if (statsMode === "me") {
+    const myVoted = db.filter(x => x.votes && x.votes[currentUser]);
+    const myWatch = db.filter(x => x.status === "watchlist" && x.added_by === currentUser);
+    document.getElementById("statSeen").textContent = String(myVoted.length);
+    document.getElementById("statWatch").textContent = String(myWatch.length);
+    document.getElementById("statMovies").textContent = String(myVoted.filter(x => x.media_type === "movie").length);
+    document.getElementById("statSeries").textContent = String(myVoted.filter(x => x.media_type === "tv").length);
+  } else {
+    const seenAll = db.filter(x => x.status === "seen");
+    const watchAll = db.filter(x => x.status === "watchlist");
+    document.getElementById("statSeen").textContent = String(seenAll.length);
+    document.getElementById("statWatch").textContent = String(watchAll.length);
+    document.getElementById("statMovies").textContent = String(seenAll.filter(x => x.media_type === "movie").length);
+    document.getElementById("statSeries").textContent = String(seenAll.filter(x => x.media_type === "tv").length);
+  }
 
   const relevant = statsMode === "me"
     ? db.filter(x => x.votes && x.votes[currentUser])
@@ -677,6 +697,7 @@ async function handleSaveVote() {
     if (!savedId) { showToast("Errore, riprova", "error"); return; }
     await upsertVote(savedId, currentUser, vote, comment);
     showToast("Voto salvato", "success");
+    removeFromTonightCard(previewItem.id, previewItem.media_type);
     previewItem = null;
     await reloadLibrary();
     openDetail(savedId);
@@ -708,6 +729,7 @@ async function handleToggleStatus() {
       ? res.title.id
       : db.find(x => x.tmdb_id === previewItem.id && x.media_type === previewItem.media_type)?.id;
     showToast(`${previewItem.title} aggiunto alla watchlist`, "success");
+    removeFromTonightCard(previewItem.id, previewItem.media_type);
     previewItem = null;
     await reloadLibrary();
     if (savedId) openDetail(savedId);
