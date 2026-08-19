@@ -385,17 +385,6 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 
 .user-picker__add .btn { width:auto; padding:12px 20px; }
 
-.user-pick-row { display:flex; align-items:center; gap:8px; }
-.user-pick-btn { flex:1; }
-.user-delete-btn {
-  width:40px; height:40px; border-radius:50%; flex-shrink:0;
-  background: var(--surface2); border:1px solid var(--border); color: var(--text3);
-  font-size:15px; display:flex; align-items:center; justify-content:center;
-  transition: background var(--t-mid), border-color var(--t-mid), color var(--t-mid);
-}
-.user-delete-btn:active { transform: scale(.9); }
-.user-delete-btn:hover { background: rgba(255,95,95,.14); border-color: rgba(255,95,95,.3); color: var(--red); }
-
 .poster-card__scheda {
   display:block; text-align:center; margin-top:8px; padding:8px; font-size:12px; font-weight:700;
   font-family: var(--font-display); color: var(--acc2); background: var(--surface2);

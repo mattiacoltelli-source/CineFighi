@@ -1,23 +1,23 @@
-//  app.js 
+// ─── app.js ────────────────────────────────────────────────────────────
 // Il "cervello" dell'app: inizializza le schermate, gestisce i click,
 // richiama storage.js (Supabase) e tmdb.js, e passa i dati a ui.js per disegnare.
 
 import {
   uniqueKey, average, escapeHtml, decadeOf
-} from "./cine-core.js?v=15";
+} from "./cine-core.js?v=16";
 import {
   getCurrentUser, setCurrentUser, clearCurrentUser, MAX_USERS,
   fetchUsers, addUser, deleteUser,
   fetchLibrary, addTitle, updateTitleStatus, removeTitle,
   upsertVote, removeVote
-} from "./storage.js?v=15";
-import { tmdbFetchDetail, tmdbSearch, tmdbFetchDiscoverLevel, buildFallbackQueries } from "./tmdb.js?v=15";
+} from "./storage.js?v=16";
+import { tmdbFetchDetail, tmdbSearch, tmdbFetchDiscoverLevel, buildFallbackQueries } from "./tmdb.js?v=16";
 import {
   showToast, avatarHtml, initScreens, switchScreen,
   renderShelf, renderSearchResults, renderLibraryList, renderGenreFilters,
   renderGenreBars, renderRanking, renderTonightList,
   renderDetailFacts, renderVotesList, haptic, animateValue
-} from "./ui.js?v=15";
+} from "./ui.js?v=16";
 
 let currentUser = null;
 let users = [];
@@ -35,15 +35,15 @@ let confirmYesAction = null;
 
 const SUGGEST_HISTORY_MAX = 40;
 
-// 
+// ───────────────────────────────────────────────────────────────────────────
 
-//  AGGIORNAMENTI (service worker leggero, solo notifica) 
+// ─── AGGIORNAMENTI (service worker leggero, solo notifica) ───────────────────
 
 function initUpdateCheck() {
   if (!("serviceWorker" in navigator)) return;
 
   navigator.serviceWorker.register("./sw.js").then(reg => {
-    reg.update(); // controlla subito se c'� una versione pi� recente
+    reg.update(); // controlla subito se c'è una versione più recente
 
     reg.addEventListener("updatefound", () => {
       const newWorker = reg.installing;
@@ -69,7 +69,7 @@ function showUpdateBanner(worker) {
   const bar = document.createElement("div");
   bar.id = "updateBanner";
   bar.innerHTML = `
-    <span> Nuova versione disponibile</span>
+    <span>🔄 Nuova versione disponibile</span>
     <button id="updateBtn">Aggiorna</button>
   `;
   document.body.appendChild(bar);
@@ -115,7 +115,7 @@ async function reloadLibrary() {
 
 function byId(id) { return db.find(x => x.id === id); }
 
-//  USER PICKER 
+// ─── USER PICKER ───────────────────────────────────────────────────────────
 
 function updateUserChip() {
   const chip = document.getElementById("userChip");
@@ -144,7 +144,7 @@ async function renderUserPickerList() {
       <button class="user-pick-btn" data-user="${escapeHtml(u)}">
         ${avatarHtml(u, 32)}<span>${escapeHtml(u)}</span>
       </button>
-      <button class="user-delete-btn" data-user="${escapeHtml(u)}" title="Elimina utente"></button>
+      <button class="user-delete-btn" data-user="${escapeHtml(u)}" title="Elimina utente">🗑</button>
     </div>
   `).join("");
 
@@ -153,7 +153,7 @@ async function renderUserPickerList() {
   document.getElementById("userPickerAddRow").classList.toggle("hidden", full);
 }
 
-//  CONFERMA AZIONI PERICOLOSE (es. eliminare un utente) 
+// ─── CONFERMA AZIONI PERICOLOSE (es. eliminare un utente) ────────────────────
 
 function askConfirm(text, onYes) {
   document.getElementById("confirmText").textContent = text;
@@ -168,7 +168,7 @@ function closeConfirm() {
 
 async function handleDeleteUser(name) {
   askConfirm(
-    `Eliminare "${name}" dal gruppo? I voti gi� dati restano nella classifica, ma non potr� pi� votare finch� non si aggiunge di nuovo.`,
+    `Eliminare "${name}" dal gruppo? I voti già dati restano nella classifica, ma non potrà più votare finché non si aggiunge di nuovo.`,
     async () => {
       const res = await deleteUser(name);
       if (!res.ok) { showToast("Errore, riprova", "error"); return; }
@@ -208,7 +208,7 @@ function selectUser(name) {
   if (currentDetailId) openDetail(currentDetailId, { push: false });
 }
 
-//  HOME 
+// ─── HOME ───────────────────────────────────────────────────────────────────
 
 function renderHome() {
   const watch = db.filter(x => x.status === "watchlist").slice(0, 10);
@@ -229,7 +229,7 @@ function toggleEmpty(shelfId, emptyId, items) {
   document.getElementById(emptyId).classList.toggle("hidden", items.length > 0);
 }
 
-//  RICERCA 
+// ─── RICERCA ────────────────────────────────────────────────────────────────
 
 let searchDebounce = null;
 
@@ -249,7 +249,7 @@ async function doSearch(q) {
   const empty = document.getElementById("resultsEmpty");
 
   sec.classList.remove("hidden");
-  empty.textContent = "Ricerca in corso�";
+  empty.textContent = "Ricerca in corso…";
   empty.classList.remove("hidden");
   res.innerHTML = "";
 
@@ -261,7 +261,7 @@ async function doSearch(q) {
         id: x.id,
         media_type: currentType === "multi" ? x.media_type : currentType,
         title: x.title || x.name || "Senza titolo",
-        year: (x.release_date || x.first_air_date || "").slice(0, 4) || "�",
+        year: (x.release_date || x.first_air_date || "").slice(0, 4) || "—",
         poster_path: x.poster_path,
         overview: x.overview || "",
         genre_names: [],
@@ -285,29 +285,39 @@ async function doSearch(q) {
   }
 }
 
-async function handleAddFromSearch(tmdbId, type, status) {
-  const cache = JSON.parse(document.getElementById("results").dataset.cache || "[]");
+// Cerca il titolo nella cache di una sezione (risultati ricerca o consigli di
+// "Stasera"), lo aggiunge in libreria e mostra il toast d'esito. Usata sia da
+// handleAddFromSearch che da handleAddFromTonight, che differiscono solo per
+// cosa fare DOPO l'aggiunta.
+async function addItemFromCache(containerId, tmdbId, type, status) {
+  const cache = JSON.parse(document.getElementById(containerId).dataset.cache || "[]");
   const item = cache.find(x => String(x.id) === String(tmdbId) && x.media_type === type);
-  if (!item) return;
+  if (!item) return null;
 
   const fullItem = await tmdbFetchDetail(type, tmdbId).catch(() => item);
   const res = await addTitle(fullItem, status, currentUser);
 
   if (!res.ok) {
-    showToast(res.reason === "duplicate" ? "Gi� in libreria" : "Errore, riprova", "error");
-    return;
+    showToast(res.reason === "duplicate" ? "Già in libreria" : "Errore, riprova", "error");
+    return null;
   }
   showToast(`${fullItem.title} aggiunto`, "success");
   haptic(12);
+  return res.title.id;
+}
+
+async function handleAddFromSearch(tmdbId, type, status) {
+  const savedId = await addItemFromCache("results", tmdbId, type, status);
+  if (!savedId) return;
   await reloadLibrary();
   document.getElementById("searchInput").value = "";
   document.getElementById("resultsSection").classList.add("hidden");
-  openDetail(res.title.id);
+  openDetail(savedId);
 }
 
-//  AGGIUNTA DA STASERA (rimane in pagina, sparisce dai consigliati) 
+// ─── AGGIUNTA DA STASERA (rimane in pagina, sparisce dai consigliati) ────────
 
-// Rimuove (se presente) la card dai consigli di "Stasera" � usata sia quando
+// Rimuove (se presente) la card dai consigli di "Stasera" — usata sia quando
 // si aggiunge direttamente dai tasti sulla card, sia quando si salva un voto
 // o si aggiunge a watchlist passando dalla "Scheda" di consultazione.
 function removeFromTonightCard(tmdbId, mediaType) {
@@ -323,24 +333,25 @@ function removeFromTonightCard(tmdbId, mediaType) {
 }
 
 async function handleAddFromTonight(tmdbId, type, status) {
-  const cache = JSON.parse(document.getElementById("tonightResult").dataset.cache || "[]");
-  const item = cache.find(x => String(x.id) === String(tmdbId) && x.media_type === type);
-  if (!item) return;
-
-  const fullItem = await tmdbFetchDetail(type, tmdbId).catch(() => item);
-  const res = await addTitle(fullItem, status, currentUser);
-
-  if (!res.ok) {
-    showToast(res.reason === "duplicate" ? "Gi� in libreria" : "Errore, riprova", "error");
-    return;
-  }
-  showToast(`${fullItem.title} aggiunto`, "success");
-  haptic(12);
+  const savedId = await addItemFromCache("tonightResult", tmdbId, type, status);
+  if (!savedId) return;
   removeFromTonightCard(tmdbId, type);
   await reloadLibrary();
 }
 
-//  SCHEDA DI CONSULTAZIONE (per titoli non ancora salvati) 
+// ─── SCHEDA DI CONSULTAZIONE (per titoli non ancora salvati) ─────────────────
+
+// Riempie la parte "statica" della scheda dettaglio (poster, titolo, anno,
+// tipo, trama, dati) — condivisa sia da openPreview (titolo non ancora
+// salvato) che da openDetail (titolo già in libreria).
+function fillDetailHeader(item) {
+  document.getElementById("detailPoster").style.backgroundImage = item.poster_path ? `url('https://image.tmdb.org/t/p/w500${item.poster_path}')` : "";
+  document.getElementById("detailTitle").textContent = item.title;
+  document.getElementById("detailYear").textContent = item.year;
+  document.getElementById("detailType").textContent = item.media_type === "movie" ? "Film" : "Serie TV";
+  document.getElementById("detailOverview").textContent = item.overview || "Nessuna trama disponibile.";
+  document.getElementById("detailFacts").innerHTML = renderDetailFacts(item);
+}
 
 async function openPreview(tmdbId, type) {
   const existing = db.find(x => x.tmdb_id === Number(tmdbId) && x.media_type === type);
@@ -354,28 +365,23 @@ async function openPreview(tmdbId, type) {
   detailReturnScreen = getVisibleScreen();
   haptic(8);
 
-  document.getElementById("detailPoster").style.backgroundImage = fullItem.poster_path ? `url('https://image.tmdb.org/t/p/w500${fullItem.poster_path}')` : "";
-  document.getElementById("detailTitle").textContent = fullItem.title;
-  document.getElementById("detailYear").textContent = fullItem.year;
-  document.getElementById("detailType").textContent = fullItem.media_type === "movie" ? "Film" : "Serie TV";
-  document.getElementById("detailOverview").textContent = fullItem.overview || "Nessuna trama disponibile.";
-  document.getElementById("detailFacts").innerHTML = renderDetailFacts(fullItem);
+  fillDetailHeader(fullItem);
   document.getElementById("detailVotesList").innerHTML = renderVotesList({}, currentUser);
 
   document.getElementById("detailVoteSlider").value = 7;
   document.getElementById("detailVoteValue").textContent = "7.0";
   document.getElementById("detailCommentInput").value = "";
 
-  document.getElementById("detailSaveVoteBtn").textContent = " Salva voto (segna come visto)";
+  document.getElementById("detailSaveVoteBtn").textContent = "✓ Salva voto (segna come visto)";
   document.getElementById("detailClearVoteBtn").classList.add("hidden");
-  document.getElementById("detailStatusBtn").textContent = " Aggiungi a watchlist";
+  document.getElementById("detailStatusBtn").textContent = "♡ Aggiungi a watchlist";
   document.getElementById("detailRemoveBtn").classList.add("hidden");
 
   switchScreen("detail");
   pushHistoryState("detail");
 }
 
-//  LIBRERIA (raggiunta solo dai "Vedi tutto" della home) 
+// ─── LIBRERIA (raggiunta solo dai "Vedi tutto" della home) ───────────────────
 
 function openLibrarySection(status, mediaFilter) {
   libraryStatus = status;
@@ -418,7 +424,7 @@ function renderLibraryScreen() {
   }
 }
 
-//  STATISTICHE (generi + classifica, con toggle Io/Gruppo) 
+// ─── STATISTICHE (generi + classifica, con toggle Io/Gruppo) ─────────────────
 
 function renderStats() {
   document.querySelectorAll("#statsIoGruppoToggle .stats-toggle-btn").forEach(btn => {
@@ -428,7 +434,7 @@ function renderStats() {
     btn.classList.toggle("active", btn.dataset.media === rankingMedia);
   });
 
-  // Le 4 card numeriche: di gruppo in modalit� "Gruppo", personali in "Io".
+  // Le 4 card numeriche: di gruppo in modalità "Gruppo", personali in "Io".
   // "In watchlist" personale conta solo i titoli che HAI aggiunto tu e che
   // sono ancora in watchlist in questo momento (si aggiorna da solo quando
   // li segni visti o li rimuovi).
@@ -473,7 +479,7 @@ function renderStats() {
   renderRanking(ranked, rankingMedia === "movie" ? "Film" : "Serie TV");
 }
 
-//  STASERA COSA GUARDO � algoritmo completo (come CineTracker) 
+// ─── STASERA COSA GUARDO — algoritmo completo (come CineTracker) ─────────────
 
 function suggestHistoryKey() { return `cinefighiSuggestHistory:${currentUser}`; }
 
@@ -603,7 +609,7 @@ function buildReason(item, profile, affinity) {
   const matches = (item.genre_names || []).filter(g => profile.topGenres.includes(g));
   if (matches.length) reasons.push(`match con ${matches.slice(0, 2).join(" + ")}`);
   if (profile.topDecade && decadeOf(item.year) === profile.topDecade) reasons.push("decade che guardi spesso");
-  if (affinity >= 88) reasons.push("compatibilit� molto alta");
+  if (affinity >= 88) reasons.push("compatibilità molto alta");
   else if (affinity >= 80) reasons.push("buona sintonia con i tuoi gusti");
   return reasons.slice(0, 3);
 }
@@ -643,7 +649,7 @@ function pickDiverse(ranked, count = 5) {
 
 async function runTonight() {
   const area = document.getElementById("tonightResult");
-  area.innerHTML = `<p class="tonight__hint">Cerco qualcosa per te�</p>`;
+  area.innerHTML = `<p class="tonight__hint">Cerco qualcosa per te…</p>`;
 
   const profile = getUserTasteProfile();
   if (!profile) {
@@ -658,7 +664,7 @@ async function runTonight() {
   for (const level of fallback.levels) {
     const found = await tmdbFetchDiscoverLevel(level.urls, fallback.type, excludedKeys);
     found.forEach(item => candidatesMap.set(uniqueKey(item), item));
-    if (candidatesMap.size >= 16) break; // gi� abbastanza scelta, non serve allargare oltre
+    if (candidatesMap.size >= 16) break; // già abbastanza scelta, non serve allargare oltre
   }
 
   const candidates = [...candidatesMap.values()];
@@ -686,7 +692,7 @@ async function runTonight() {
   registerSuggested(diverse.map(d => d.item));
 }
 
-//  DETTAGLIO 
+// ─── DETTAGLIO ──────────────────────────────────────────────────────────────
 
 function getVisibleScreen() {
   const ids = ["home", "library", "stats", "tonight", "detail"];
@@ -712,12 +718,7 @@ function openDetail(id, options = {}) {
     haptic(8);
   }
 
-  document.getElementById("detailPoster").style.backgroundImage = item.poster_path ? `url('https://image.tmdb.org/t/p/w500${item.poster_path}')` : "";
-  document.getElementById("detailTitle").textContent = item.title;
-  document.getElementById("detailYear").textContent = item.year;
-  document.getElementById("detailType").textContent = item.media_type === "movie" ? "Film" : "Serie TV";
-  document.getElementById("detailOverview").textContent = item.overview || "Nessuna trama disponibile.";
-  document.getElementById("detailFacts").innerHTML = renderDetailFacts(item);
+  fillDetailHeader(item);
   document.getElementById("detailVotesList").innerHTML = renderVotesList(item.votes, currentUser);
 
   const myVote = item.votes?.[currentUser]?.vote ?? 7;
@@ -731,11 +732,24 @@ function openDetail(id, options = {}) {
   document.getElementById("detailClearVoteBtn").classList.toggle("hidden", !hasMyVote);
 
   document.getElementById("detailStatusBtn").textContent =
-    item.status === "watchlist" ? " Segna come visto" : " Sposta in watchlist";
+    item.status === "watchlist" ? "✓ Segna come visto" : "♡ Sposta in watchlist";
   document.getElementById("detailRemoveBtn").classList.remove("hidden");
 
   switchScreen("detail");
   if (push) pushHistoryState("detail");
+}
+
+// Salva in libreria il titolo attualmente in "consultazione" (previewItem,
+// non ancora in libreria), con lo status indicato. Se qualcun altro l'ha
+// già aggiunto nel frattempo (duplicate), recupera comunque l'id esistente.
+// Usata sia da handleSaveVote (status "seen") che da handleToggleStatus
+// (status "watchlist"). Ritorna l'id salvato, o null in caso di errore vero.
+async function promotePreviewItem(status) {
+  const res = await addTitle(previewItem, status, currentUser);
+  if (!res.ok && res.reason !== "duplicate") return null;
+  return res.ok
+    ? res.title.id
+    : (db.find(x => x.tmdb_id === previewItem.id && x.media_type === previewItem.media_type)?.id ?? null);
 }
 
 async function handleSaveVote() {
@@ -743,11 +757,8 @@ async function handleSaveVote() {
   const comment = document.getElementById("detailCommentInput").value.trim();
 
   if (previewItem) {
-    // Un voto significa sempre "l'ho gi� visto": lo salviamo come visto, mai in watchlist
-    const res = await addTitle(previewItem, "seen", currentUser);
-    const savedId = res.ok
-      ? res.title.id
-      : db.find(x => x.tmdb_id === previewItem.id && x.media_type === previewItem.media_type)?.id;
+    // Un voto significa sempre "l'ho già visto": lo salviamo come visto, mai in watchlist
+    const savedId = await promotePreviewItem("seen");
     if (!savedId) { showToast("Errore, riprova", "error"); return; }
     await upsertVote(savedId, currentUser, vote, comment);
     haptic(12);
@@ -779,18 +790,15 @@ async function handleClearVote() {
 
 async function handleToggleStatus() {
   if (previewItem) {
-    // Modalit� consultazione: unico pulsante disponibile � "Aggiungi a watchlist"
-    const res = await addTitle(previewItem, "watchlist", currentUser);
-    if (!res.ok && res.reason !== "duplicate") { showToast("Errore, riprova", "error"); return; }
-    const savedId = res.ok
-      ? res.title.id
-      : db.find(x => x.tmdb_id === previewItem.id && x.media_type === previewItem.media_type)?.id;
+    // Modalità consultazione: unico pulsante disponibile è "Aggiungi a watchlist"
+    const savedId = await promotePreviewItem("watchlist");
+    if (!savedId) { showToast("Errore, riprova", "error"); return; }
     haptic(12);
     showToast(`${previewItem.title} aggiunto alla watchlist`, "success");
     removeFromTonightCard(previewItem.id, previewItem.media_type);
     previewItem = null;
     await reloadLibrary();
-    if (savedId) openDetail(savedId, { push: false });
+    openDetail(savedId, { push: false });
     return;
   }
 
@@ -815,7 +823,7 @@ async function handleRemove() {
   try { history.replaceState({ screen: "home" }, "", location.href); } catch {}
 }
 
-//  EVENTI 
+// ─── EVENTI ───────────────────────────────────────────────────────────────
 
 function bindGlobalEvents() {
   document.getElementById("userChip").addEventListener("click", () => openUserPicker(false));
