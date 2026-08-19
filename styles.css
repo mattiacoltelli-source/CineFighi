@@ -216,7 +216,46 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .bar-row__name { font-size:14px; font-weight:600; }
 .bar-row__count { font-family: var(--font-display); font-size:13px; font-weight:700; color: var(--acc); }
 .bar-track { width:100%; height:6px; background: var(--surface3); border-radius: var(--radius-pill); overflow:hidden; }
-.bar__fill { height:100%; border-radius: var(--radius-pill); background: linear-gradient(90deg, var(--blue), #7dbdff); }
+.bar__fill {
+  height:100%; width:0%; border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, var(--blue), #7dbdff);
+  transition: width 900ms cubic-bezier(.22,1,.36,1);
+  will-change: width;
+}
+
+.splash {
+  position:fixed; inset:0; z-index:99999; display:flex; align-items:center; justify-content:center;
+  background: var(--bg); transition: opacity .5s ease, visibility .5s ease;
+}
+.splash.hide { opacity:0; visibility:hidden; pointer-events:none; }
+.splash-card { text-align:center; padding:24px; }
+.splash-emoji { font-size:44px; margin-bottom:12px; }
+.splash-title {
+  font-family: var(--font-display); font-size:28px; font-weight:900; letter-spacing:-.5px;
+  background: linear-gradient(135deg, var(--acc2), var(--acc));
+  -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+}
+.splash-sub { font-size:13px; color: var(--text3); margin:8px 0 22px; }
+.splash-bar { width:120px; height:3px; margin:0 auto; border-radius: var(--radius-pill); overflow:hidden; background: var(--surface2); }
+.splash-bar > div {
+  height:100%; width:0%; background: linear-gradient(90deg, var(--acc), var(--acc2));
+  animation: splashLoad 1s var(--ease) forwards; border-radius: var(--radius-pill);
+}
+@keyframes splashLoad { from { width:0% } to { width:100% } }
+
+#updateBanner {
+  position: fixed; left:16px; right:16px; bottom: 92px; z-index: 10000;
+  background: var(--surface); border:1px solid rgba(45,217,163,.35); border-radius: var(--radius-md);
+  padding: 12px 14px; display:flex; align-items:center; justify-content:space-between; gap:10px;
+  box-shadow: 0 16px 40px rgba(0,0,0,.5);
+  animation: toastIn 300ms var(--ease);
+}
+@keyframes toastIn { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+#updateBanner span { font-size:13px; font-weight:600; color: var(--text); }
+#updateBanner button {
+  background: linear-gradient(160deg, var(--acc2), var(--acc)); color:#04140f; font-family: var(--font-display);
+  font-weight:800; font-size:13px; padding:9px 16px; border-radius: var(--radius-sm); border:none; flex-shrink:0;
+}
 
 .count-badge { padding:5px 12px; border-radius:999px; font-family: var(--font-display); font-size:12px; font-weight:800;
   background: var(--acc-dim); border:1px solid rgba(45,217,163,.22); color: var(--acc2); }

@@ -5,7 +5,53 @@
 import {
   escapeHtml, mediaLabel, mediaBadgeClass, posterUrl, uniqueKey,
   average, voteCount, rawNumberToFixed
-} from "./cine-core.js?v=11";
+} from "./cine-core.js?v=15";
+
+// ─── ANIMAZIONI (numeri che contano, barre che si riempiono, tattile) ───────
+
+let _lastHapticAt = 0;
+export function haptic(pattern = 10) {
+  const now = Date.now();
+  if (now - _lastHapticAt < 60) return;
+  _lastHapticAt = now;
+  if (navigator.vibrate) {
+    try { navigator.vibrate(pattern); } catch {}
+  }
+}
+
+export function animateValue(el, target, duration = 600) {
+  if (!el) return;
+  const end = Number(target) || 0;
+  const current = Number(el.dataset.currentValue || 0);
+  if (current === end) { el.textContent = String(end); return; }
+
+  const start = current;
+  const startTime = performance.now();
+
+  function tick(now) {
+    const p = Math.min((now - startTime) / duration, 1);
+    const eased = 1 - Math.pow(1 - p, 3);
+    const v = Math.round(start + (end - start) * eased);
+    el.textContent = String(v);
+    el.dataset.currentValue = String(v);
+    if (p < 1) requestAnimationFrame(tick);
+    else { el.textContent = String(end); el.dataset.currentValue = String(end); }
+  }
+  requestAnimationFrame(tick);
+}
+
+export function animateBarGroups() {
+  const bars = document.querySelectorAll("#genreBars .bar__fill[data-width]");
+  if (!bars.length) return;
+  bars.forEach(bar => { bar.style.width = "0%"; });
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      bars.forEach((bar, i) => {
+        setTimeout(() => { bar.style.width = `${bar.dataset.width}%`; }, i * 70);
+      });
+    });
+  });
+}
 
 // ─── TOAST ───────────────────────────────────────────────────────────────────
 
@@ -168,9 +214,10 @@ export function renderGenreBars(entries) {
         <span class="bar-row__name">${escapeHtml(e.label)}</span>
         <span class="bar-row__count">${e.value}</span>
       </div>
-      <div class="bar-track"><div class="bar__fill" style="width:${Math.max(8, (e.value / max) * 100)}%"></div></div>
+      <div class="bar-track"><div class="bar__fill" data-width="${Math.max(8, (e.value / max) * 100)}"></div></div>
     </div>
   `).join("");
+  animateBarGroups();
 }
 
 // ─── STATS: classifica ───────────────────────────────────────────────────────
