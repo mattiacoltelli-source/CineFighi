@@ -92,9 +92,20 @@ async function init() {
   });
 
   currentUser = getCurrentUser();
-  users = await fetchUsers();
 
-  if (!currentUser || !users.includes(currentUser)) {
+  // FIX: se fetchUsers fallisce (rete/Supabase giù), non trattiamo l'esito
+  // come "nessun utente" — altrimenti un utente già selezionato verrebbe
+  // rispedito alla schermata di scelta profilo solo per un errore di rete.
+  let usersFetchOk = true;
+  try {
+    users = await fetchUsers();
+  } catch (e) {
+    users = [];
+    usersFetchOk = false;
+    showToast("Impossibile contattare il server: controlla la connessione", "error");
+  }
+
+  if (!currentUser || (usersFetchOk && !users.includes(currentUser))) {
     openUserPicker(true);
   } else {
     document.getElementById("app").classList.remove("hidden");
@@ -108,7 +119,18 @@ async function init() {
 }
 
 async function reloadLibrary() {
-  db = await fetchLibrary();
+  // FIX: se fetchLibrary fallisce, NON sovrascriviamo `db` con una lista
+  // vuota — altrimenti un semplice errore di rete svuota silenziosamente
+  // Home/Statistiche per tutti, facendo credere che i titoli siano spariti.
+  // Manteniamo lo stato precedente e avvisiamo l'utente.
+  let freshDb;
+  try {
+    freshDb = await fetchLibrary();
+  } catch (e) {
+    showToast("Impossibile aggiornare la libreria: controlla la connessione", "error");
+    return;
+  }
+  db = freshDb;
   renderHome();
   renderStats();
 }
@@ -140,7 +162,14 @@ function closeUserPicker() {
 }
 
 async function renderUserPickerList() {
-  users = await fetchUsers();
+  // FIX: come reloadLibrary, non svuotiamo la lista utenti mostrata se
+  // fetchUsers fallisce per un errore di rete.
+  try {
+    users = await fetchUsers();
+  } catch (e) {
+    showToast("Impossibile aggiornare la lista utenti", "error");
+    return;
+  }
   const list = document.getElementById("userPickerList");
   list.innerHTML = users.map(u => `
     <div class="user-pick-row">
@@ -763,7 +792,8 @@ async function handleSaveVote() {
     // Un voto significa sempre "l'ho già visto": lo salviamo come visto, mai in watchlist
     const savedId = await promotePreviewItem("seen");
     if (!savedId) { showToast("Errore, riprova", "error"); return; }
-    await upsertVote(savedId, currentUser, vote, comment);
+    const res = await upsertVote(savedId, currentUser, vote, comment);
+    if (!res.ok) { showToast("Errore nel salvare il voto, riprova", "error"); return; }
     haptic(12);
     showToast("Voto salvato", "success");
     removeFromTonightCard(previewItem.id, previewItem.media_type);
@@ -775,7 +805,8 @@ async function handleSaveVote() {
 
   const item = byId(currentDetailId);
   if (!item) return;
-  await upsertVote(item.id, currentUser, vote, comment);
+  const res = await upsertVote(item.id, currentUser, vote, comment);
+  if (!res.ok) { showToast("Errore nel salvare il voto, riprova", "error"); return; }
   haptic(12);
   showToast("Voto salvato", "success");
   await reloadLibrary();
@@ -785,7 +816,8 @@ async function handleSaveVote() {
 async function handleClearVote() {
   const item = byId(currentDetailId);
   if (!item) return;
-  await removeVote(item.id, currentUser);
+  const res = await removeVote(item.id, currentUser);
+  if (!res.ok) { showToast("Errore, riprova", "error"); return; }
   haptic(10);
   await reloadLibrary();
   openDetail(item.id, { push: false });
@@ -808,7 +840,8 @@ async function handleToggleStatus() {
   const item = byId(currentDetailId);
   if (!item) return;
   const nextStatus = item.status === "watchlist" ? "seen" : "watchlist";
-  await updateTitleStatus(item.id, nextStatus);
+  const res = await updateTitleStatus(item.id, nextStatus);
+  if (!res.ok) { showToast("Errore, riprova", "error"); return; }
   haptic(12);
   await reloadLibrary();
   openDetail(item.id, { push: false });
@@ -817,7 +850,8 @@ async function handleToggleStatus() {
 async function handleRemove() {
   const item = byId(currentDetailId);
   if (!item) return;
-  await removeTitle(item.id);
+  const res = await removeTitle(item.id);
+  if (!res.ok) { showToast("Errore, riprova", "error"); return; }
   haptic(16);
   showToast("Rimosso dalla libreria", "success");
   currentDetailId = null;
