@@ -113,7 +113,10 @@ async function reloadLibrary() {
   renderStats();
 }
 
-function byId(id) { return db.find(x => x.id === id); }
+// FIX: id arriva quasi sempre come stringa (es. card.dataset.id nel DOM),
+// mentre in db è numerico (Supabase restituisce t.id come number). Un
+// confronto stretto === falliva sempre, impedendo di aprire il dettaglio.
+function byId(id) { return db.find(x => String(x.id) === String(id)); }
 
 // ─── USER PICKER ───────────────────────────────────────────────────────────
 
