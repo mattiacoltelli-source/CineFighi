@@ -223,6 +223,7 @@ async function handleAddUser() {
   if (!res.ok) {
     if (res.reason === "full") showToast(`Gruppo al completo (${MAX_USERS}/${MAX_USERS})`, "error");
     else if (res.reason === "too_long") showToast("Nome troppo lungo", "error");
+    else if (res.reason === "empty") showToast("Inserisci un nome", "error");
     else showToast("Errore, riprova", "error");
     return;
   }
@@ -850,14 +851,22 @@ async function handleToggleStatus() {
 async function handleRemove() {
   const item = byId(currentDetailId);
   if (!item) return;
-  const res = await removeTitle(item.id);
-  if (!res.ok) { showToast("Errore, riprova", "error"); return; }
-  haptic(16);
-  showToast("Rimosso dalla libreria", "success");
-  currentDetailId = null;
-  await reloadLibrary();
-  switchScreen("home");
-  try { history.replaceState({ screen: "home" }, "", location.href); } catch {}
+  // La libreria è condivisa da tutto il gruppo: un tocco per sbaglio non deve
+  // cancellare un titolo (e i voti di tutti collegati) senza possibilità di
+  // annullare. Stessa conferma già usata per eliminare un utente dal gruppo.
+  askConfirm(
+    `Rimuovere "${item.title}" dalla libreria? Anche i voti e i commenti di tutto il gruppo andranno persi.`,
+    async () => {
+      const res = await removeTitle(item.id);
+      if (!res.ok) { showToast("Errore, riprova", "error"); return; }
+      haptic(16);
+      showToast("Rimosso dalla libreria", "success");
+      currentDetailId = null;
+      await reloadLibrary();
+      switchScreen("home");
+      try { history.replaceState({ screen: "home" }, "", location.href); } catch {}
+    }
+  );
 }
 
 // ─── EVENTI ───────────────────────────────────────────────────────────────
