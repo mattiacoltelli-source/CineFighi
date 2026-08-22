@@ -12,7 +12,8 @@ import {
   upsertVote, removeVote
 } from "./storage.js?v=17";
 import {
-  tmdbFetchDetail, tmdbSearch, tmdbFetchDiscoverLevel, tmdbFetchDecadeCandidates, buildFallbackQueries
+  tmdbFetchDetail, tmdbSearch, tmdbFetchDiscoverLevel, tmdbFetchDecadeCandidates,
+  tmdbFetchOutOfComfortZoneCandidates, buildFallbackQueries
 } from "./tmdb.js?v=17";
 import {
   showToast, avatarHtml, initScreens, switchScreen,
@@ -649,6 +650,14 @@ function buildReason(item, profile, affinity) {
   return reasons.slice(0, 3);
 }
 
+function buildOutOfZoneReason(item, profile) {
+  const reasons = ["fuori dai generi che guardi di solito"];
+  const tmdbVote = Number(item.vote_average) || 0;
+  if (tmdbVote >= 7.2) reasons.push("voto molto alto su TMDB");
+  if (profile.topDecade && decadeOf(item.year) === profile.topDecade) reasons.push("nella tua decade preferita");
+  return reasons;
+}
+
 // Quante persone la persona selezionata ha già votato: sotto i 3 voti il
 // profilo di gusti è troppo debole per dare consigli sensati.
 function votedCount() {
@@ -701,7 +710,7 @@ function pickDiverse(ranked, count = 5) {
 }
 
 // Range di decadi su cui pescare i candidati in parallelo: garantisce che i
-// 5 consigli non siano quasi sempre film recenti (limite dell'algoritmo
+// consigli non siano quasi sempre film recenti (limite dell'algoritmo
 // originale), includendo anche un blocco di classici pre-2000.
 function tonightDecadeRanges() {
   const currentYear = new Date().getFullYear();
@@ -725,18 +734,21 @@ async function recommendTonightFive() {
     return;
   }
 
-  area.innerHTML = `<p class="tonight__hint">🔍 Sto cercando 5 titoli adatti…</p>`;
+  area.innerHTML = `<p class="tonight__hint">🔍 Sto cercando 6 titoli adatti…</p>`;
 
   const profile = getUserTasteProfile();
   const genreIds = profile.topGenres.map(g => GENRE_NAME_TO_ID[g]).filter(Boolean);
   const excludedKeys = new Set(db.map(x => `${x.media_type}_${x.tmdb_id}`));
 
   try {
-    const decadePools = await Promise.all(
-      tonightDecadeRanges().map(d =>
-        tmdbFetchDecadeCandidates(profile.prefType, d.start, d.end, genreIds, excludedKeys)
-      )
-    );
+    const [decadePools, outOfZoneRaw] = await Promise.all([
+      Promise.all(
+        tonightDecadeRanges().map(d =>
+          tmdbFetchDecadeCandidates(profile.prefType, d.start, d.end, genreIds, excludedKeys)
+        )
+      ),
+      tmdbFetchOutOfComfortZoneCandidates(profile.prefType, genreIds, excludedKeys)
+    ]);
 
     const candidatesMap = new Map();
     decadePools.flat().forEach(item => candidatesMap.set(uniqueKey(item), item));
@@ -772,12 +784,34 @@ async function recommendTonightFive() {
       })
       .sort((a, b) => b.rankScore - a.rankScore);
 
-    const diverse = pickDiverse(ranked, 5)
+    // 4 slot ad alta affinità, diversificati per genere e decade
+    const topFour = pickDiverse(ranked, 4)
       .sort((a, b) => Number(a.item.year || 0) - Number(b.item.year || 0));
 
-    area.innerHTML = renderTonightList(diverse);
-    area.dataset.cache = JSON.stringify(diverse.map(d => d.item));
-    registerSuggested(diverse.map(d => d.item));
+    const usedKeys = new Set(topFour.map(entry => uniqueKey(entry.item)));
+
+    // 2 slot fuori dai generi che guardi di solito, ma con voto TMDB alto
+    // (soglia già più severa in tmdbFetchOutOfComfortZoneCandidates):
+    // "diverso" qui non vuol dire "a caso".
+    const outOfZonePicked = outOfZoneRaw
+      .filter(item => !usedKeys.has(uniqueKey(item)))
+      .map(item => {
+        const affinity = calculateAffinity(item, profile);
+        return {
+          item,
+          affinity,
+          reasons: buildOutOfZoneReason(item, profile),
+          rankScore: scoreCandidate(item, profile, []) + Math.random() * 2.5
+        };
+      })
+      .sort((a, b) => b.rankScore - a.rankScore)
+      .slice(0, 2);
+
+    const finalSix = [...topFour, ...outOfZonePicked];
+
+    area.innerHTML = renderTonightList(finalSix);
+    area.dataset.cache = JSON.stringify(finalSix.map(d => d.item));
+    registerSuggested(finalSix.map(d => d.item));
   } catch (e) {
     console.error(e);
     area.innerHTML = `<p class="tonight__hint">Errore di ricerca. Controlla la connessione.</p>`;

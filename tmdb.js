@@ -96,6 +96,21 @@ export async function tmdbFetchDecadeCandidates(type, yearStart, yearEnd, genreI
   return tmdbFetchDiscoverLevel(urls, type, excludedKeys);
 }
 
+// Pesca candidati ESCLUDENDO i generi preferiti dell'utente (without_genres),
+// con una soglia di voto più alta del solito: "fuori zona" non deve
+// significare "qualità bassa".
+export async function tmdbFetchOutOfComfortZoneCandidates(type, excludeGenreIds, excludedKeys) {
+  const minVotes = type === "movie" ? "&vote_count.gte=150" : "&vote_count.gte=60";
+  const withoutGenres = excludeGenreIds.length ? `&without_genres=${excludeGenreIds.join(",")}` : "";
+
+  const urls = [
+    `${BASE_URL}/discover/${type}?api_key=${API_KEY}&language=it-IT${withoutGenres}&sort_by=vote_average.desc${minVotes}&page=${randomPage(5)}`,
+    `${BASE_URL}/discover/${type}?api_key=${API_KEY}&language=it-IT${withoutGenres}&sort_by=popularity.desc${minVotes}&page=${randomPage(5)}`
+  ];
+
+  return tmdbFetchDiscoverLevel(urls, type, excludedKeys);
+}
+
 // Costruisce i 4 livelli di ricerca (precisa → ampia → solo genere → fallback),
 // esattamente come nell'algoritmo originale di CineTracker, basandosi sul
 // profilo di gusti della persona selezionata.
