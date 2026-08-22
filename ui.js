@@ -303,19 +303,23 @@ export function renderTonightList(entries) {
 
 export function renderDiscoverResult(chosen, whyBits, fallbackNote) {
   return `
-    <div class="discover-result" data-tonight-key="${chosen.media_type}_${chosen.id}">
-      <div class="discover-result__poster" style="background-image:url('${posterUrl(chosen.poster_path)}')"></div>
-      <div class="discover-result__body">
-        <div class="discover-result__title">✨ ${escapeHtml(chosen.title)}</div>
-        <div class="discover-result__meta">${chosen.year} · ${mediaLabel(chosen)} · ★ ${rawNumberToFixed(chosen.vote_average, 1)} TMDB</div>
-        <div class="discover-result__why">
-          Scelto perché ${escapeHtml(whyBits.join(", "))}.${fallbackNote ? ` ${escapeHtml(fallbackNote)}` : ""}
+    <div class="tonight-solo">
+      <div class="poster-card" data-tonight-key="${chosen.media_type}_${chosen.id}">
+        <div class="poster-card__img" style="background-image:url('${posterUrl(chosen.poster_path)}')">
+          <span class="badge ${mediaBadgeClass(chosen)}">${mediaLabel(chosen)}</span>
+          <div class="poster-card__actions">
+            <button class="poster-btn poster-btn--watch action-add-tonight" data-id="${chosen.id}" data-type="${chosen.media_type}" data-status="watchlist">♡ Lista</button>
+            <button class="poster-btn poster-btn--seen action-add-tonight" data-id="${chosen.id}" data-type="${chosen.media_type}" data-status="seen">✓ Visto</button>
+          </div>
         </div>
-        <div class="detail-actions-row" style="margin-top:12px;">
-          <button class="btn btn--secondary action-add-tonight" data-id="${chosen.id}" data-type="${chosen.media_type}" data-status="watchlist">♡ Watchlist</button>
-          <button class="btn btn--ok action-add-tonight" data-id="${chosen.id}" data-type="${chosen.media_type}" data-status="seen">✓ Già visto</button>
+        <div class="poster-card__info">
+          <div class="poster-card__title">✨ ${escapeHtml(chosen.title)}</div>
+          <div class="poster-card__meta">${chosen.year} · ${mediaLabel(chosen)} · ★ ${rawNumberToFixed(chosen.vote_average, 1)} TMDB</div>
+          <div class="tonight-card__reason">
+            Scelto perché ${escapeHtml(whyBits.join(", "))}.${fallbackNote ? ` ${escapeHtml(fallbackNote)}` : ""}
+          </div>
+          <button class="poster-card__scheda open-preview" data-id="${chosen.id}" data-type="${chosen.media_type}">Scheda →</button>
         </div>
-        <button class="poster-card__scheda open-preview" data-id="${chosen.id}" data-type="${chosen.media_type}">Scheda →</button>
       </div>
     </div>
   `;
@@ -325,12 +329,16 @@ export function renderDiscoverResult(chosen, whyBits, fallbackNote) {
 
 export function renderClassicResult(pick, myVote, comment) {
   return `
-    <div class="classic-result open-detail" data-id="${pick.id}">
-      <div class="classic-result__poster" style="background-image:url('${posterUrl(pick.poster_path)}')"></div>
-      <div class="classic-result__body">
-        <div class="classic-result__title">🏛️ ${escapeHtml(pick.title)}</div>
-        <div class="classic-result__meta">${pick.year} · ${mediaLabel(pick)} · il tuo voto: ${Number(myVote).toFixed(1)}</div>
-        <div class="classic-result__why">${escapeHtml(comment)}</div>
+    <div class="tonight-solo">
+      <div class="poster-card open-detail" data-id="${pick.id}">
+        <div class="poster-card__img" style="background-image:url('${posterUrl(pick.poster_path)}')">
+          <span class="badge ${mediaBadgeClass(pick)}">${mediaLabel(pick)}</span>
+        </div>
+        <div class="poster-card__info">
+          <div class="poster-card__title">🏛️ ${escapeHtml(pick.title)}</div>
+          <div class="poster-card__meta">${pick.year} · ${mediaLabel(pick)} · il tuo voto: ${Number(myVote).toFixed(1)}</div>
+          <div class="tonight-card__reason">${escapeHtml(comment)}</div>
+        </div>
       </div>
     </div>
   `;
