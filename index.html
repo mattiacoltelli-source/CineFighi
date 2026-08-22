@@ -7,7 +7,7 @@
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#080c12">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=16">
+  <link rel="stylesheet" href="styles.css?v=17">
 </head>
 <body>
 
@@ -170,9 +170,37 @@
     <section id="screen-tonight" class="hidden">
       <h2 class="section__title" style="margin-bottom:6px;">Stasera cosa guardo?</h2>
       <p id="tonightIntro" class="tonight__intro">Consigli basati sui tuoi voti.</p>
-      <button id="tonightBtn" class="tonight-main-btn">✨ Dammi 5 consigli</button>
+
+      <div class="tonight-discover-block">
+        <div class="tonight-select-wrap">
+          <select id="tonightGenreSelect">
+            <option value="all">Qualsiasi genere</option>
+            <option value="Azione">Azione</option>
+            <option value="Avventura">Avventura</option>
+            <option value="Animazione">Animazione</option>
+            <option value="Commedia">Commedia</option>
+            <option value="Crime">Crime</option>
+            <option value="Drama">Drama</option>
+            <option value="Fantascienza">Fantascienza</option>
+            <option value="Fantasy">Fantasy</option>
+            <option value="Horror">Horror</option>
+            <option value="Mistero">Mistero</option>
+            <option value="Romance">Romance</option>
+            <option value="Thriller">Thriller</option>
+            <option value="Guerra">Guerra</option>
+            <option value="Western">Western</option>
+          </select>
+        </div>
+        <button id="tonightDiscoverBtn" class="btn btn--secondary tonight-discover-btn">✨ Scopri qualcosa di nuovo</button>
+      </div>
+
+      <button id="tonightBtn" class="tonight-main-btn">⭐ Dammi 5 consigli</button>
+      <div class="tonight-secondary-actions">
+        <button id="tonightClassicBtn" class="btn btn--ghost tonight-mini-btn">🏛️ Rivedi un classico</button>
+      </div>
+
       <div id="tonightResult" class="tonight-result">
-        <p class="tonight__hint">Premi il pulsante per ricevere dei consigli.</p>
+        <p class="tonight__hint">Premi un pulsante per ricevere un consiglio.</p>
       </div>
     </section>
 
@@ -239,6 +267,6 @@
 
   <div id="toastWrap"></div>
 
-  <script type="module" src="app.js?v=16"></script>
+  <script type="module" src="app.js?v=17"></script>
 </body>
 </html>

@@ -3,21 +3,23 @@
 // richiama storage.js (Supabase) e tmdb.js, e passa i dati a ui.js per disegnare.
 
 import {
-  uniqueKey, average, escapeHtml, decadeOf
-} from "./cine-core.js?v=16";
+  uniqueKey, average, escapeHtml, decadeOf, GENRE_NAME_TO_ID
+} from "./cine-core.js?v=17";
 import {
   getCurrentUser, setCurrentUser, clearCurrentUser, MAX_USERS,
   fetchUsers, addUser, deleteUser,
   fetchLibrary, addTitle, updateTitleStatus, removeTitle,
   upsertVote, removeVote
-} from "./storage.js?v=16";
-import { tmdbFetchDetail, tmdbSearch, tmdbFetchDiscoverLevel, buildFallbackQueries } from "./tmdb.js?v=16";
+} from "./storage.js?v=17";
+import {
+  tmdbFetchDetail, tmdbSearch, tmdbFetchDiscoverLevel, tmdbFetchDecadeCandidates, buildFallbackQueries
+} from "./tmdb.js?v=17";
 import {
   showToast, avatarHtml, initScreens, switchScreen,
   renderShelf, renderSearchResults, renderLibraryList, renderGenreFilters,
-  renderGenreBars, renderRanking, renderTonightList,
+  renderGenreBars, renderRanking, renderTonightList, renderDiscoverResult, renderClassicResult,
   renderDetailFacts, renderVotesList, haptic, animateValue
-} from "./ui.js?v=16";
+} from "./ui.js?v=17";
 
 let currentUser = null;
 let users = [];
@@ -647,11 +649,24 @@ function buildReason(item, profile, affinity) {
   return reasons.slice(0, 3);
 }
 
-// Sceglie 5 titoli diversificando i generi, come nell'originale
+// Quante persone la persona selezionata ha già votato: sotto i 3 voti il
+// profilo di gusti è troppo debole per dare consigli sensati.
+function votedCount() {
+  return db.filter(x => x.votes && x.votes[currentUser]).length;
+}
+
+function getSelectedTonightGenre() {
+  const el = document.getElementById("tonightGenreSelect");
+  return el ? el.value : "all";
+}
+
+// Sceglie 5 titoli diversificando SIA per genere principale SIA per decade,
+// così i consigli non finiscono tutti sullo stesso genere o sulla stessa epoca.
 function pickDiverse(ranked, count = 5) {
   const selected = [];
   const usedKeys = new Set();
   const usedGenres = new Map();
+  const usedDecades = new Map();
 
   for (const entry of ranked) {
     if (selected.length >= count) break;
@@ -659,12 +674,17 @@ function pickDiverse(ranked, count = 5) {
     if (usedKeys.has(key)) continue;
 
     const primaryGenre = (entry.item.genre_names && entry.item.genre_names[0]) || "Altro";
-    const usage = usedGenres.get(primaryGenre) || 0;
-    if (usage >= 1 && selected.length < count - 1) continue;
+    const decade = decadeOf(entry.item.year);
+    const genreUsage = usedGenres.get(primaryGenre) || 0;
+    const decadeUsage = usedDecades.get(decade) || 0;
+    const isLastSlot = selected.length >= count - 1;
+
+    if (!isLastSlot && (genreUsage >= 1 || decadeUsage >= 2)) continue;
 
     selected.push(entry);
     usedKeys.add(key);
-    usedGenres.set(primaryGenre, usage + 1);
+    usedGenres.set(primaryGenre, genreUsage + 1);
+    usedDecades.set(decade, decadeUsage + 1);
   }
 
   if (selected.length < count) {
@@ -680,49 +700,173 @@ function pickDiverse(ranked, count = 5) {
   return selected.slice(0, count);
 }
 
-async function runTonight() {
+// Range di decadi su cui pescare i candidati in parallelo: garantisce che i
+// 5 consigli non siano quasi sempre film recenti (limite dell'algoritmo
+// originale), includendo anche un blocco di classici pre-2000.
+function tonightDecadeRanges() {
+  const currentYear = new Date().getFullYear();
+  return [
+    { start: 1960, end: 1999 },
+    { start: 2000, end: 2009 },
+    { start: 2010, end: 2019 },
+    { start: 2020, end: currentYear }
+  ];
+}
+
+async function recommendTonightFive() {
   const area = document.getElementById("tonightResult");
-  area.innerHTML = `<p class="tonight__hint">Cerco qualcosa per te…</p>`;
+
+  if (votedCount() < 3) {
+    area.innerHTML = `<p class="tonight__hint">Vota almeno 3 titoli per ricevere consigli personalizzati.</p>`;
+    return;
+  }
+  if (!navigator.onLine) {
+    area.innerHTML = `<p class="tonight__hint">Sei offline. Connettiti per ricevere consigli.</p>`;
+    return;
+  }
+
+  area.innerHTML = `<p class="tonight__hint">🔍 Sto cercando 5 titoli adatti…</p>`;
 
   const profile = getUserTasteProfile();
-  if (!profile) {
-    area.innerHTML = renderTonightList([]);
-    return;
-  }
-
+  const genreIds = profile.topGenres.map(g => GENRE_NAME_TO_ID[g]).filter(Boolean);
   const excludedKeys = new Set(db.map(x => `${x.media_type}_${x.tmdb_id}`));
-  const fallback = buildFallbackQueries(profile, null, {});
 
-  const candidatesMap = new Map();
-  for (const level of fallback.levels) {
-    const found = await tmdbFetchDiscoverLevel(level.urls, fallback.type, excludedKeys);
-    found.forEach(item => candidatesMap.set(uniqueKey(item), item));
-    if (candidatesMap.size >= 16) break; // già abbastanza scelta, non serve allargare oltre
+  try {
+    const decadePools = await Promise.all(
+      tonightDecadeRanges().map(d =>
+        tmdbFetchDecadeCandidates(profile.prefType, d.start, d.end, genreIds, excludedKeys)
+      )
+    );
+
+    const candidatesMap = new Map();
+    decadePools.flat().forEach(item => candidatesMap.set(uniqueKey(item), item));
+
+    // Se il mix per decade non basta (catalogo piccolo, generi rari), allarghiamo
+    // con la ricerca a livelli generica esistente.
+    if (candidatesMap.size < 10) {
+      const fallback = buildFallbackQueries(profile, null, {});
+      for (const level of fallback.levels) {
+        const found = await tmdbFetchDiscoverLevel(level.urls, fallback.type, excludedKeys);
+        found.forEach(item => candidatesMap.set(uniqueKey(item), item));
+        if (candidatesMap.size >= 14) break;
+      }
+    }
+
+    const candidates = [...candidatesMap.values()];
+    if (!candidates.length) {
+      area.innerHTML = `<p class="tonight__hint">Non ho trovato consigli nuovi al momento. Riprova tra poco.</p>`;
+      return;
+    }
+
+    const ranked = candidates
+      .map(item => {
+        const affinity = calculateAffinity(item, profile);
+        return {
+          item,
+          affinity,
+          reasons: buildReason(item, profile, affinity),
+          // Un po' di casualità nell'ordinamento: a parità di gusti, richieste
+          // ripetute nella stessa serata non restituiscono sempre la stessa lista.
+          rankScore: scoreCandidate(item, profile, []) + Math.random() * 2.5
+        };
+      })
+      .sort((a, b) => b.rankScore - a.rankScore);
+
+    const diverse = pickDiverse(ranked, 5)
+      .sort((a, b) => Number(a.item.year || 0) - Number(b.item.year || 0));
+
+    area.innerHTML = renderTonightList(diverse);
+    area.dataset.cache = JSON.stringify(diverse.map(d => d.item));
+    registerSuggested(diverse.map(d => d.item));
+  } catch (e) {
+    console.error(e);
+    area.innerHTML = `<p class="tonight__hint">Errore di ricerca. Controlla la connessione.</p>`;
   }
+}
 
-  const candidates = [...candidatesMap.values()];
-  if (!candidates.length) {
-    area.innerHTML = `<p class="tonight__hint">Non ho trovato consigli nuovi al momento. Riprova tra poco.</p>`;
+// ─── SCOPRI PER GENERE (un titolo alla volta, genere scelto a mano) ─────────
+
+async function discoverByTaste() {
+  const area = document.getElementById("tonightResult");
+
+  if (votedCount() < 3) {
+    area.innerHTML = `<p class="tonight__hint">Vota almeno 3 titoli per ricevere consigli personalizzati.</p>`;
+    return;
+  }
+  if (!navigator.onLine) {
+    area.innerHTML = `<p class="tonight__hint">Sei offline. Connettiti per scoprire nuovi titoli.</p>`;
     return;
   }
 
-  const ranked = candidates
-    .map(item => {
-      const affinity = calculateAffinity(item, profile);
-      return {
-        item,
-        score: scoreCandidate(item, profile, fallback.selectedBoosts),
-        affinity,
-        reasons: buildReason(item, profile, affinity)
-      };
-    })
-    .sort((a, b) => b.score - a.score);
+  area.innerHTML = `<p class="tonight__hint">🔍 Sto cercando qualcosa di nuovo…</p>`;
 
-  const diverse = pickDiverse(ranked, 5);
+  const profile = getUserTasteProfile();
+  const selectedGenre = getSelectedTonightGenre();
+  const excludedKeys = new Set(db.map(x => `${x.media_type}_${x.tmdb_id}`));
+  const { type, levels, selectedBoosts } = buildFallbackQueries(profile, null, {
+    useSelectedGenre: selectedGenre !== "all",
+    selectedGenre
+  });
 
-  area.innerHTML = renderTonightList(diverse);
-  area.dataset.cache = JSON.stringify(diverse.map(d => d.item));
-  registerSuggested(diverse.map(d => d.item));
+  try {
+    let candidates = [];
+    let levelLabel = "";
+    for (const level of levels) {
+      const found = await tmdbFetchDiscoverLevel(level.urls, type, excludedKeys);
+      if (found.length) { candidates = found; levelLabel = level.label; break; }
+    }
+
+    if (!candidates.length) {
+      area.innerHTML = `<p class="tonight__hint">Nessun risultato. Riprova più tardi.</p>`;
+      return;
+    }
+
+    const scored = candidates
+      .map(item => ({ item, score: scoreCandidate(item, profile, selectedBoosts) + Math.random() * 2.5 }))
+      .sort((a, b) => b.score - a.score);
+
+    const topPool = scored.slice(0, Math.min(12, scored.length));
+    const chosen = topPool[Math.floor(Math.random() * topPool.length)].item;
+
+    const genres = chosen.genre_names || [];
+    const matchGenres = genres.filter(g => profile.topGenres.includes(g));
+    const whyBits = [];
+    if (selectedGenre !== "all" && genres.includes(selectedGenre)) whyBits.push(`hai scelto il genere ${selectedGenre}`);
+    if (matchGenres.length) whyBits.push(`ami il genere ${matchGenres[0]}`);
+    if (profile.topDecade && decadeOf(chosen.year) === profile.topDecade) whyBits.push(`ti piacciono gli ${profile.topDecade}`);
+    if (!whyBits.length) whyBits.push("ha un buon match con i tuoi gusti");
+    const fallbackNote = levelLabel !== "ricerca precisa" ? "Ho allargato la ricerca." : "";
+
+    area.innerHTML = renderDiscoverResult(chosen, whyBits, fallbackNote);
+    area.dataset.cache = JSON.stringify([chosen]);
+    registerSuggested([chosen]);
+  } catch (e) {
+    console.error(e);
+    area.innerHTML = `<p class="tonight__hint">Errore di ricerca. Controlla la connessione.</p>`;
+  }
+}
+
+// ─── RIVEDI UN CLASSICO (tra i titoli già votati ≥7 dalla persona) ──────────
+
+function suggestClassic() {
+  const area = document.getElementById("tonightResult");
+  const pool = db.filter(x => x.votes && x.votes[currentUser] && Number(x.votes[currentUser].vote) >= 7);
+
+  if (!pool.length) {
+    area.innerHTML = `<p class="tonight__hint">Nessun titolo con voto ≥ 7. Vota qualche titolo che hai amato.</p>`;
+    return;
+  }
+
+  const pick = pool[Math.floor(Math.random() * pool.length)];
+  const myVote = pick.votes[currentUser].vote;
+  const comment = myVote >= 9
+    ? "Uno dei tuoi assoluti — sempre un buon motivo per rivederlo."
+    : myVote >= 8
+    ? "L'hai amato. Certi titoli vanno rivisti."
+    : "Un bel titolo che hai apprezzato — vale una seconda visione.";
+
+  area.innerHTML = renderClassicResult(pick, myVote, comment);
+  area.dataset.cache = "[]";
 }
 
 // ─── DETTAGLIO ──────────────────────────────────────────────────────────────
@@ -942,7 +1086,9 @@ function bindGlobalEvents() {
     btn.addEventListener("click", () => { rankingMedia = btn.dataset.media; renderStats(); });
   });
 
-  document.getElementById("tonightBtn").addEventListener("click", runTonight);
+  document.getElementById("tonightBtn").addEventListener("click", recommendTonightFive);
+  document.getElementById("tonightDiscoverBtn").addEventListener("click", discoverByTaste);
+  document.getElementById("tonightClassicBtn").addEventListener("click", suggestClassic);
   document.getElementById("tonightResult").addEventListener("click", e => {
     const btn = e.target.closest(".action-add-tonight");
     if (btn) handleAddFromTonight(btn.dataset.id, btn.dataset.type, btn.dataset.status);

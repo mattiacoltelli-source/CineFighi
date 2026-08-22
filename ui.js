@@ -5,7 +5,7 @@
 import {
   escapeHtml, mediaLabel, mediaBadgeClass, posterUrl, uniqueKey,
   average, voteCount, rawNumberToFixed
-} from "./cine-core.js?v=16";
+} from "./cine-core.js?v=17";
 
 // ─── ANIMAZIONI (numeri che contano, barre che si riempiono, tattile) ───────
 
@@ -295,6 +295,43 @@ export function renderTonightList(entries) {
           </div>
         </div>
       `).join("")}
+    </div>
+  `;
+}
+
+// ─── SCOPRI PER GENERE (un titolo, con motivo e aggiunta rapida) ────────────
+
+export function renderDiscoverResult(chosen, whyBits, fallbackNote) {
+  return `
+    <div class="discover-result" data-tonight-key="${chosen.media_type}_${chosen.id}">
+      <div class="discover-result__poster" style="background-image:url('${posterUrl(chosen.poster_path)}')"></div>
+      <div class="discover-result__body">
+        <div class="discover-result__title">✨ ${escapeHtml(chosen.title)}</div>
+        <div class="discover-result__meta">${chosen.year} · ${mediaLabel(chosen)} · ★ ${rawNumberToFixed(chosen.vote_average, 1)} TMDB</div>
+        <div class="discover-result__why">
+          Scelto perché ${escapeHtml(whyBits.join(", "))}.${fallbackNote ? ` ${escapeHtml(fallbackNote)}` : ""}
+        </div>
+        <div class="detail-actions-row" style="margin-top:12px;">
+          <button class="btn btn--secondary action-add-tonight" data-id="${chosen.id}" data-type="${chosen.media_type}" data-status="watchlist">♡ Watchlist</button>
+          <button class="btn btn--ok action-add-tonight" data-id="${chosen.id}" data-type="${chosen.media_type}" data-status="seen">✓ Già visto</button>
+        </div>
+        <button class="poster-card__scheda open-preview" data-id="${chosen.id}" data-type="${chosen.media_type}">Scheda →</button>
+      </div>
+    </div>
+  `;
+}
+
+// ─── RIVEDI UN CLASSICO (titolo già votato ≥7, apre la scheda del gruppo) ───
+
+export function renderClassicResult(pick, myVote, comment) {
+  return `
+    <div class="classic-result open-detail" data-id="${pick.id}">
+      <div class="classic-result__poster" style="background-image:url('${posterUrl(pick.poster_path)}')"></div>
+      <div class="classic-result__body">
+        <div class="classic-result__title">🏛️ ${escapeHtml(pick.title)}</div>
+        <div class="classic-result__meta">${pick.year} · ${mediaLabel(pick)} · il tuo voto: ${Number(myVote).toFixed(1)}</div>
+        <div class="classic-result__why">${escapeHtml(comment)}</div>
+      </div>
     </div>
   `;
 }

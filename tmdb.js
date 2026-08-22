@@ -2,7 +2,7 @@
 // Tutte le chiamate a TMDB: ricerca, dettaglio titolo, e "discover" usato
 // dall'algoritmo di "Stasera cosa guardo" (a più livelli, come CineTracker).
 
-import { normalizedItem, uniqueKey, buildDateRange, randomPage, GENRE_NAME_TO_ID } from "./cine-core.js?v=16";
+import { normalizedItem, uniqueKey, buildDateRange, randomPage, GENRE_NAME_TO_ID } from "./cine-core.js?v=17";
 
 const API_KEY = "c9ebaca404bbc26bad39cce1c3aa9677";
 const BASE_URL = "https://api.themoviedb.org/3";
@@ -72,6 +72,28 @@ export async function tmdbFetchDiscoverLevel(urls, type, excludedKeys) {
   });
 
   return [...map.values()];
+}
+
+// Pesca candidati mirati su un range di anni specifico (usata per garantire un
+// mix di decadi diverse nei "5 consigli", invece di sperare che il pool
+// generico ne contenga di ogni epoca).
+export async function tmdbFetchDecadeCandidates(type, yearStart, yearEnd, genreIds, excludedKeys) {
+  const minVotes = type === "movie" ? "&vote_count.gte=80" : "&vote_count.gte=30";
+  const dateParam = type === "movie"
+    ? `&primary_release_date.gte=${yearStart}-01-01&primary_release_date.lte=${yearEnd}-12-31`
+    : `&first_air_date.gte=${yearStart}-01-01&first_air_date.lte=${yearEnd}-12-31`;
+
+  const primaryGenre = genreIds[0] ? `&with_genres=${genreIds[0]}` : "";
+  const comboGenres = genreIds.slice(0, 2).filter(Boolean).join(",");
+  const comboParam = comboGenres ? `&with_genres=${comboGenres}` : "";
+
+  const urls = [
+    `${BASE_URL}/discover/${type}?api_key=${API_KEY}&language=it-IT${comboParam}${dateParam}&sort_by=popularity.desc${minVotes}&page=${randomPage(5)}`,
+    `${BASE_URL}/discover/${type}?api_key=${API_KEY}&language=it-IT${primaryGenre}${dateParam}&sort_by=vote_average.desc${minVotes}&page=${randomPage(5)}`,
+    `${BASE_URL}/discover/${type}?api_key=${API_KEY}&language=it-IT${dateParam}&sort_by=popularity.desc${minVotes}&page=${randomPage(5)}`
+  ];
+
+  return tmdbFetchDiscoverLevel(urls, type, excludedKeys);
 }
 
 // Costruisce i 4 livelli di ricerca (precisa → ampia → solo genere → fallback),
