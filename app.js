@@ -658,6 +658,20 @@ function buildOutOfZoneReason(item, profile) {
   return reasons;
 }
 
+// Sceglie i 2 slot "fuori zona" evitando che finiscano sullo stesso genere
+// principale (es. entrambi animazione, che su TMDB ha spesso voto medio
+// molto alto e rischia di dominare il pool ordinato per voto).
+function pickOutOfZoneTwo(ranked) {
+  if (!ranked.length) return [];
+  const first = ranked[0];
+  const firstGenre = (first.item.genre_names && first.item.genre_names[0]) || "Altro";
+  const second = ranked.slice(1).find(entry => {
+    const g = (entry.item.genre_names && entry.item.genre_names[0]) || "Altro";
+    return g !== firstGenre;
+  }) || ranked[1];
+  return second ? [first, second] : [first];
+}
+
 // Quante persone la persona selezionata ha già votato: sotto i 3 voti il
 // profilo di gusti è troppo debole per dare consigli sensati.
 function votedCount() {
@@ -792,8 +806,9 @@ async function recommendTonightFive() {
 
     // 2 slot fuori dai generi che guardi di solito, ma con voto TMDB alto
     // (soglia già più severa in tmdbFetchOutOfComfortZoneCandidates):
-    // "diverso" qui non vuol dire "a caso".
-    const outOfZonePicked = outOfZoneRaw
+    // "diverso" qui non vuol dire "a caso". pickOutOfZoneTwo evita che i 2
+    // finiscano sullo stesso genere principale.
+    const outOfZoneRanked = outOfZoneRaw
       .filter(item => !usedKeys.has(uniqueKey(item)))
       .map(item => {
         const affinity = calculateAffinity(item, profile);
@@ -804,8 +819,9 @@ async function recommendTonightFive() {
           rankScore: scoreCandidate(item, profile, []) + Math.random() * 2.5
         };
       })
-      .sort((a, b) => b.rankScore - a.rankScore)
-      .slice(0, 2);
+      .sort((a, b) => b.rankScore - a.rankScore);
+
+    const outOfZonePicked = pickOutOfZoneTwo(outOfZoneRanked);
 
     const finalSix = [...topFour, ...outOfZonePicked];
 
