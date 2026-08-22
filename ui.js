@@ -147,10 +147,10 @@ export function renderSearchResults(items, libraryMap) {
             : `
               <div class="poster-card__actions">
                 <button class="poster-btn poster-btn--watch action-add" data-id="${item.id}" data-type="${item.media_type}" data-status="watchlist">
-                  ♡ Watchlist
+                  ♡ Lista
                 </button>
                 <button class="poster-btn poster-btn--seen action-add" data-id="${item.id}" data-type="${item.media_type}" data-status="seen">
-                  ✓ Già visto
+                  ✓ Visto
                 </button>
               </div>
             `}
@@ -278,10 +278,10 @@ export function renderTonightList(entries) {
             <span class="tonight-card__affinity">${affinity}%</span>
             <div class="poster-card__actions">
               <button class="poster-btn poster-btn--watch action-add-tonight" data-id="${item.id}" data-type="${item.media_type}" data-status="watchlist">
-                ♡ Watchlist
+                ♡ Lista
               </button>
               <button class="poster-btn poster-btn--seen action-add-tonight" data-id="${item.id}" data-type="${item.media_type}" data-status="seen">
-                ✓ Già visto
+                ✓ Visto
               </button>
             </div>
           </div>
