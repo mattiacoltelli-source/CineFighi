@@ -7,6 +7,7 @@ import {
 } from "./cine-core.js?v=16";
 import {
   getCurrentUser, setCurrentUser, clearCurrentUser, MAX_USERS,
+  getLastSeenAt, setLastSeenAt,
   fetchUsers, addUser, deleteUser,
   fetchLibrary, addTitle, updateTitleStatus, removeTitle,
   upsertVote, removeVote
@@ -32,6 +33,11 @@ let previewItem = null;    // titolo TMDB non ancora salvato, aperto solo per co
 let detailReturnScreen = "home";
 let currentType = "multi"; // per la ricerca
 let confirmYesAction = null;
+// "Visto l'ultima volta" letto una volta sola all'avvio (vedi init()): resta
+// fisso per tutta la sessione, così i titoli marcati "nuovi" all'apertura
+// restano segnati come tali finché non riapri l'app, anche se nel frattempo
+// aggiungi o voti qualcosa tu stesso (che farebbe ripartire reloadLibrary()).
+let sessionLastSeenAt = null;
 
 const SUGGEST_HISTORY_MAX = 40;
 
@@ -111,6 +117,11 @@ async function init() {
     document.getElementById("app").classList.remove("hidden");
     updateUserChip();
   }
+
+  // Letto PRIMA di sovrascriverlo: è il confronto con cui questa sessione
+  // deciderà quali titoli marcare come "nuovi" (vedi renderHome()).
+  sessionLastSeenAt = getLastSeenAt();
+  setLastSeenAt(new Date().toISOString());
 
   await reloadLibrary();
 
@@ -252,9 +263,9 @@ function renderHome() {
   toggleEmpty("seenMovieShelf", "seenMovieShelfEmpty", seenMovies);
   toggleEmpty("seenSeriesShelf", "seenSeriesShelfEmpty", seenSeries);
 
-  renderShelf("watchShelf", watch);
-  renderShelf("seenMovieShelf", seenMovies);
-  renderShelf("seenSeriesShelf", seenSeries);
+  renderShelf("watchShelf", watch, sessionLastSeenAt);
+  renderShelf("seenMovieShelf", seenMovies, sessionLastSeenAt);
+  renderShelf("seenSeriesShelf", seenSeries, sessionLastSeenAt);
 }
 
 function toggleEmpty(shelfId, emptyId, items) {

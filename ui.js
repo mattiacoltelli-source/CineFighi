@@ -111,15 +111,23 @@ export function switchScreen(name) {
 
 // ─── SHELVES (home) ──────────────────────────────────────────────────────────
 
-export function renderShelf(containerId, items) {
+// lastSeenAt: quando presente, i titoli aggiunti dopo quel momento ricevono
+// un piccolo puntino discreto (vedi styles.css .shelf-card__new-dot) — niente
+// numeri, niente banner, si nota solo se lo cerchi. Assente (null) alla primissima
+// apertura in assoluto dell'app su questo dispositivo: in quel caso nessun
+// titolo viene marcato "nuovo", per non riempire di puntini tutta la libreria
+// esistente al primo avvio.
+export function renderShelf(containerId, items, lastSeenAt) {
   const el = document.getElementById(containerId);
   if (!el) return;
   el.innerHTML = items.map(item => {
     const avg = average(item.votes);
+    const isNew = !!(lastSeenAt && item.created_at && item.created_at > lastSeenAt);
     return `
       <div class="shelf-card open-detail" data-id="${item.id}">
         <div class="shelf-card__poster" style="background-image:url('${posterUrl(item.poster_path)}')">
           <span class="badge ${mediaBadgeClass(item)}">${mediaLabel(item)}</span>
+          ${isNew ? `<span class="shelf-card__new-dot"></span>` : ""}
           ${avg !== null ? `<span class="shelf-card__vote">★ ${avg.toFixed(1)}</span>` : ""}
         </div>
         <div class="shelf-card__info">
