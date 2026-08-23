@@ -193,6 +193,9 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 
 /* LIBRARY LIST */
 .list { display:flex; flex-direction:column; gap:10px; }
+/* Sentinella per il caricamento progressivo di "Vedi tutto" (vedi app.js
+   renderLibraryScreen): invisibile, serve solo da bersaglio a IntersectionObserver. */
+#libraryLoadMoreSentinel { height:1px; }
 .list-item { display:grid; grid-template-columns:72px 1fr; gap:14px; background: var(--surface); border:1px solid var(--border);
   border-radius: var(--radius-lg); padding:12px; cursor:pointer; }
 .list-item__thumb { width:72px; height:108px; border-radius: var(--radius-sm); background: var(--surface2) center/cover no-repeat; border:1px solid var(--border); }

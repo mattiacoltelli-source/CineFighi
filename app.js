@@ -47,6 +47,16 @@ const SUGGEST_HISTORY_MAX = 40;
 const LIBRARY_REFRESH_COOLDOWN_MS = 60000;
 let lastLibraryRefreshAt = 0;
 
+// "Vedi tutto" (renderLibraryScreen) carica i risultati a blocchi invece di
+// disegnarli tutti in un colpo solo: con una libreria grande, renderizzare
+// centinaia di card assieme (e far partire altrettante richieste per le
+// locandine) è la prima cosa a rallentare l'app, molto prima di qualunque
+// limite lato Supabase. Vedi renderNextLibraryPage/observeLibrarySentinel.
+const LIBRARY_PAGE_SIZE = 40;
+let libraryFilteredItems = [];
+let libraryRenderedCount = 0;
+let libraryLoadMoreObserver = null;
+
 // ───────────────────────────────────────────────────────────────────────────
 
 // ─── AGGIORNAMENTI (service worker leggero, solo notifica) ───────────────────
@@ -505,12 +515,41 @@ function renderLibraryScreen() {
 
   const listEl = document.getElementById("libraryList");
   const emptyEl = document.getElementById("libraryEmpty");
+  listEl.innerHTML = "";
+  libraryFilteredItems = items;
+  libraryRenderedCount = 0;
+
   if (!items.length) {
-    listEl.innerHTML = "";
     emptyEl.classList.remove("hidden");
   } else {
     emptyEl.classList.add("hidden");
-    listEl.innerHTML = renderLibraryList(items);
+    renderNextLibraryPage();
+  }
+  observeLibrarySentinel();
+}
+
+// Aggiunge il prossimo blocco di risultati alla lista già disegnata, invece
+// di ridisegnare tutto da capo: chiamata sia dal render iniziale che dal
+// IntersectionObserver quando la sentinella in fondo alla lista diventa
+// visibile (utente vicino al fondo dello scroll).
+function renderNextLibraryPage() {
+  const next = libraryFilteredItems.slice(libraryRenderedCount, libraryRenderedCount + LIBRARY_PAGE_SIZE);
+  if (!next.length) return;
+  document.getElementById("libraryList").insertAdjacentHTML("beforeend", renderLibraryList(next));
+  libraryRenderedCount += next.length;
+}
+
+// Un solo observer, riusato a ogni apertura di "Vedi tutto": osserva sempre
+// la stessa sentinella (mai ricreata nel DOM), quindi basta assicurarsi che
+// sia "in ascolto" — nessun rischio di observer duplicati.
+function observeLibrarySentinel() {
+  const sentinel = document.getElementById("libraryLoadMoreSentinel");
+  if (!sentinel) return;
+  if (!libraryLoadMoreObserver) {
+    libraryLoadMoreObserver = new IntersectionObserver(entries => {
+      if (entries.some(e => e.isIntersecting)) renderNextLibraryPage();
+    }, { rootMargin: "600px" }); // carica il blocco successivo un po' prima che l'utente arrivi in fondo
+    libraryLoadMoreObserver.observe(sentinel);
   }
 }
 
