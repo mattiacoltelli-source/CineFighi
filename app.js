@@ -36,10 +36,11 @@ let previewItem = null;    // titolo TMDB non ancora salvato, aperto solo per co
 let detailReturnScreen = "home";
 let currentType = "multi"; // per la ricerca
 let confirmYesAction = null;
-// "Visto l'ultima volta" letto una volta sola all'avvio (vedi init()): resta
-// fisso per tutta la sessione, così i titoli marcati "nuovi" all'apertura
-// restano segnati come tali finché non riapri l'app, anche se nel frattempo
-// aggiungi o voti qualcosa tu stesso (che farebbe ripartire reloadLibrary()).
+// "Visto l'ultima volta" letto la prima volta all'avvio (vedi init()) e poi
+// riaggiornato ogni volta che si lascia la Home per un'altra scheda (vedi
+// goToScreen/markHomeSeen): così i puntini restano visibili per tutta la
+// permanenza sulla Home, ma spariscono non appena la si lascia e si torna
+// indietro (es. Home → Statistiche → Home), senza bisogno di ricaricare la pagina.
 let sessionLastSeenAt = null;
 
 const SUGGEST_HISTORY_MAX = 40;
@@ -98,7 +99,7 @@ async function init() {
   window.addEventListener("popstate", e => {
     const screen = (e.state && e.state.screen) || "home";
     haptic(8);
-    switchScreen(screen);
+    goToScreen(screen);
     if (screen === "stats") renderStats();
   });
 
@@ -282,6 +283,22 @@ function selectUser(name) {
 
 // ─── HOME ───────────────────────────────────────────────────────────────────
 
+// Segna "vista" la Home adesso: usata quando la si lascia per un'altra
+// scheda, così i puntini dei titoli nuovi non ricompaiono al ritorno.
+function markHomeSeen() {
+  sessionLastSeenAt = new Date().toISOString();
+  setLastSeenAt(sessionLastSeenAt);
+}
+
+// Wrapper attorno a switchScreen (ui.js): se si sta lasciando la Home per
+// un'altra schermata, segna la Home come vista; se invece ci si sta
+// arrivando, la ridisegna così i puntini ormai visti spariscono subito.
+function goToScreen(screen) {
+  if (getVisibleScreen() === "home" && screen !== "home") markHomeSeen();
+  switchScreen(screen);
+  if (screen === "home") renderHome();
+}
+
 function renderHome() {
   const watch = db.filter(x => x.status === "watchlist").slice(0, 10);
   const seenMovies = db.filter(x => x.status === "seen" && x.media_type === "movie").slice(0, 10);
@@ -450,7 +467,7 @@ async function openPreview(tmdbId, type) {
   document.getElementById("detailStatusBtn").textContent = "♡ Aggiungi a watchlist";
   document.getElementById("detailRemoveBtn").classList.add("hidden");
 
-  switchScreen("detail");
+  goToScreen("detail");
   pushHistoryState("detail");
 }
 
@@ -465,7 +482,7 @@ function openLibrarySection(status, mediaFilter) {
   document.getElementById("libraryTitle").textContent = titles[status] || "Libreria";
 
   renderLibraryScreen();
-  switchScreen("library");
+  goToScreen("library");
 }
 
 function renderLibraryScreen() {
@@ -999,7 +1016,7 @@ function openDetail(id, options = {}) {
     item.status === "watchlist" ? "✓ Segna come visto" : "♡ Sposta in watchlist";
   document.getElementById("detailRemoveBtn").classList.remove("hidden");
 
-  switchScreen("detail");
+  goToScreen("detail");
   if (push) pushHistoryState("detail");
 }
 
@@ -1102,7 +1119,7 @@ async function handleRemove() {
       currentDetailId = null;
       db = db.filter(x => x.id !== item.id);
       renderAfterLocalChange();
-      switchScreen("home");
+      goToScreen("home");
       try { history.replaceState({ screen: "home" }, "", location.href); } catch {}
     }
   );
@@ -1134,7 +1151,7 @@ function bindGlobalEvents() {
   document.querySelectorAll(".nav__btn[data-screen]").forEach(btn => {
     btn.addEventListener("click", () => {
       const already = getVisibleScreen() === btn.dataset.screen;
-      switchScreen(btn.dataset.screen);
+      goToScreen(btn.dataset.screen);
       if (!already) { pushHistoryState(btn.dataset.screen); haptic(8); }
       if (btn.dataset.screen === "stats") renderStats();
     });

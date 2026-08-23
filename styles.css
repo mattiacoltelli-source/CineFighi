@@ -143,8 +143,8 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 /* Puntino discreto per i titoli aggiunti da qualcun altro dopo la tua ultima
    visita: niente numeri né banner, deliberatamente minimo (vedi ui.js::renderShelf). */
 .shelf-card__new-dot {
-  position:absolute; top:8px; right:8px; width:8px; height:8px; border-radius:50%;
-  background: var(--acc); box-shadow: 0 0 0 2px rgba(0,0,0,.5); z-index:2;
+  position:absolute; top:8px; right:8px; width:6px; height:6px; border-radius:50%;
+  background: var(--acc); z-index:2;
 }
 .shelf-card__info { margin-top:8px; }
 .shelf-card__title { font-family: var(--font-display); font-size:13px; font-weight:700; line-height:1.25;
