@@ -37,6 +37,8 @@ let currentType = "multi"; // per la ricerca
 let confirmYesAction = null;
 
 const SUGGEST_HISTORY_MAX = 40;
+const LIBRARY_REFRESH_COOLDOWN_MS = 60000;
+let lastLibraryRefreshAt = 0;
 
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -94,6 +96,19 @@ async function init() {
     if (screen === "stats") renderStats();
   });
 
+  // Le azioni dell'utente ora aggiornano `db` in locale invece di rileggere
+  // tutta la libreria condivisa (vedi renderAfterLocalChange): niente più
+  // occasioni "gratuite" per accorgersi delle modifiche fatte da altri.
+  // Un refresh quando si torna sull'app (con un minimo di cooldown per non
+  // rifarlo ad ogni cambio di tab troppo ravvicinato) colma il vuoto senza
+  // reintrodurre un fetch completo ad ogni singola azione.
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible") return;
+    if (Date.now() - lastLibraryRefreshAt < LIBRARY_REFRESH_COOLDOWN_MS) return;
+    lastLibraryRefreshAt = Date.now();
+    reloadLibrary();
+  });
+
   currentUser = getCurrentUser();
 
   // FIX: se fetchUsers fallisce (rete/Supabase giù), non trattiamo l'esito
@@ -116,6 +131,7 @@ async function init() {
   }
 
   await reloadLibrary();
+  lastLibraryRefreshAt = Date.now();
 
   setTimeout(() => document.getElementById("splash")?.classList.add("hide"), 850);
   initUpdateCheck();
@@ -134,6 +150,15 @@ async function reloadLibrary() {
     return;
   }
   db = freshDb;
+  renderAfterLocalChange();
+}
+
+// Ridisegna Home e Statistiche dopo una modifica già applicata a `db` in
+// locale — usata al posto di reloadLibrary() per le azioni dell'utente
+// (aggiungi, vota, rimuovi): il server ci ha già confermato l'esito, quindi
+// non serve un altro giro di rete a rileggere tutta la libreria condivisa
+// solo per riflettere una modifica di cui conosciamo già il risultato.
+function renderAfterLocalChange() {
   renderHome();
   renderStats();
 }
@@ -339,13 +364,14 @@ async function addItemFromCache(containerId, tmdbId, type, status) {
   }
   showToast(`${fullItem.title} aggiunto`, "success");
   haptic(12);
+  db.unshift({ ...res.title, votes: {} });
   return res.title.id;
 }
 
 async function handleAddFromSearch(tmdbId, type, status) {
   const savedId = await addItemFromCache("results", tmdbId, type, status);
   if (!savedId) return;
-  await reloadLibrary();
+  renderAfterLocalChange();
   document.getElementById("searchInput").value = "";
   document.getElementById("resultsSection").classList.add("hidden");
   openDetail(savedId);
@@ -372,7 +398,7 @@ async function handleAddFromTonight(tmdbId, type, status) {
   const savedId = await addItemFromCache("tonightResult", tmdbId, type, status);
   if (!savedId) return;
   removeFromTonightCard(tmdbId, type);
-  await reloadLibrary();
+  renderAfterLocalChange();
 }
 
 // ─── SCHEDA DI CONSULTAZIONE (per titoli non ancora salvati) ─────────────────
@@ -974,6 +1000,7 @@ function openDetail(id, options = {}) {
 async function promotePreviewItem(status) {
   const res = await addTitle(previewItem, status, currentUser);
   if (!res.ok && res.reason !== "duplicate") return null;
+  if (res.ok) db.unshift({ ...res.title, votes: {} });
   return res.ok
     ? res.title.id
     : (db.find(x => x.tmdb_id === previewItem.id && x.media_type === previewItem.media_type)?.id ?? null);
@@ -993,7 +1020,9 @@ async function handleSaveVote() {
     showToast("Voto salvato", "success");
     removeFromTonightCard(previewItem.id, previewItem.media_type);
     previewItem = null;
-    await reloadLibrary();
+    const saved = byId(savedId);
+    if (saved) { saved.votes = saved.votes || {}; saved.votes[currentUser] = { vote, comment }; }
+    renderAfterLocalChange();
     openDetail(savedId, { push: false });
     return;
   }
@@ -1004,7 +1033,9 @@ async function handleSaveVote() {
   if (!res.ok) { showToast("Errore nel salvare il voto, riprova", "error"); return; }
   haptic(12);
   showToast("Voto salvato", "success");
-  await reloadLibrary();
+  item.votes = item.votes || {};
+  item.votes[currentUser] = { vote, comment };
+  renderAfterLocalChange();
   openDetail(item.id, { push: false });
 }
 
@@ -1014,7 +1045,8 @@ async function handleClearVote() {
   const res = await removeVote(item.id, currentUser);
   if (!res.ok) { showToast("Errore, riprova", "error"); return; }
   haptic(10);
-  await reloadLibrary();
+  if (item.votes) delete item.votes[currentUser];
+  renderAfterLocalChange();
   openDetail(item.id, { push: false });
 }
 
@@ -1027,7 +1059,7 @@ async function handleToggleStatus() {
     showToast(`${previewItem.title} aggiunto alla watchlist`, "success");
     removeFromTonightCard(previewItem.id, previewItem.media_type);
     previewItem = null;
-    await reloadLibrary();
+    renderAfterLocalChange();
     openDetail(savedId, { push: false });
     return;
   }
@@ -1038,7 +1070,8 @@ async function handleToggleStatus() {
   const res = await updateTitleStatus(item.id, nextStatus);
   if (!res.ok) { showToast("Errore, riprova", "error"); return; }
   haptic(12);
-  await reloadLibrary();
+  item.status = nextStatus;
+  renderAfterLocalChange();
   openDetail(item.id, { push: false });
 }
 
@@ -1056,7 +1089,8 @@ async function handleRemove() {
       haptic(16);
       showToast("Rimosso dalla libreria", "success");
       currentDetailId = null;
-      await reloadLibrary();
+      db = db.filter(x => x.id !== item.id);
+      renderAfterLocalChange();
       switchScreen("home");
       try { history.replaceState({ screen: "home" }, "", location.href); } catch {}
     }
