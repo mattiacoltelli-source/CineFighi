@@ -22,6 +22,13 @@ export function haptic(pattern = 10) {
 export function animateValue(el, target, duration = 600) {
   if (!el) return;
   const end = Number(target) || 0;
+
+  if (el.offsetParent === null) {
+    el.textContent = String(end);
+    delete el.dataset.currentValue;
+    return;
+  }
+
   const current = Number(el.dataset.currentValue || 0);
   if (current === end) { el.textContent = String(end); return; }
 
