@@ -4,24 +4,24 @@
 
 import {
   uniqueKey, average, escapeHtml, decadeOf, GENRE_NAME_TO_ID
-} from "./cine-core.js?v=18";
+} from "./cine-core.js?v=19";
 import {
   getCurrentUser, setCurrentUser, clearCurrentUser, MAX_USERS,
   getLastSeenAt, setLastSeenAt,
   fetchUsers, addUser, deleteUser,
   fetchLibrary, addTitle, updateTitleStatus, removeTitle,
   upsertVote, removeVote
-} from "./storage.js?v=18";
+} from "./storage.js?v=19";
 import {
   tmdbFetchDetail, tmdbSearch, tmdbFetchDiscoverLevel, tmdbFetchDecadeCandidates,
   tmdbFetchOutOfComfortZoneCandidates, buildFallbackQueries
-} from "./tmdb.js?v=18";
+} from "./tmdb.js?v=19";
 import {
   showToast, avatarHtml, initScreens, switchScreen,
   renderShelf, renderSearchResults, renderLibraryList, renderGenreFilters,
   renderGenreBars, renderRanking, renderTonightList, renderDiscoverResult, renderClassicResult,
   renderDetailFacts, renderVotesList, haptic, animateValue
-} from "./ui.js?v=18";
+} from "./ui.js?v=19";
 
 let currentUser = null;
 let users = [];
