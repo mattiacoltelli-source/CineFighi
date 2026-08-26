@@ -22,13 +22,6 @@ export function haptic(pattern = 10) {
 export function animateValue(el, target, duration = 600) {
   if (!el) return;
   const end = Number(target) || 0;
-
-  if (el.offsetParent === null) {
-    el.textContent = String(end);
-    delete el.dataset.currentValue;
-    return;
-  }
-
   const current = Number(el.dataset.currentValue || 0);
   if (current === end) { el.textContent = String(end); return; }
 
@@ -84,7 +77,7 @@ export function showToast(message, type = "info", title = "") {
 
 // ─── AVATAR ──────────────────────────────────────────────────────────────────
 
-const AVATAR_COLORS = ["#2dd9a3", "#4da3ff", "#ffb15c", "#ff8fa3", "#b389f5", "#5eead4"];
+const AVATAR_COLORS = ["#10b981", "#34d399", "#059669", "#3bc293", "#6ee7b7", "#047857"];
 
 function colorForUser(name) {
   let h = 0;
