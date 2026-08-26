@@ -588,12 +588,24 @@ function renderStats() {
     : db.filter(x => x.votes && Object.keys(x.votes).length > 0);
 
   const genreCount = {};
+  const genreVotes = {};
   relevant.forEach(item => {
-    (item.genre_names || []).forEach(g => { genreCount[g] = (genreCount[g] || 0) + 1; });
+    const score = statsMode === "me" ? item.votes[currentUser]?.vote : average(item.votes);
+    (item.genre_names || []).forEach(g => {
+      genreCount[g] = (genreCount[g] || 0) + 1;
+      if (Number.isFinite(score)) {
+        if (!genreVotes[g]) genreVotes[g] = [];
+        genreVotes[g].push(score);
+      }
+    });
   });
   const topGenres = Object.entries(genreCount)
     .sort((a, b) => b[1] - a[1]).slice(0, 5)
-    .map(([label, value]) => ({ label, value }));
+    .map(([label, value]) => {
+      const votes = genreVotes[label] || [];
+      const avg = votes.length ? votes.reduce((a, b) => a + b, 0) / votes.length : null;
+      return { label, value, avg };
+    });
   renderGenreBars(topGenres);
 
   const ranked = relevant

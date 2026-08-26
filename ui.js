@@ -84,12 +84,10 @@ export function showToast(message, type = "info", title = "") {
 
 // ─── AVATAR ──────────────────────────────────────────────────────────────────
 
-const AVATAR_COLORS = ["#2dd9a3", "#4da3ff", "#ffb15c", "#ff8fa3", "#b389f5", "#5eead4"];
+const AVATAR_COLORS = ["#52b788"];
 
 function colorForUser(name) {
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % AVATAR_COLORS.length;
-  return AVATAR_COLORS[h];
+  return "#52b788";
 }
 
 export function avatarHtml(name, size = 28) {
@@ -223,15 +221,21 @@ export function renderGenreBars(entries) {
     return;
   }
   const max = entries[0].value || 1;
-  container.innerHTML = entries.map(e => `
+  container.innerHTML = entries.map(e => {
+    const countText = `${e.value} ${e.value === 1 ? "titolo" : "titoli"}`;
+    const voteText = e.avg !== null ? `<span class="bar-row__vote"> · ★ ${e.avg.toFixed(1)}</span>` : "";
+    return `
     <div class="bar-row">
       <div class="bar-row__label">
         <span class="bar-row__name">${escapeHtml(e.label)}</span>
-        <span class="bar-row__count">${e.value}</span>
+        <div>
+          <span class="bar-row__count">${countText}</span>${voteText}
+        </div>
       </div>
       <div class="bar-track"><div class="bar__fill" data-width="${Math.max(8, (e.value / max) * 100)}"></div></div>
     </div>
-  `).join("");
+  `;
+  }).join("");
   animateBarGroups();
 }
 
