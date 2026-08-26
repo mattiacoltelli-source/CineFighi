@@ -1214,6 +1214,13 @@ function bindGlobalEvents() {
   document.getElementById("libraryBackBtn").addEventListener("click", () => { haptic(8); history.back(); });
 
   document.getElementById("searchInput").addEventListener("input", onSearchInput);
+  document.getElementById("searchBtn").addEventListener("click", () => {
+    const q = document.getElementById("searchInput").value.trim();
+    if (!q) return;
+    clearTimeout(searchDebounce);
+    haptic(8);
+    doSearch(q);
+  });
   document.querySelectorAll(".tab[data-type]").forEach(tab => {
     tab.addEventListener("click", () => {
       currentType = tab.dataset.type;
