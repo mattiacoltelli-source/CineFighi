@@ -335,6 +335,12 @@ async function doSearch(q) {
   const res = document.getElementById("results");
   const empty = document.getElementById("resultsEmpty");
 
+  if (!q) {
+    sec.classList.add("hidden");
+    res.innerHTML = "";
+    return;
+  }
+
   sec.classList.remove("hidden");
   empty.textContent = "Ricerca in corso…";
   empty.classList.remove("hidden");
@@ -1202,17 +1208,13 @@ function bindGlobalEvents() {
   document.getElementById("libraryBackBtn").addEventListener("click", () => { haptic(8); history.back(); });
 
   document.getElementById("searchBtn").addEventListener("click", () => {
-    const q = document.getElementById("searchInput").value.trim();
-    if (!q) return;
     haptic(8);
-    doSearch(q);
+    doSearch(document.getElementById("searchInput").value.trim());
   });
   document.getElementById("searchInput").addEventListener("keydown", e => {
     if (e.key !== "Enter") return;
-    const q = document.getElementById("searchInput").value.trim();
-    if (!q) return;
     haptic(8);
-    doSearch(q);
+    doSearch(document.getElementById("searchInput").value.trim());
   });
   document.querySelectorAll(".tab[data-type]").forEach(tab => {
     tab.addEventListener("click", () => {
