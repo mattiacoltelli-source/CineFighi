@@ -232,7 +232,7 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .taste-block__header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
 .taste-block__title { font-family: var(--font-display); font-weight:700; color: var(--text2);
   text-transform:uppercase; letter-spacing:.4px; font-size:12px; }
-.taste-block__legend { font-size:11px; color: var(--text3); }
+.taste-block__legend { font-family: var(--font-display); font-weight:600; font-size:11px; color: var(--text3); opacity:.8; }
 .bar-row { margin-bottom:14px; }
 .bar-row__label { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px; }
 .bar-row__name { font-size:14px; font-weight:600; }
