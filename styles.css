@@ -1,25 +1,25 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&family=Inter:wght@400;500;600&display=swap');
 
 :root {
-  --bg: #080c12;
-  --surface: #111820;
-  --surface2: #161f2c;
-  --surface3: #1a2535;
-  --border: rgba(255,255,255,.07);
-  --border2: rgba(255,255,255,.12);
+  --bg: #06090e;
+  --surface: #0d131c;
+  --surface2: #141d2a;
+  --surface3: #1b2738;
+  --border: rgba(255,255,255,.08);
+  --border2: rgba(0,245,212,.18);
 
-  --text: #eef2f7;
-  --text2: #a8b8cc;
-  --text3: #657485;
+  --text: #f0f6fc;
+  --text2: #a3b8cc;
+  --text3: #62788e;
 
-  /* accento principale: verde smeraldo / petrolio */
-  --acc: #2dd9a3;
-  --acc2: #5eead4;
-  --acc-dim: rgba(45,217,163,.15);
-  --acc-glow: 0 0 0 1px rgba(45,217,163,.2), 0 8px 28px rgba(45,217,163,.16);
+  /* Proposta 3: Nordic Slate & Mint Emerald */
+  --acc: #00f5d4;
+  --acc2: #52b788;
+  --acc-dim: rgba(0,245,212,.12);
+  --acc-glow: 0 0 0 1px rgba(0,245,212,.22), 0 8px 28px rgba(0,245,212,.18);
 
-  --blue: #4da3ff;
-  --blue-dim: rgba(77,163,255,.14);
+  --blue: #00b4d8;
+  --blue-dim: rgba(0,180,216,.15);
   --green: #3ec97a;
   --red: #ff5f5f;
   --red-dim: rgba(255,95,95,.14);
@@ -155,8 +155,8 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
   position:absolute; top:8px; left:8px; font-family: var(--font-display); font-size:10px; font-weight:800;
   padding:4px 8px; border-radius: var(--radius-pill); z-index:2; text-transform:uppercase; letter-spacing:.4px;
 }
-.badge-film { background: rgba(45,217,163,.22); color: var(--acc2); border:1px solid rgba(45,217,163,.35); }
-.badge-series { background: rgba(77,163,255,.2); color:#9ec9ff; border:1px solid rgba(77,163,255,.35); }
+.badge-film { background: rgba(0,245,212,.18); color: var(--acc); border:1px solid rgba(0,245,212,.35); }
+.badge-series { background: rgba(0,180,216,.18); color:#70e0ff; border:1px solid rgba(0,180,216,.35); }
 
 .empty-state { padding:20px; text-align:center; color: var(--text3); font-size:14px; background: var(--surface);
   border:1px dashed var(--border); border-radius: var(--radius-lg); }
@@ -377,8 +377,8 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .nav__btn { display:flex; align-items:center; justify-content:center; min-height:56px; border-radius:20px;
   background: rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.08); color:#aebbd0;
   font-family: var(--font-display); font-size:13px; font-weight:700; }
-.nav__btn.active { color:#f5f8fc; border-color: rgba(45,217,163,.34);
-  background: radial-gradient(circle at top center, rgba(45,217,163,.14), transparent 60%), linear-gradient(180deg, rgba(20,45,38,.9), rgba(15,28,24,.9)); }
+.nav__btn.active { color:#f5f8fc; border-color: rgba(0,245,212,.34);
+  background: radial-gradient(circle at top center, rgba(0,245,212,.16), transparent 60%), linear-gradient(180deg, rgba(13,35,32,.9), rgba(9,22,20,.9)); }
 
 /* TOAST */
 #toastWrap { position:fixed; left:16px; right:16px; bottom:82px; z-index:9999; display:flex; flex-direction:column; gap:8px; pointer-events:none; }
