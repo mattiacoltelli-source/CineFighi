@@ -4,24 +4,29 @@
 
 import {
   uniqueKey, average, escapeHtml, decadeOf, GENRE_NAME_TO_ID
-} from "./cine-core.js?v=19";
+} from "./cine-core.js?v=20";
 import {
   getCurrentUser, setCurrentUser, clearCurrentUser, MAX_USERS,
   getLastSeenAt, setLastSeenAt,
+  getReportIntroSeen, setReportIntroSeen,
   fetchUsers, addUser, deleteUser,
   fetchLibrary, addTitle, updateTitleStatus, removeTitle,
-  upsertVote, removeVote
-} from "./storage.js?v=19";
+  upsertVote, removeVote,
+  loadLatestReport, regenerateReport
+} from "./storage.js?v=20";
 import {
   tmdbFetchDetail, tmdbSearch, tmdbFetchDiscoverLevel, tmdbFetchDecadeCandidates,
   tmdbFetchOutOfComfortZoneCandidates, buildFallbackQueries
-} from "./tmdb.js?v=19";
+} from "./tmdb.js?v=20";
 import {
   showToast, avatarHtml, initScreens, switchScreen,
   renderShelf, renderSearchResults, renderLibraryList, renderGenreFilters,
   renderGenreBars, renderRanking, renderTonightList, renderDiscoverResult, renderClassicResult,
-  renderDetailFacts, renderVotesList, haptic, animateValue
-} from "./ui.js?v=19";
+  renderDetailFacts, renderVotesList, renderReportMeta, renderReportContent, renderReportGate,
+  haptic, animateValue
+} from "./ui.js?v=20";
+
+const MIN_VOTED_FOR_REPORT = 50;
 
 let currentUser = null;
 let users = [];
@@ -112,6 +117,7 @@ async function init() {
     haptic(8);
     goToScreen(screen);
     if (screen === "stats") renderStats();
+    if (screen === "report") renderReport();
   });
 
   // Le azioni dell'utente ora aggiornano `db` in locale invece di rileggere
@@ -623,6 +629,94 @@ function renderStats() {
     .sort((a, b) => b.__score - a.__score);
 
   renderRanking(ranked, rankingMedia === "movie" ? "Film" : "Serie TV");
+}
+
+// ─── REPORT ───────────────────────────────────────────────────────────────
+// A differenza delle Statistiche (ricalcolate live dalla libreria ad ogni
+// apertura), il Report è un testo generato da Claude e salvato su Supabase,
+// personale per ogni utente (basato SOLO sui titoli che ha votato lui).
+// Il tasto "Aggiorna" è attivo solo finché non esiste ancora un report: una
+// volta generato per la prima volta, gli aggiornamenti successivi avvengono
+// da soli una volta all'anno (controllato qui, ad ogni apertura della tab).
+
+let reportCache = null;
+let reportRefreshing = false;
+
+function myVotedSeenCount() {
+  return db.filter(x => x.status === "seen" && x.votes && x.votes[currentUser]).length;
+}
+
+async function renderReport() {
+  if (!getReportIntroSeen()) {
+    document.getElementById("reportIntro").classList.remove("hidden");
+  }
+
+  const report = await loadLatestReport(currentUser, updated => {
+    reportCache = updated;
+    renderReportScreen();
+  });
+  if (report) reportCache = report;
+
+  renderReportScreen();
+  maybeAutoRefreshReport();
+}
+
+function renderReportScreen() {
+  const votedCount = myVotedSeenCount();
+  const hasReport = !!reportCache;
+
+  renderReportMeta(reportCache);
+  renderReportContent(reportCache);
+  renderReportGate(votedCount, MIN_VOTED_FOR_REPORT);
+
+  document.getElementById("reportGate").classList.toggle("hidden", hasReport || votedCount >= MIN_VOTED_FOR_REPORT);
+  document.getElementById("reportBody").classList.toggle("hidden", !hasReport && votedCount < MIN_VOTED_FOR_REPORT);
+
+  const btn = document.getElementById("reportRefreshBtn");
+  // Il bottone compare solo per generare il PRIMO report (e solo quando si
+  // hanno abbastanza titoli votati): dopo, gli aggiornamenti sono automatici.
+  btn.classList.toggle("hidden", hasReport || votedCount < MIN_VOTED_FOR_REPORT);
+}
+
+async function handleReportRefresh() {
+  if (reportRefreshing) return;
+  const btn = document.getElementById("reportRefreshBtn");
+
+  if (!navigator.onLine) {
+    showToast("Sei offline. Connettiti per generare il report.", "error", "Report");
+    return;
+  }
+
+  reportRefreshing = true;
+  btn.disabled = true;
+  btn.classList.add("spinning");
+
+  try {
+    const report = await regenerateReport(currentUser);
+    reportCache = report;
+    renderReportScreen();
+    showToast("Report generato.", "success", "Report");
+  } catch (e) {
+    console.error(e);
+    showToast(e.message || "Generazione non riuscita. Riprova.", "error", "Report");
+  } finally {
+    reportRefreshing = false;
+    btn.disabled = false;
+    btn.classList.remove("spinning");
+  }
+}
+
+// Nessun cron lato Supabase (a differenza di Cos90): il controllo "è passato
+// più di un anno dall'ultimo report?" avviene qui, ad ogni apertura della
+// tab Report — se sì, si rigenera da sola in background, senza bisogno che
+// l'utente tocchi alcun bottone.
+function maybeAutoRefreshReport() {
+  if (!reportCache || reportRefreshing) return;
+  const last = new Date(reportCache.generated_at);
+  if (isNaN(last.getTime())) return;
+  const nextDue = new Date(last);
+  nextDue.setFullYear(nextDue.getFullYear() + 1);
+  if (new Date() >= nextDue) handleReportRefresh();
 }
 
 // ─── STASERA COSA GUARDO — algoritmo completo (come CineTracker) ─────────────
@@ -1210,6 +1304,7 @@ function bindGlobalEvents() {
       goToScreen(btn.dataset.screen);
       if (!already) { pushHistoryState(btn.dataset.screen); haptic(8); }
       if (btn.dataset.screen === "stats") renderStats();
+      if (btn.dataset.screen === "report") renderReport();
     });
   });
 
@@ -1263,6 +1358,13 @@ function bindGlobalEvents() {
   });
   document.querySelectorAll("#rankingMediaToggle .stats-toggle-btn").forEach(btn => {
     btn.addEventListener("click", () => { rankingMedia = btn.dataset.media; renderStats(); });
+  });
+
+  document.getElementById("reportRefreshBtn").addEventListener("click", () => { haptic(8); handleReportRefresh(); });
+  document.getElementById("reportIntroClose").addEventListener("click", () => {
+    haptic(8);
+    setReportIntroSeen();
+    document.getElementById("reportIntro").classList.add("hidden");
   });
 
   document.getElementById("tonightBtn").addEventListener("click", recommendTonightFive);

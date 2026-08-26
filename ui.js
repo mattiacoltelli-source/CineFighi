@@ -5,7 +5,7 @@
 import {
   escapeHtml, mediaLabel, mediaBadgeClass, posterUrl, uniqueKey,
   average, voteCount, rawNumberToFixed
-} from "./cine-core.js?v=19";
+} from "./cine-core.js?v=20";
 
 // ─── ANIMAZIONI (numeri che contano, barre che si riempiono, tattile) ───────
 
@@ -93,7 +93,7 @@ export function avatarHtml(name, size = 28) {
 
 export const SCREENS = {};
 export function initScreens() {
-  ["home", "library", "stats", "tonight", "detail"].forEach(name => {
+  ["home", "library", "stats", "tonight", "report", "detail"].forEach(name => {
     SCREENS[name] = document.getElementById(`screen-${name}`);
   });
 }
@@ -349,6 +349,109 @@ export function renderClassicResult(pick, myVote, comment) {
           <div class="tonight-card__reason">${escapeHtml(comment)}</div>
         </div>
       </div>
+    </div>
+  `;
+}
+
+// ─── REPORT ──────────────────────────────────────────────────────────────────
+
+export function formatReportDate(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" });
+}
+
+// Il ciclo è una volta all'anno: la data del prossimo aggiornamento
+// automatico è solo indicativa (mostrata in UI) — il controllo vero avviene
+// lato client ad ogni apertura della tab (vedi app.js::maybeAutoRefreshReport).
+export function nextReportDate(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  d.setFullYear(d.getFullYear() + 1);
+  return d.toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" });
+}
+
+export function renderReportMeta(report) {
+  const el = document.getElementById("reportMetaLine");
+  if (!el) return;
+  if (!report) {
+    el.textContent = "Nessun report ancora generato.";
+    return;
+  }
+  el.textContent = `Aggiornato il ${formatReportDate(report.generated_at)} · prossimo aggiornamento automatico l'${nextReportDate(report.generated_at)}`;
+}
+
+// Converte i **grassetti** in stile markdown scritti da Claude in <b>, DOPO
+// aver già passato il testo da escapeHtml — l'escape avviene prima, quindi
+// non c'è HTML arbitrario da interpretare, solo questa singola sostituzione
+// controllata su testo già sicuro.
+function mdBold(escapedText) {
+  return escapedText.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+}
+
+export function renderReportGate(votedCount, min) {
+  const el = document.getElementById("reportGate");
+  if (!el) return;
+  el.textContent = `Ti servono almeno ${min} titoli votati da te per generare il Report (ne hai votati ${votedCount}). Continua a votare i titoli che vedi!`;
+}
+
+export function renderReportContent(report) {
+  const el = document.getElementById("reportBody");
+  if (!el) return;
+
+  if (!report) {
+    el.innerHTML = `<p class="empty-hint">Tocca "Aggiorna" per generare il tuo primo report.</p>`;
+    return;
+  }
+
+  const { profile = [], genres_note = "", directors = [], recommendations = [] } = report.payload || {};
+
+  const profileHtml = profile.map(p => `<p>${mdBold(escapeHtml(p))}</p>`).join("");
+
+  const directorsHtml = directors.length
+    ? directors.map(d => `
+      <div class="director-row">
+        <span class="director-row__name">${escapeHtml(d.name)}</span>
+        <span class="director-row__n">${d.count} titoli</span>
+        <span class="director-row__avg">★ ${Number(d.avg).toFixed(2)}</span>
+      </div>
+    `).join("")
+    : `<p class="empty-hint">Nessun regista visto almeno 2 volte, per ora.</p>`;
+
+  const recsHtml = recommendations.map((r, i) => {
+    const poster = posterUrl(r.poster_path || "");
+    const posterStyle = poster ? ` style="background-image:url('${escapeHtml(poster)}')"` : "";
+    return `
+    <div class="rec-card">
+      <div class="rec-card__poster"${posterStyle}>${poster ? "" : `<span class="rec-card__num">${String(i + 1).padStart(2, "0")}</span>`}</div>
+      <div class="rec-card__title">${escapeHtml(r.title)}</div>
+      <div class="rec-card__meta">${escapeHtml(r.year)} &middot; ${escapeHtml(r.director)}</div>
+      <div class="rec-card__why">${mdBold(escapeHtml(r.why))}</div>
+    </div>
+  `;
+  }).join("");
+
+  el.innerHTML = `
+    <div class="taste-block">
+      <div class="taste-block__title">Il tuo profilo<span class="by">scritto da Claude</span></div>
+      ${profileHtml}
+    </div>
+
+    <div class="taste-block">
+      <div class="taste-block__title">Generi</div>
+      <p>${mdBold(escapeHtml(genres_note))}</p>
+    </div>
+
+    <div class="taste-block">
+      <div class="taste-block__title">Registi che ti fidelizzano<span class="hint">★ media voto</span></div>
+      ${directorsHtml}
+    </div>
+
+    <div class="section">
+      <div class="taste-block__title" style="margin-bottom:12px;">10 titoli per te<span class="by">scritto da Claude</span></div>
+      <div class="rec-shelf">${recsHtml}</div>
     </div>
   `;
 }

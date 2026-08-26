@@ -7,7 +7,7 @@
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#080c12">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=19">
+  <link rel="stylesheet" href="styles.css?v=20">
 </head>
 <body>
 
@@ -213,6 +213,32 @@
       </div>
     </section>
 
+    <!-- REPORT -->
+    <section id="screen-report" class="hidden">
+      <div class="section">
+        <div class="report-head">
+          <h2 class="section__title" style="margin-bottom:0;">Report</h2>
+          <button class="refresh-btn hidden" id="reportRefreshBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.36"/><path d="M21 3v6h-6"/></svg>
+            Aggiorna
+          </button>
+        </div>
+        <div id="reportMetaLine" class="report-meta-line">Nessun report ancora generato.</div>
+
+        <div id="reportIntro" class="report-intro hidden">
+          <p><b>Cos'è il Report?</b> Un'analisi scritta da Claude sui titoli che <b>tu</b> hai visto e votato — non su quelli del gruppo. La generi la prima volta col tasto "Aggiorna", poi si aggiorna da sola una volta all'anno.</p>
+          <p>Servono almeno <b>50 titoli votati da te</b> per generarla la prima volta.</p>
+          <button id="reportIntroClose" class="report-intro__close">Ho capito</button>
+        </div>
+
+        <div id="reportGate" class="empty-state hidden"></div>
+
+        <div id="reportBody">
+          <p class="empty-hint">Tocca "Aggiorna" per generare il tuo primo report.</p>
+        </div>
+      </div>
+    </section>
+
     <!-- DETTAGLIO -->
     <section id="screen-detail" class="hidden">
       <button id="detailBackBtn" class="detail-back-btn">← Indietro</button>
@@ -271,11 +297,12 @@
       <button class="nav__btn active" data-screen="home"><strong>Home</strong></button>
       <button class="nav__btn" data-screen="stats"><strong>Statistiche</strong></button>
       <button class="nav__btn" data-screen="tonight"><strong>Stasera</strong></button>
+      <button class="nav__btn" data-screen="report"><strong>Report</strong></button>
     </div>
   </nav>
 
   <div id="toastWrap"></div>
 
-  <script type="module" src="app.js?v=19"></script>
+  <script type="module" src="app.js?v=20"></script>
 </body>
 </html>
