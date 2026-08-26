@@ -330,18 +330,6 @@ function toggleEmpty(shelfId, emptyId, items) {
 
 // ─── RICERCA ────────────────────────────────────────────────────────────────
 
-let searchDebounce = null;
-
-function onSearchInput() {
-  const q = document.getElementById("searchInput").value.trim();
-  clearTimeout(searchDebounce);
-  if (!q) {
-    document.getElementById("resultsSection").classList.add("hidden");
-    return;
-  }
-  searchDebounce = setTimeout(() => doSearch(q), 400);
-}
-
 async function doSearch(q) {
   const sec = document.getElementById("resultsSection");
   const res = document.getElementById("results");
@@ -1213,11 +1201,16 @@ function bindGlobalEvents() {
   document.getElementById("openSeenSeries").addEventListener("click", () => { openLibrarySection("seen", "tv"); pushHistoryState("library"); });
   document.getElementById("libraryBackBtn").addEventListener("click", () => { haptic(8); history.back(); });
 
-  document.getElementById("searchInput").addEventListener("input", onSearchInput);
   document.getElementById("searchBtn").addEventListener("click", () => {
     const q = document.getElementById("searchInput").value.trim();
     if (!q) return;
-    clearTimeout(searchDebounce);
+    haptic(8);
+    doSearch(q);
+  });
+  document.getElementById("searchInput").addEventListener("keydown", e => {
+    if (e.key !== "Enter") return;
+    const q = document.getElementById("searchInput").value.trim();
+    if (!q) return;
     haptic(8);
     doSearch(q);
   });
