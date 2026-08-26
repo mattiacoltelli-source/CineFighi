@@ -84,18 +84,9 @@ export function showToast(message, type = "info", title = "") {
 
 // ─── AVATAR ──────────────────────────────────────────────────────────────────
 
-const AVATAR_COLORS = ["#2dd9a3", "#4da3ff", "#ffb15c", "#ff8fa3", "#b389f5", "#5eead4"];
-
-function colorForUser(name) {
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % AVATAR_COLORS.length;
-  return AVATAR_COLORS[h];
-}
-
 export function avatarHtml(name, size = 28) {
   const initials = name.trim().slice(0, 2).toUpperCase();
-  const color = colorForUser(name);
-  return `<span class="avatar" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.38)}px;background:${color}">${escapeHtml(initials)}</span>`;
+  return `<span class="avatar" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.38)}px;background:var(--orange)">${escapeHtml(initials)}</span>`;
 }
 
 // ─── SCREENS ─────────────────────────────────────────────────────────────────
