@@ -227,7 +227,10 @@ export function renderGenreBars(entries) {
     <div class="bar-row">
       <div class="bar-row__label">
         <span class="bar-row__name">${escapeHtml(e.label)}</span>
-        <span class="bar-row__count">${e.value}</span>
+        <span class="bar-row__meta">
+          <span class="bar-row__count">${e.value} titol${e.value === 1 ? "o" : "i"}</span>
+          ${e.avgVote != null ? `<span class="bar-row__vote">★ ${e.avgVote.toFixed(1).replace(".", ",")}</span>` : ""}
+        </span>
       </div>
       <div class="bar-track"><div class="bar__fill" data-width="${Math.max(8, (e.value / max) * 100)}"></div></div>
     </div>
