@@ -29,6 +29,7 @@ let db = [];               // libreria completa (titoli + voti)
 let libraryStatus = "all"; // all | watchlist | seen  (impostato dai "Vedi tutto")
 let libraryFilter = "all"; // all | movie | tv
 let libraryGenre = "all";
+let watchlistMode = "me";  // me | group (Home)
 let statsMode = "group";   // group | me
 let rankingMedia = "movie"; // movie | tv
 let currentDetailId = null;
@@ -310,9 +311,19 @@ function goToScreen(screen) {
 }
 
 function renderHome() {
-  const watch = db.filter(x => x.status === "watchlist").slice(0, 10);
+  document.querySelectorAll("#watchlistModeToggle .stats-toggle-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.mode === watchlistMode);
+  });
+
+  const watch = db
+    .filter(x => x.status === "watchlist" && (watchlistMode === "group" || x.added_by === currentUser))
+    .slice(0, 10);
   const seenMovies = db.filter(x => x.status === "seen" && x.media_type === "movie").slice(0, 10);
   const seenSeries = db.filter(x => x.status === "seen" && x.media_type === "tv").slice(0, 10);
+
+  document.getElementById("watchShelfEmpty").textContent = watchlistMode === "group"
+    ? "La watchlist del gruppo è vuota."
+    : "La tua watchlist è vuota.";
 
   toggleEmpty("watchShelf", "watchShelfEmpty", watch);
   toggleEmpty("seenMovieShelf", "seenMovieShelfEmpty", seenMovies);
@@ -1244,6 +1255,9 @@ function bindGlobalEvents() {
     if (btn) { libraryGenre = btn.dataset.genreFilter; renderLibraryScreen(); }
   });
 
+  document.querySelectorAll("#watchlistModeToggle .stats-toggle-btn").forEach(btn => {
+    btn.addEventListener("click", () => { haptic(8); watchlistMode = btn.dataset.mode; renderHome(); });
+  });
   document.querySelectorAll("#statsIoGruppoToggle .stats-toggle-btn").forEach(btn => {
     btn.addEventListener("click", () => { statsMode = btn.dataset.mode; renderStats(); });
   });
