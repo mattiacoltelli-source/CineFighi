@@ -146,9 +146,28 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
   position:relative; overflow:hidden; border:1px solid var(--border);
 }
 .shelf-card__poster::after { content:""; position:absolute; inset:0; background: linear-gradient(to bottom, transparent 55%, rgba(0,0,0,.75)); }
+/* Nome di chi ha votato + voto, sulla stessa riga in basso: il voto
+   (flex:0 0 auto) non si restringe mai, il nome (flex:1 1 auto) prende lo
+   spazio che resta e si tronca da solo con l'ellissi — per costruzione non
+   può mai finire sotto/dietro al voto, qualunque sia la lunghezza del nome
+   (vedi ui.js::renderShelf, firstVoter in cine-core.js). */
+.shelf-card__bottom {
+  position:absolute; left:8px; right:8px; bottom:8px;
+  display:flex; align-items:center; justify-content:flex-end; gap:6px; z-index:2;
+}
+.shelf-card__voter {
+  flex:1 1 auto; min-width:0; display:flex; align-items:center; gap:2px; overflow:hidden;
+  font-family: var(--font-display); font-size:10.5px; font-weight:700;
+  color: var(--text2); background: rgba(0,0,0,.65); padding:3px 7px; border-radius: var(--radius-pill);
+}
+/* Il nome si tronca (min-width:0 + ellissi, in questo figlio); il "+N"
+   (flex:0 0 auto) resta sempre visibile per intero — è l'unico segnale che
+   dice "hanno votato in più persone", non deve mai sparire per primo. */
+.shelf-card__voter-name { min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.shelf-card__voter-count { flex:0 0 auto; opacity:.8; }
 .shelf-card__vote {
-  position:absolute; bottom:8px; right:8px; font-family: var(--font-display); font-size:11px; font-weight:800;
-  color: var(--cyan2); background: rgba(0,0,0,.65); padding:3px 7px; border-radius: var(--radius-pill); z-index:2;
+  flex:0 0 auto; font-family: var(--font-display); font-size:11px; font-weight:800;
+  color: var(--cyan2); background: rgba(0,0,0,.65); padding:3px 7px; border-radius: var(--radius-pill);
 }
 /* Puntino discreto per i titoli aggiunti da qualcun altro dopo la tua ultima
    visita: niente numeri né banner, deliberatamente minimo (vedi ui.js::renderShelf). */

@@ -4,8 +4,8 @@
 
 import {
   escapeHtml, mediaLabel, mediaBadgeClass, posterUrl, uniqueKey,
-  average, voteCount, rawNumberToFixed
-} from "./cine-core.js?v=20";
+  average, voteCount, rawNumberToFixed, firstVoter
+} from "./cine-core.js?v=21";
 
 // ─── ANIMAZIONI (numeri che contano, barre che si riempiono, tattile) ───────
 
@@ -134,13 +134,24 @@ export function renderShelf(containerId, items, lastSeenAt) {
   if (!el) return;
   el.innerHTML = items.map(item => {
     const avg = average(item.votes);
+    const voter = firstVoter(item.votes);
     const isNew = !!(lastSeenAt && item.created_at && item.created_at > lastSeenAt);
     return `
       <div class="shelf-card open-detail" data-id="${item.id}">
         <div class="shelf-card__poster" style="background-image:url('${posterUrl(item.poster_path)}')">
           <span class="badge ${mediaBadgeClass(item)}">${mediaLabel(item)}</span>
           ${isNew ? `<span class="shelf-card__new-dot"></span>` : ""}
-          ${avg !== null ? `<span class="shelf-card__vote">★ ${avg.toFixed(1)}</span>` : ""}
+          ${avg !== null ? `
+            <div class="shelf-card__bottom">
+              ${voter ? `
+                <span class="shelf-card__voter">
+                  <span class="shelf-card__voter-name">${escapeHtml(voter.name)}</span>
+                  ${voter.others > 0 ? `<span class="shelf-card__voter-count">+${voter.others}</span>` : ""}
+                </span>
+              ` : ""}
+              <span class="shelf-card__vote">★ ${avg.toFixed(1)}</span>
+            </div>
+          ` : ""}
         </div>
         <div class="shelf-card__info">
           <div class="shelf-card__title">${escapeHtml(item.title)}</div>
