@@ -5,7 +5,7 @@
 import {
   escapeHtml, mediaLabel, mediaBadgeClass, posterUrl, uniqueKey,
   average, voteCount, rawNumberToFixed, firstVoter
-} from "./cine-core.js?v=22";
+} from "./cine-core.js?v=23";
 
 // ─── ANIMAZIONI (numeri che contano, barre che si riempiono, tattile) ───────
 
@@ -271,12 +271,43 @@ function podiumOrder(items) {
   ].filter(Boolean);
 }
 
+function rankRowHtml(item, pos, typeLabel) {
+  return `
+    <div class="rank-row open-detail" data-id="${item.id}">
+      <div class="rank-row__pos">${pos}</div>
+      <div class="rank-row__poster" style="background-image:url('${posterUrl(item.poster_path)}')"></div>
+      <div class="rank-row__info">
+        <div class="rank-row__title">${escapeHtml(item.title)}</div>
+        <div class="rank-row__meta">${item.year} · ${typeLabel}</div>
+      </div>
+      <div class="rank-row__vote">★ ${item.__score.toFixed(1)}</div>
+    </div>
+  `;
+}
+
+// Righe mostrate SUBITO dopo il podio, prima del tasto "Mostra tutti" — con
+// centinaia di titoli votati (la Classifica non ha un minimo di voti, a
+// differenza di Curiosità: vedi mostDivisive in cine-core.js) mostrarli
+// tutti fin da subito significa caricare centinaia di locandine in un
+// colpo solo, ben prima che l'utente scorra fin laggiù.
+const RANKING_LIST_INITIAL = 2;
+
+// HTML delle righe oltre le prime RANKING_LIST_INITIAL, tenuto pronto ma
+// NON ancora inserito nel DOM (quindi le sue locandine non vengono
+// scaricate) finché non si preme "Mostra tutti" — vedi expandRankingList().
+// Si resetta ad ogni renderRanking(): cambiare vista (Io/Gruppo, Film/Serie
+// TV) deve sempre ripartire da collassato.
+let _rankingPendingHtml = "";
+
 export function renderRanking(items, typeLabel) {
   const podiumEl = document.getElementById("rankingPodium");
   const listEl = document.getElementById("rankingList");
   const badgeEl = document.getElementById("rankingCountBadge");
+  const expandBtn = document.getElementById("rankingExpandBtn");
 
   badgeEl.textContent = String(items.length);
+  _rankingPendingHtml = "";
+  expandBtn.classList.add("hidden");
 
   if (!items.length) {
     podiumEl.innerHTML = `<p class="empty-hint">Vota qualche ${typeLabel === "Film" ? "film" : "serie"} per vedere la classifica.</p>`;
@@ -285,6 +316,8 @@ export function renderRanking(items, typeLabel) {
   }
 
   const rest = items.slice(3);
+  const visible = rest.slice(0, RANKING_LIST_INITIAL);
+  const pending = rest.slice(RANKING_LIST_INITIAL);
 
   podiumEl.innerHTML = podiumOrder(items).map(({ item, medal, first }) => `
     <div class="podium-card open-detail${first ? " podium-card--first" : ""}" data-id="${item.id}">
@@ -296,17 +329,23 @@ export function renderRanking(items, typeLabel) {
     </div>
   `).join("");
 
-  listEl.innerHTML = rest.length ? rest.map((item, i) => `
-    <div class="rank-row open-detail" data-id="${item.id}">
-      <div class="rank-row__pos">${i + 4}</div>
-      <div class="rank-row__poster" style="background-image:url('${posterUrl(item.poster_path)}')"></div>
-      <div class="rank-row__info">
-        <div class="rank-row__title">${escapeHtml(item.title)}</div>
-        <div class="rank-row__meta">${item.year} · ${typeLabel}</div>
-      </div>
-      <div class="rank-row__vote">★ ${item.__score.toFixed(1)}</div>
-    </div>
-  `).join("") : "";
+  listEl.innerHTML = visible.map((item, i) => rankRowHtml(item, i + 4, typeLabel)).join("");
+
+  if (pending.length) {
+    _rankingPendingHtml = pending.map((item, i) => rankRowHtml(item, i + 4 + visible.length, typeLabel)).join("");
+    expandBtn.querySelector(".rank-expand-btn__count").textContent = `· ${pending.length}`;
+    expandBtn.classList.remove("hidden");
+  }
+}
+
+// Chiamata dal click su #rankingExpandBtn (vedi app.js) — aggiunge le
+// righe già pronte e nasconde il tasto. Nessun nuovo calcolo: i dati sono
+// già ordinati, solo non ancora scritti nel DOM.
+export function expandRankingList() {
+  if (!_rankingPendingHtml) return;
+  document.getElementById("rankingList").insertAdjacentHTML("beforeend", _rankingPendingHtml);
+  _rankingPendingHtml = "";
+  document.getElementById("rankingExpandBtn").classList.add("hidden");
 }
 
 // ─── STATS: Curiosità (solo vista Gruppo — vedi renderStats in app.js) ───────

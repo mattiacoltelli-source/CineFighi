@@ -5,7 +5,7 @@
 import {
   uniqueKey, average, escapeHtml, decadeOf, GENRE_NAME_TO_ID,
   votingLeaderboard, mostAffinePair, mostDivisive
-} from "./cine-core.js?v=22";
+} from "./cine-core.js?v=23";
 import {
   getCurrentUser, setCurrentUser, clearCurrentUser, MAX_USERS,
   getLastSeenAt, setLastSeenAt,
@@ -13,18 +13,18 @@ import {
   fetchLibrary, addTitle, updateTitleStatus, removeTitle,
   upsertVote, removeVote,
   loadLatestReport, regenerateReport
-} from "./storage.js?v=22";
+} from "./storage.js?v=23";
 import {
   tmdbFetchDetail, tmdbSearch, tmdbFetchDiscoverLevel, tmdbFetchDecadeCandidates,
   tmdbFetchOutOfComfortZoneCandidates, buildFallbackQueries
-} from "./tmdb.js?v=22";
+} from "./tmdb.js?v=23";
 import {
   showToast, avatarHtml, initScreens, switchScreen,
   renderShelf, renderSearchResults, renderLibraryList, renderGenreFilters,
-  renderGenreBars, renderRanking, renderCuriosita, renderTonightList, renderDiscoverResult, renderClassicResult,
+  renderGenreBars, renderRanking, expandRankingList, renderCuriosita, renderTonightList, renderDiscoverResult, renderClassicResult,
   renderDetailFacts, renderVotesList, renderReportMeta, renderReportContent, renderReportGate,
   haptic, animateValue
-} from "./ui.js?v=22";
+} from "./ui.js?v=23";
 
 const MIN_VOTED_FOR_REPORT = 50;
 
@@ -1381,6 +1381,7 @@ function bindGlobalEvents() {
   document.querySelectorAll("#rankingMediaToggle .stats-toggle-btn").forEach(btn => {
     btn.addEventListener("click", () => { rankingMedia = btn.dataset.media; renderStats(); });
   });
+  document.getElementById("rankingExpandBtn").addEventListener("click", () => { haptic(8); expandRankingList(); });
 
   document.getElementById("reportRefreshBtn").addEventListener("click", () => { haptic(8); handleReportRefresh(); });
 
