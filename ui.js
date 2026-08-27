@@ -5,7 +5,7 @@
 import {
   escapeHtml, mediaLabel, mediaBadgeClass, posterUrl, uniqueKey,
   average, voteCount, rawNumberToFixed, firstVoter
-} from "./cine-core.js?v=21";
+} from "./cine-core.js?v=22";
 
 // ─── ANIMAZIONI (numeri che contano, barre che si riempiono, tattile) ───────
 
@@ -256,7 +256,20 @@ export function renderGenreBars(entries) {
 
 // ─── STATS: classifica ───────────────────────────────────────────────────────
 
-const MEDALS = ["🥇", "🥈", "🥉"];
+// Riordina un array già ordinato per rank (items[0] = 1°) nell'ordine di
+// DISEGNO del podio — 2°-1°-3°, il 1° al centro — con medaglia e flag
+// "first" già risolti. Gestisce bene anche 1 o 2 soli elementi (il flag
+// si basa sulla posizione nell'array ORIGINALE, mai su un indice
+// ricalcolato dopo aver scartato gli slot vuoti — quello aveva già
+// causato un bug qui). Usata sia dalla Classifica sia da Curiosità
+// (vedi renderCuriosita) per un solo linguaggio di podio in tutta l'app.
+function podiumOrder(items) {
+  return [
+    items[1] ? { item: items[1], medal: "🥈", first: false } : null,
+    items[0] ? { item: items[0], medal: "🥇", first: true } : null,
+    items[2] ? { item: items[2], medal: "🥉", first: false } : null,
+  ].filter(Boolean);
+}
 
 export function renderRanking(items, typeLabel) {
   const podiumEl = document.getElementById("rankingPodium");
@@ -271,12 +284,11 @@ export function renderRanking(items, typeLabel) {
     return;
   }
 
-  const podium = items.slice(0, 3);
   const rest = items.slice(3);
 
-  podiumEl.innerHTML = podium.map((item, i) => `
-    <div class="podium-card open-detail" data-id="${item.id}">
-      <div class="podium-card__medal">${MEDALS[i]}</div>
+  podiumEl.innerHTML = podiumOrder(items).map(({ item, medal, first }) => `
+    <div class="podium-card open-detail${first ? " podium-card--first" : ""}" data-id="${item.id}">
+      <div class="podium-card__medal">${medal}</div>
       <div class="podium-card__poster" style="background-image:url('${posterUrl(item.poster_path)}')"></div>
       <div class="podium-card__title">${escapeHtml(item.title)}</div>
       <div class="podium-card__meta">${item.year} · ${typeLabel}</div>
@@ -295,6 +307,57 @@ export function renderRanking(items, typeLabel) {
       <div class="rank-row__vote">★ ${item.__score.toFixed(1)}</div>
     </div>
   `).join("") : "";
+}
+
+// ─── STATS: Curiosità (solo vista Gruppo — vedi renderStats in app.js) ───────
+// Podio a 3 card, stessa forma di .podium-card già usata sopra per la
+// Classifica e stesso riordino 2°-1°-3° di podiumOrder() (coerenza
+// visiva: un solo linguaggio per "ecco un podio" in tutta l'app) — solo
+// senza locandina, dato che leaderboard/divisivi non hanno un'immagine
+// naturale, e tre card sempre della stessa altezza restano più ordinate
+// di locandine finte.
+
+function curiositaCardHtml({ medal, title, meta, value, first, openDetailId }) {
+  const cls = `podium-card${openDetailId != null ? " open-detail" : ""}${first ? " podium-card--first" : ""}`;
+  const idAttr = openDetailId != null ? ` data-id="${openDetailId}"` : "";
+  return `
+    <div class="${cls}"${idAttr}>
+      <div class="podium-card__medal">${medal}</div>
+      <div class="podium-card__title">${escapeHtml(title)}</div>
+      ${meta ? `<div class="podium-card__meta">${escapeHtml(meta)}</div>` : ""}
+      <div class="podium-card__vote">${value}</div>
+    </div>
+  `;
+}
+
+export function renderCuriosita({ leaderboard, pair, divisive }) {
+  const wrap = document.getElementById("curiositaSection");
+  if (!wrap) return;
+
+  const votingEl = document.getElementById("curiositaVoting");
+  votingEl.innerHTML = leaderboard.length
+    ? podiumOrder(leaderboard).map(({ item, medal, first }) =>
+        curiositaCardHtml({ medal, title: item.user, value: `${item.count} voti`, first })
+      ).join("")
+    : `<p class="empty-hint">Ancora nessun voto nel gruppo.</p>`;
+
+  const pairEl = document.getElementById("curiositaPair");
+  pairEl.innerHTML = pair ? `
+    <div class="affinity-callout">
+      <div class="affinity-callout__names">${escapeHtml(pair.a)} &amp; ${escapeHtml(pair.b)}</div>
+      <div class="affinity-callout__detail">Differenza media di soli <b>${pair.avgDiff.toFixed(2).replace(".", ",")} punti</b> sui <b>${pair.sharedCount} titoli</b> votati da entrambi.</div>
+    </div>
+  ` : `<p class="empty-hint">Non ci sono ancora abbastanza titoli votati in comune tra due persone.</p>`;
+
+  const divisiveEl = document.getElementById("curiositaDivisive");
+  divisiveEl.innerHTML = divisive.length
+    ? podiumOrder(divisive).map(({ item, medal, first }) =>
+        curiositaCardHtml({
+          medal, title: item.title, meta: `${item.year} · ${item.count} voti`,
+          value: `±${item.sd.toFixed(1).replace(".", ",")}`, first, openDetailId: item.id,
+        })
+      ).join("")
+    : `<p class="empty-hint">Ancora nessun titolo con abbastanza voti per dirlo.</p>`;
 }
 
 // ─── TONIGHT (consigli, con affinità % e motivo, come CineTracker) ───────────

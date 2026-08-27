@@ -150,3 +150,67 @@ export function firstVoter(votesObj) {
   if (!names.length) return null;
   return { name: names[0], others: names.length - 1 };
 }
+
+// ─── CURIOSITÀ (Statistiche → Gruppo) ────────────────────────────────────────
+// Tre metriche in più sugli stessi dati già caricati per la Home/Statistiche
+// (nessuna nuova query): chi ha votato di più, la coppia coi gusti più
+// simili, i titoli più divisivi. Pure, sola lettura, nessuna chiamata a
+// Supabase qui dentro — prendono `db` (l'array già restituito da
+// fetchLibrary(), ogni item con `.votes`) e basta.
+
+export function votingLeaderboard(db) {
+  const counts = new Map();
+  for (const item of db) {
+    for (const user of Object.keys(item.votes || {})) {
+      counts.set(user, (counts.get(user) || 0) + 1);
+    }
+  }
+  return [...counts.entries()]
+    .map(([user, count]) => ({ user, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
+// Coppia con i gusti più simili: differenza media di voto sui titoli
+// votati da ENTRAMBI. Richiede almeno minShared titoli in comune —
+// altrimenti il numero è rumore (2-3 titoli condivisi tra due persone non
+// dice niente di vero), quindi quella coppia viene scartata, mai
+// segnalata con un dato fuorviante. null se nessuna coppia raggiunge la
+// soglia.
+export function mostAffinePair(db, { minShared = 5 } = {}) {
+  const users = [...new Set(db.flatMap(item => Object.keys(item.votes || {})))];
+  let best = null;
+  for (let i = 0; i < users.length; i++) {
+    for (let j = i + 1; j < users.length; j++) {
+      const [a, b] = [users[i], users[j]];
+      const diffs = [];
+      for (const item of db) {
+        const va = Number(item.votes?.[a]?.vote);
+        const vb = Number(item.votes?.[b]?.vote);
+        if (Number.isFinite(va) && Number.isFinite(vb)) diffs.push(Math.abs(va - vb));
+      }
+      if (diffs.length < minShared) continue;
+      const avgDiff = diffs.reduce((x, y) => x + y, 0) / diffs.length;
+      if (!best || avgDiff < best.avgDiff) best = { a, b, avgDiff, sharedCount: diffs.length };
+    }
+  }
+  return best;
+}
+
+// I titoli più divisivi: deviazione standard dei voti ricevuti — quanto in
+// media un voto si allontana dalla media del titolo. Soglia minVotes
+// DIVERSA (e più alta) di quella della Classifica, che accetta anche 1
+// solo voto: lì basta per un ranking, qui "quanto il gruppo è diviso" con
+// 1-2 voti non significa niente.
+export function mostDivisive(db, { minVotes = 3, limit = 3 } = {}) {
+  return db
+    .map(item => {
+      const vals = Object.values(item.votes || {}).map(v => Number(v.vote)).filter(Number.isFinite);
+      if (vals.length < minVotes) return null;
+      const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+      const variance = vals.reduce((a, b) => a + (b - avg) ** 2, 0) / vals.length;
+      return { id: item.id, title: item.title, year: item.year, avg, sd: Math.sqrt(variance), count: vals.length };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.sd - a.sd)
+    .slice(0, limit);
+}

@@ -3,8 +3,9 @@
 // richiama storage.js (Supabase) e tmdb.js, e passa i dati a ui.js per disegnare.
 
 import {
-  uniqueKey, average, escapeHtml, decadeOf, GENRE_NAME_TO_ID
-} from "./cine-core.js?v=21";
+  uniqueKey, average, escapeHtml, decadeOf, GENRE_NAME_TO_ID,
+  votingLeaderboard, mostAffinePair, mostDivisive
+} from "./cine-core.js?v=22";
 import {
   getCurrentUser, setCurrentUser, clearCurrentUser, MAX_USERS,
   getLastSeenAt, setLastSeenAt,
@@ -12,18 +13,18 @@ import {
   fetchLibrary, addTitle, updateTitleStatus, removeTitle,
   upsertVote, removeVote,
   loadLatestReport, regenerateReport
-} from "./storage.js?v=21";
+} from "./storage.js?v=22";
 import {
   tmdbFetchDetail, tmdbSearch, tmdbFetchDiscoverLevel, tmdbFetchDecadeCandidates,
   tmdbFetchOutOfComfortZoneCandidates, buildFallbackQueries
-} from "./tmdb.js?v=21";
+} from "./tmdb.js?v=22";
 import {
   showToast, avatarHtml, initScreens, switchScreen,
   renderShelf, renderSearchResults, renderLibraryList, renderGenreFilters,
-  renderGenreBars, renderRanking, renderTonightList, renderDiscoverResult, renderClassicResult,
+  renderGenreBars, renderRanking, renderCuriosita, renderTonightList, renderDiscoverResult, renderClassicResult,
   renderDetailFacts, renderVotesList, renderReportMeta, renderReportContent, renderReportGate,
   haptic, animateValue
-} from "./ui.js?v=21";
+} from "./ui.js?v=22";
 
 const MIN_VOTED_FOR_REPORT = 50;
 
@@ -635,6 +636,25 @@ function renderStats() {
     .sort((a, b) => b.__score - a.__score);
 
   renderRanking(ranked, rankingMedia === "movie" ? "Film" : "Serie TV");
+
+  // Curiosità: solo in vista Gruppo, non ha un senso "personale" (chi vota
+  // di più, le coppie affini, i titoli divisivi sono per forza cose del
+  // gruppo intero, non del singolo utente). Il contenitore resta nel DOM,
+  // si nasconde/mostra con .hidden — stesso pattern già in uso altrove
+  // (es. userPickerAddRow, reportGate).
+  const curiositaEl = document.getElementById("curiositaSection");
+  if (curiositaEl) {
+    if (statsMode === "me") {
+      curiositaEl.classList.add("hidden");
+    } else {
+      curiositaEl.classList.remove("hidden");
+      renderCuriosita({
+        leaderboard: votingLeaderboard(db),
+        pair: mostAffinePair(db),
+        divisive: mostDivisive(db),
+      });
+    }
+  }
 }
 
 // ─── REPORT ───────────────────────────────────────────────────────────────
