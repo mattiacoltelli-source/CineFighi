@@ -293,6 +293,13 @@ function selectUser(name) {
   updateUserChip();
   document.getElementById("app").classList.remove("hidden");
   closeUserPicker();
+  // La Home viene disegnata per la prima volta da reloadLibrary() durante
+  // init(), PRIMA che l'utente scelga il profilo dal picker (currentUser è
+  // ancora vuoto in quel momento): la watchlist "Io" risultava filtrata su
+  // nessuno e restava vuota finché non si cambiava schermata e si tornava
+  // su Home. Ridisegnarla anche qui, non solo le Statistiche, la aggiorna
+  // subito col profilo appena scelto.
+  renderHome();
   renderStats();
   if (currentDetailId) openDetail(currentDetailId, { push: false });
 }
