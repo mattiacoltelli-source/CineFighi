@@ -333,7 +333,8 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
   padding:11px 16px; border-radius: var(--radius-pill); background: var(--surface2); border:1px solid var(--border2);
   color: var(--text2); font-family: var(--font-display); font-size:13px; font-weight:700;
 }
-.rank-expand-btn svg { width:14px; height:14px; stroke:currentColor; }
+.rank-expand-btn svg { width:14px; height:14px; stroke:currentColor; transition: transform var(--t-mid) var(--ease); }
+.rank-expand-btn.is-up svg { transform: rotate(180deg); }
 .rank-expand-btn__count { color: var(--text3); font-weight:600; }
 
 /* CURIOSITÀ (Statistiche → Gruppo): un solo linguaggio di podio riusato in

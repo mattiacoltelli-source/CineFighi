@@ -5,7 +5,7 @@
 import {
   escapeHtml, mediaLabel, mediaBadgeClass, posterUrl, uniqueKey,
   average, voteCount, rawNumberToFixed, firstVoter
-} from "./cine-core.js?v=23";
+} from "./cine-core.js?v=24";
 
 // ─── ANIMAZIONI (numeri che contano, barre che si riempiono, tattile) ───────
 
@@ -292,32 +292,53 @@ function rankRowHtml(item, pos, typeLabel) {
 // colpo solo, ben prima che l'utente scorra fin laggiù.
 const RANKING_LIST_INITIAL = 2;
 
-// HTML delle righe oltre le prime RANKING_LIST_INITIAL, tenuto pronto ma
-// NON ancora inserito nel DOM (quindi le sue locandine non vengono
-// scaricate) finché non si preme "Mostra tutti" — vedi expandRankingList().
-// Si resetta ad ogni renderRanking(): cambiare vista (Io/Gruppo, Film/Serie
-// TV) deve sempre ripartire da collassato.
-let _rankingPendingHtml = "";
+// Tutte le righe oltre il podio (item, non HTML) e l'etichetta del tipo
+// corrente — bastano a ridisegnare la lista in entrambi gli stati
+// (collassato/espanso) senza ricalcolare nulla. Si resettano ad ogni
+// renderRanking(): cambiare vista (Io/Gruppo, Film/Serie TV) riparte
+// sempre da collassato, mai da dove si era lasciato l'ultima volta.
+let _rankingRest = [];
+let _rankingTypeLabel = "";
+let _rankingExpanded = false;
 
-export function renderRanking(items, typeLabel) {
-  const podiumEl = document.getElementById("rankingPodium");
-  const listEl = document.getElementById("rankingList");
-  const badgeEl = document.getElementById("rankingCountBadge");
-  const expandBtn = document.getElementById("rankingExpandBtn");
+function renderRankingListRows() {
+  const items = _rankingExpanded ? _rankingRest : _rankingRest.slice(0, RANKING_LIST_INITIAL);
+  document.getElementById("rankingList").innerHTML =
+    items.map((item, i) => rankRowHtml(item, i + 4, _rankingTypeLabel)).join("");
+}
 
-  badgeEl.textContent = String(items.length);
-  _rankingPendingHtml = "";
-  expandBtn.classList.add("hidden");
+function updateExpandBtn() {
+  const btn = document.getElementById("rankingExpandBtn");
+  const hiddenCount = _rankingRest.length - RANKING_LIST_INITIAL;
 
-  if (!items.length) {
-    podiumEl.innerHTML = `<p class="empty-hint">Vota qualche ${typeLabel === "Film" ? "film" : "serie"} per vedere la classifica.</p>`;
-    listEl.innerHTML = "";
+  if (hiddenCount <= 0) {
+    btn.classList.add("hidden");
     return;
   }
 
-  const rest = items.slice(3);
-  const visible = rest.slice(0, RANKING_LIST_INITIAL);
-  const pending = rest.slice(RANKING_LIST_INITIAL);
+  btn.classList.remove("hidden");
+  btn.classList.toggle("is-up", _rankingExpanded);
+  btn.querySelector(".rank-expand-btn__label").textContent = _rankingExpanded ? "Mostra meno" : "Mostra tutti";
+  const countEl = btn.querySelector(".rank-expand-btn__count");
+  countEl.textContent = `· ${hiddenCount}`;
+  countEl.classList.toggle("hidden", _rankingExpanded);
+}
+
+export function renderRanking(items, typeLabel) {
+  const podiumEl = document.getElementById("rankingPodium");
+  const badgeEl = document.getElementById("rankingCountBadge");
+
+  badgeEl.textContent = String(items.length);
+  _rankingRest = items.slice(3);
+  _rankingTypeLabel = typeLabel;
+  _rankingExpanded = false;
+
+  if (!items.length) {
+    podiumEl.innerHTML = `<p class="empty-hint">Vota qualche ${typeLabel === "Film" ? "film" : "serie"} per vedere la classifica.</p>`;
+    document.getElementById("rankingList").innerHTML = "";
+    document.getElementById("rankingExpandBtn").classList.add("hidden");
+    return;
+  }
 
   podiumEl.innerHTML = podiumOrder(items).map(({ item, medal, first }) => `
     <div class="podium-card open-detail${first ? " podium-card--first" : ""}" data-id="${item.id}">
@@ -329,23 +350,24 @@ export function renderRanking(items, typeLabel) {
     </div>
   `).join("");
 
-  listEl.innerHTML = visible.map((item, i) => rankRowHtml(item, i + 4, typeLabel)).join("");
-
-  if (pending.length) {
-    _rankingPendingHtml = pending.map((item, i) => rankRowHtml(item, i + 4 + visible.length, typeLabel)).join("");
-    expandBtn.querySelector(".rank-expand-btn__count").textContent = `· ${pending.length}`;
-    expandBtn.classList.remove("hidden");
-  }
+  renderRankingListRows();
+  updateExpandBtn();
 }
 
-// Chiamata dal click su #rankingExpandBtn (vedi app.js) — aggiunge le
-// righe già pronte e nasconde il tasto. Nessun nuovo calcolo: i dati sono
-// già ordinati, solo non ancora scritti nel DOM.
-export function expandRankingList() {
-  if (!_rankingPendingHtml) return;
-  document.getElementById("rankingList").insertAdjacentHTML("beforeend", _rankingPendingHtml);
-  _rankingPendingHtml = "";
-  document.getElementById("rankingExpandBtn").classList.add("hidden");
+// Chiamata dal click su #rankingExpandBtn (vedi app.js). Un solo tasto per
+// entrambe le direzioni — stessa posizione nel DOM, cambia solo testo e
+// freccia (vedi updateExpandBtn) — così finisce naturalmente in fondo alla
+// lista quando è espansa, esattamente dove serve per richiuderla. Chiudendo
+// riporta anche la vista in cima alla Classifica: con centinaia di righe
+// "richiudere" da solo lascerebbe l'utente sepolto in fondo alla pagina.
+export function toggleRankingList() {
+  if (!_rankingRest.length) return;
+  _rankingExpanded = !_rankingExpanded;
+  renderRankingListRows();
+  updateExpandBtn();
+  if (!_rankingExpanded) {
+    document.getElementById("classificaSection").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 }
 
 // ─── STATS: Curiosità (solo vista Gruppo — vedi renderStats in app.js) ───────
