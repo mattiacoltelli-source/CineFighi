@@ -394,7 +394,17 @@ function mdBold(escapedText) {
 export function renderReportGate(votedCount, min) {
   const el = document.getElementById("reportGate");
   if (!el) return;
-  el.textContent = `Ti servono almeno ${min} titoli votati da te per generare il Report (ne hai votati ${votedCount}). Continua a votare i titoli che vedi!`;
+  const pct = Math.max(4, Math.min(100, (votedCount / min) * 100));
+  el.innerHTML = `
+    <p>Ti servono almeno ${min} titoli votati da te per generare il Report (ne hai votati ${votedCount}). Continua a votare i titoli che vedi!</p>
+    <div class="bar-track" style="margin-top:12px;"><div class="bar__fill" data-width="${pct}"></div></div>
+  `;
+  const fill = el.querySelector(".bar__fill");
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      fill.style.width = `${fill.dataset.width}%`;
+    });
+  });
 }
 
 export function renderReportContent(report) {
