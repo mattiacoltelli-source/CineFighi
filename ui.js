@@ -19,6 +19,16 @@ export function haptic(pattern = 10) {
   }
 }
 
+let animateValueCounter = 0;
+
+// Chiamata due volte di fila sullo stesso elemento (es. toggle Io/Gruppo
+// nelle Statistiche, cliccato subito dopo il render iniziale) prima che
+// la prima animazione dei 600ms sia finita: senza un modo per invalidare
+// il loop rAF precedente, i due tick() giravano in parallelo, e quello
+// partito per primo (con un target ormai superato) poteva comunque
+// arrivare per ultimo e "vincere", lasciando il numero sbagliato a video.
+// animId etichetta ogni chiamata: un tick() il cui id non è più quello
+// corrente per l'elemento si ferma da solo, silenziosamente.
 export function animateValue(el, target, duration = 600) {
   if (!el) return;
   const end = Number(target) || 0;
@@ -32,10 +42,14 @@ export function animateValue(el, target, duration = 600) {
   const current = Number(el.dataset.currentValue || 0);
   if (current === end) { el.textContent = String(end); return; }
 
+  const animId = ++animateValueCounter;
+  el._animId = animId;
+
   const start = current;
   const startTime = performance.now();
 
   function tick(now) {
+    if (el._animId !== animId) return;
     const p = Math.min((now - startTime) / duration, 1);
     const eased = 1 - Math.pow(1 - p, 3);
     const v = Math.round(start + (end - start) * eased);
