@@ -8,7 +8,6 @@ import {
 import {
   getCurrentUser, setCurrentUser, clearCurrentUser, MAX_USERS,
   getLastSeenAt, setLastSeenAt,
-  getReportIntroSeen, setReportIntroSeen,
   fetchUsers, addUser, deleteUser,
   fetchLibrary, addTitle, updateTitleStatus, removeTitle,
   upsertVote, removeVote,
@@ -647,10 +646,6 @@ function myVotedSeenCount() {
 }
 
 async function renderReport() {
-  if (!getReportIntroSeen()) {
-    document.getElementById("reportIntro").classList.remove("hidden");
-  }
-
   const report = await loadLatestReport(currentUser, updated => {
     reportCache = updated;
     renderReportScreen();
@@ -1361,11 +1356,6 @@ function bindGlobalEvents() {
   });
 
   document.getElementById("reportRefreshBtn").addEventListener("click", () => { haptic(8); handleReportRefresh(); });
-  document.getElementById("reportIntroClose").addEventListener("click", () => {
-    haptic(8);
-    setReportIntroSeen();
-    document.getElementById("reportIntro").classList.add("hidden");
-  });
 
   document.getElementById("tonightBtn").addEventListener("click", recommendTonightFive);
   document.getElementById("tonightDiscoverBtn").addEventListener("click", discoverByTaste);
