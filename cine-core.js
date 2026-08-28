@@ -170,15 +170,15 @@ export function votingLeaderboard(db) {
     .sort((a, b) => b.count - a.count);
 }
 
-// Coppia con i gusti più simili: differenza media di voto sui titoli
+// Differenza media di voto tra ogni coppia di utenti, sui soli titoli
 // votati da ENTRAMBI. Richiede almeno minShared titoli in comune —
 // altrimenti il numero è rumore (2-3 titoli condivisi tra due persone non
-// dice niente di vero), quindi quella coppia viene scartata, mai
-// segnalata con un dato fuorviante. null se nessuna coppia raggiunge la
-// soglia.
-export function mostAffinePair(db, { minShared = 5 } = {}) {
+// dice niente di vero), quindi quella coppia viene scartata dall'elenco.
+// Condiviso da mostAffinePair (avgDiff minimo) e mostDivergentPair
+// (massimo): stesso identico calcolo, cambia solo quale estremo si tiene.
+function pairVoteDiffs(db, minShared) {
   const users = [...new Set(db.flatMap(item => Object.keys(item.votes || {})))];
-  let best = null;
+  const pairs = [];
   for (let i = 0; i < users.length; i++) {
     for (let j = i + 1; j < users.length; j++) {
       const [a, b] = [users[i], users[j]];
@@ -190,18 +190,35 @@ export function mostAffinePair(db, { minShared = 5 } = {}) {
       }
       if (diffs.length < minShared) continue;
       const avgDiff = diffs.reduce((x, y) => x + y, 0) / diffs.length;
-      if (!best || avgDiff < best.avgDiff) best = { a, b, avgDiff, sharedCount: diffs.length };
+      pairs.push({ a, b, avgDiff, sharedCount: diffs.length });
     }
   }
-  return best;
+  return pairs;
 }
 
-// I titoli più divisivi: deviazione standard dei voti ricevuti — quanto in
-// media un voto si allontana dalla media del titolo. Soglia minVotes
-// DIVERSA (e più alta) di quella della Classifica, che accetta anche 1
-// solo voto: lì basta per un ranking, qui "quanto il gruppo è diviso" con
-// 1-2 voti non significa niente.
-export function mostDivisive(db, { minVotes = 3, limit = 3 } = {}) {
+// Coppia con i gusti più simili: avgDiff minimo. null se nessuna coppia
+// raggiunge la soglia minShared.
+export function mostAffinePair(db, { minShared = 5 } = {}) {
+  return pairVoteDiffs(db, minShared).reduce(
+    (best, p) => (!best || p.avgDiff < best.avgDiff ? p : best), null
+  );
+}
+
+// La coppia che litiga di più: stesso calcolo, avgDiff massimo invece che
+// minimo — il rovescio esatto di mostAffinePair.
+export function mostDivergentPair(db, { minShared = 5 } = {}) {
+  return pairVoteDiffs(db, minShared).reduce(
+    (best, p) => (!best || p.avgDiff > best.avgDiff ? p : best), null
+  );
+}
+
+// Deviazione standard dei voti ricevuti da ogni titolo — quanto in media
+// un voto si allontana dalla media del titolo. Soglia minVotes DIVERSA (e
+// più alta) di quella della Classifica, che accetta anche 1 solo voto: lì
+// basta per un ranking, qui "quanto il gruppo è diviso/d'accordo" con 1-2
+// voti non significa niente. Condivisa da mostDivisive (sd più alta) e
+// mostUnanimous (sd più bassa, il suo esatto opposto).
+function titlesBySd(db, minVotes) {
   return db
     .map(item => {
       const vals = Object.values(item.votes || {}).map(v => Number(v.vote)).filter(Number.isFinite);
@@ -210,7 +227,13 @@ export function mostDivisive(db, { minVotes = 3, limit = 3 } = {}) {
       const variance = vals.reduce((a, b) => a + (b - avg) ** 2, 0) / vals.length;
       return { id: item.id, title: item.title, year: item.year, avg, sd: Math.sqrt(variance), count: vals.length };
     })
-    .filter(Boolean)
-    .sort((a, b) => b.sd - a.sd)
-    .slice(0, limit);
+    .filter(Boolean);
+}
+
+export function mostDivisive(db, { minVotes = 3, limit = 3 } = {}) {
+  return titlesBySd(db, minVotes).sort((a, b) => b.sd - a.sd).slice(0, limit);
+}
+
+export function mostUnanimous(db, { minVotes = 3, limit = 3 } = {}) {
+  return titlesBySd(db, minVotes).sort((a, b) => a.sd - b.sd).slice(0, limit);
 }
