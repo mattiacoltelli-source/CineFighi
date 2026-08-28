@@ -5,7 +5,7 @@
 import {
   uniqueKey, average, escapeHtml, decadeOf, GENRE_NAME_TO_ID,
   votingLeaderboard, mostAffinePair, mostDivergentPair, mostDivisive, mostUnanimous
-} from "./cine-core.js?v=1f6e10c";
+} from "./cine-core.js?v=9672499";
 import {
   getCurrentUser, setCurrentUser, clearCurrentUser, MAX_USERS,
   getLastSeenAt, setLastSeenAt,
@@ -13,18 +13,18 @@ import {
   fetchLibrary, addTitle, updateTitleStatus, removeTitle,
   upsertVote, removeVote,
   loadLatestReport, regenerateReport
-} from "./storage.js?v=1f6e10c";
+} from "./storage.js?v=9672499";
 import {
   tmdbFetchDetail, tmdbSearch, tmdbFetchDiscoverLevel, tmdbFetchDecadeCandidates,
   tmdbFetchOutOfComfortZoneCandidates, buildFallbackQueries
-} from "./tmdb.js?v=1f6e10c";
+} from "./tmdb.js?v=9672499";
 import {
   showToast, avatarHtml, initScreens, switchScreen,
   renderShelf, renderSearchResults, renderLibraryList, renderGenreFilters,
   renderGenreBars, renderRanking, toggleRankingList, renderCuriosita, renderTonightList, renderDiscoverResult, renderClassicResult,
   renderDetailFacts, renderVotesList, renderReportMeta, renderReportContent, renderReportGate,
   haptic, animateValue
-} from "./ui.js?v=1f6e10c";
+} from "./ui.js?v=9672499";
 
 const MIN_VOTED_FOR_REPORT = 50;
 
