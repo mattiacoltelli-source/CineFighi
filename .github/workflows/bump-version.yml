@@ -1,10 +1,17 @@
-name: Bump SW version
+name: Bump version
 
-# Automatizza l'unico passo manuale del sistema di aggiornamento PWA (vedi
-# sw.js): ad ogni push "vero" su main, sostituisce SW_VERSION con l'hash
-# breve del commit, così il banner "Aggiorna" in app compare sempre, anche
-# se ci si dimentica di bumpare il numero a mano (es. modificando app.js
-# senza toccare sw.js, o incollando codice a mano senza Claude Code).
+# Automatizza l'unico passo manuale del cache-busting: ad ogni push "vero"
+# su main, sostituisce ogni "?v=..." nei file .html/.js con l'hash breve
+# del commit (così il browser e la CDN di GitHub Pages non servono mai
+# una copia in cache di app.js/ui.js/ecc., anche se ci si dimentica di
+# bumpare il numero a mano) e aggiorna anche SW_VERSION in sw.js, che è
+# il segnale che fa comparire il banner "Aggiorna" a chi ha già l'app
+# aperta — tutto in un solo commit automatico, invece di due workflow
+# separati che rischierebbero di pestarsi i piedi sullo stesso push.
+# Stesso pattern già in produzione su Cos90/CineTracker
+# (bump-asset-version.yml), qui unito al bump di SW_VERSION che
+# CineFighi aveva già come workflow a parte (bump-sw-version.yml, ora
+# sostituito da questo).
 #
 # Il commit automatico include "[skip ci]" nel messaggio ed è autore
 # "github-actions[bot]": entrambi sono controllati nella condizione del job
@@ -34,17 +41,22 @@ jobs:
       - name: Calcola l'hash breve del commit
         run: echo "SHORT_SHA=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
 
+      - name: Aggiorna tutti i "?v=..." nei file html/js
+        run: |
+          grep -rlE '\?v=[A-Za-z0-9]+' --include='*.html' --include='*.js' . \
+            | xargs -r sed -i -E "s/\?v=[A-Za-z0-9]+/?v=${SHORT_SHA}/g"
+
       - name: Aggiorna SW_VERSION in sw.js
         run: sed -i "s/const SW_VERSION = \".*\";/const SW_VERSION = \"${SHORT_SHA}\";/" sw.js
 
       - name: Commit e push, solo se qualcosa è cambiato
         run: |
-          if git diff --quiet -- sw.js; then
-            echo "SW_VERSION è già ${SHORT_SHA}, nessun commit necessario."
+          if git diff --quiet; then
+            echo "Versione già ${SHORT_SHA}, nessun commit necessario."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add sw.js
-          git commit -m "chore: bump SW_VERSION a ${SHORT_SHA} [skip ci]"
+          git add -A
+          git commit -m "chore: bump versione a ${SHORT_SHA} [skip ci]"
           git push origin HEAD:main
