@@ -7,7 +7,7 @@
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#080c12">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=26">
+  <link rel="stylesheet" href="styles.css?v=27">
 </head>
 <body>
 
@@ -199,13 +199,17 @@
         </div>
 
         <div class="section">
-          <h3 class="section__title">Gli estremi del gruppo</h3>
-          <div class="stats-toggle" id="curiositaExtremesToggle" style="margin-bottom:14px;">
-            <button class="stats-toggle-btn active" data-panel="divisive">😤 Divisivi</button>
-            <button class="stats-toggle-btn" data-panel="unanimous">🤝 Unanimi</button>
+          <h3 class="section__title" style="margin-bottom:14px;">Gli estremi del gruppo</h3>
+          <div class="curiosita-stack">
+            <div>
+              <div class="curiosita-stack__label">😤 Più divisivi</div>
+              <div id="curiositaDivisive" class="podium-grid podium-grid--compact"></div>
+            </div>
+            <div>
+              <div class="curiosita-stack__label">🤝 Più unanimi</div>
+              <div id="curiositaUnanimous" class="podium-grid podium-grid--compact"></div>
+            </div>
           </div>
-          <div id="curiositaDivisive" class="podium-grid podium-grid--compact"></div>
-          <div id="curiositaUnanimous" class="podium-grid podium-grid--compact hidden"></div>
           <p class="curiosita-fine-print">± = quanto in media un voto si allontana dalla media del titolo (non un voto alto — qui è "quanto il gruppo litiga", o quanto va d'accordo). Solo titoli con almeno 3 voti.</p>
         </div>
       </div>
@@ -333,6 +337,6 @@
 
   <div id="toastWrap"></div>
 
-  <script type="module" src="app.js?v=26"></script>
+  <script type="module" src="app.js?v=27"></script>
 </body>
 </html>
