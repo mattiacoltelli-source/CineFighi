@@ -5,7 +5,7 @@
 import {
   uniqueKey, average, escapeHtml, decadeOf, GENRE_NAME_TO_ID,
   votingLeaderboard, mostAffinePair, mostDivisive
-} from "./cine-core.js?v=24";
+} from "./cine-core.js?v=25";
 import {
   getCurrentUser, setCurrentUser, clearCurrentUser, MAX_USERS,
   getLastSeenAt, setLastSeenAt,
@@ -13,18 +13,18 @@ import {
   fetchLibrary, addTitle, updateTitleStatus, removeTitle,
   upsertVote, removeVote,
   loadLatestReport, regenerateReport
-} from "./storage.js?v=24";
+} from "./storage.js?v=25";
 import {
   tmdbFetchDetail, tmdbSearch, tmdbFetchDiscoverLevel, tmdbFetchDecadeCandidates,
   tmdbFetchOutOfComfortZoneCandidates, buildFallbackQueries
-} from "./tmdb.js?v=24";
+} from "./tmdb.js?v=25";
 import {
   showToast, avatarHtml, initScreens, switchScreen,
   renderShelf, renderSearchResults, renderLibraryList, renderGenreFilters,
   renderGenreBars, renderRanking, toggleRankingList, renderCuriosita, renderTonightList, renderDiscoverResult, renderClassicResult,
   renderDetailFacts, renderVotesList, renderReportMeta, renderReportContent, renderReportGate,
   haptic, animateValue
-} from "./ui.js?v=24";
+} from "./ui.js?v=25";
 
 const MIN_VOTED_FOR_REPORT = 50;
 
@@ -114,9 +114,13 @@ async function init() {
   try { history.replaceState({ screen: "home" }, "", location.href); } catch {}
   window.addEventListener("popstate", e => {
     const screen = (e.state && e.state.screen) || "home";
+    const wasDetail = getVisibleScreen() === "detail";
     haptic(8);
     goToScreen(screen);
-    if (screen === "stats") renderStats();
+    if (screen === "stats") {
+      renderStats();
+      if (wasDetail) restoreRankingScrollPosition(currentDetailId);
+    }
     if (screen === "report") renderReport();
   });
 
@@ -1158,6 +1162,27 @@ function getVisibleScreen() {
 
 function pushHistoryState(screen) {
   try { history.pushState({ screen }, "", location.href); } catch {}
+}
+
+// Tornando a Statistiche dal dettaglio di un film aperto dalla Classifica
+// (podio, righe sotto, o il podio "Film più divisivi" di Curiosità — stesso
+// meccanismo open-detail/data-id ovunque, nessun caso speciale per l'uno o
+// l'altro), riporta la vista esattamente sulla sua card invece di lasciare
+// la Statistiche scrollata in cima. renderStats() appena chiamato ha già
+// ridisegnato tutto da capo (Classifica sempre collassata a podio + 2 righe,
+// vedi RANKING_LIST_INITIAL in ui.js): se il film non è tra le prime 5, va
+// prima espansa la lista, altrimenti la sua card non esiste ancora nel DOM.
+function restoreRankingScrollPosition(id) {
+  if (!id) return;
+  let card = document.querySelector(`#screen-stats [data-id="${id}"].open-detail`);
+  if (!card) {
+    const expandBtn = document.getElementById("rankingExpandBtn");
+    if (expandBtn && !expandBtn.classList.contains("hidden")) {
+      toggleRankingList();
+      card = document.querySelector(`#screen-stats [data-id="${id}"].open-detail`);
+    }
+  }
+  if (card) card.scrollIntoView({ block: "center" });
 }
 
 function openDetail(id, options = {}) {
