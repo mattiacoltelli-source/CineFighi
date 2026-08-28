@@ -4,8 +4,8 @@
 
 import {
   uniqueKey, average, escapeHtml, decadeOf, GENRE_NAME_TO_ID,
-  votingLeaderboard, mostAffinePair, mostDivisive
-} from "./cine-core.js?v=25";
+  votingLeaderboard, mostAffinePair, mostDivergentPair, mostDivisive, mostUnanimous
+} from "./cine-core.js?v=26";
 import {
   getCurrentUser, setCurrentUser, clearCurrentUser, MAX_USERS,
   getLastSeenAt, setLastSeenAt,
@@ -13,18 +13,18 @@ import {
   fetchLibrary, addTitle, updateTitleStatus, removeTitle,
   upsertVote, removeVote,
   loadLatestReport, regenerateReport
-} from "./storage.js?v=25";
+} from "./storage.js?v=26";
 import {
   tmdbFetchDetail, tmdbSearch, tmdbFetchDiscoverLevel, tmdbFetchDecadeCandidates,
   tmdbFetchOutOfComfortZoneCandidates, buildFallbackQueries
-} from "./tmdb.js?v=25";
+} from "./tmdb.js?v=26";
 import {
   showToast, avatarHtml, initScreens, switchScreen,
   renderShelf, renderSearchResults, renderLibraryList, renderGenreFilters,
-  renderGenreBars, renderRanking, toggleRankingList, renderCuriosita, renderTonightList, renderDiscoverResult, renderClassicResult,
+  renderGenreBars, renderRanking, toggleRankingList, renderCuriosita, toggleCuriositaExtremes, renderTonightList, renderDiscoverResult, renderClassicResult,
   renderDetailFacts, renderVotesList, renderReportMeta, renderReportContent, renderReportGate,
   haptic, animateValue
-} from "./ui.js?v=25";
+} from "./ui.js?v=26";
 
 const MIN_VOTED_FOR_REPORT = 50;
 
@@ -655,7 +655,9 @@ function renderStats() {
       renderCuriosita({
         leaderboard: votingLeaderboard(db),
         pair: mostAffinePair(db),
+        divergentPair: mostDivergentPair(db),
         divisive: mostDivisive(db),
+        unanimous: mostUnanimous(db),
       });
     }
   }
@@ -1407,6 +1409,9 @@ function bindGlobalEvents() {
     btn.addEventListener("click", () => { rankingMedia = btn.dataset.media; renderStats(); });
   });
   document.getElementById("rankingExpandBtn").addEventListener("click", () => { haptic(8); toggleRankingList(); });
+  document.querySelectorAll("#curiositaExtremesToggle .stats-toggle-btn").forEach(btn => {
+    btn.addEventListener("click", () => { haptic(8); toggleCuriositaExtremes(btn.dataset.panel); });
+  });
 
   document.getElementById("reportRefreshBtn").addEventListener("click", () => { haptic(8); handleReportRefresh(); });
 

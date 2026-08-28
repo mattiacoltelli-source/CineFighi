@@ -5,7 +5,7 @@
 import {
   escapeHtml, mediaLabel, mediaBadgeClass, posterUrl, uniqueKey,
   average, voteCount, rawNumberToFixed, firstVoter
-} from "./cine-core.js?v=25";
+} from "./cine-core.js?v=26";
 
 // ─── ANIMAZIONI (numeri che contano, barre che si riempiono, tattile) ───────
 
@@ -391,7 +391,28 @@ function curiositaCardHtml({ medal, title, meta, value, first, openDetailId }) {
   `;
 }
 
-export function renderCuriosita({ leaderboard, pair, divisive }) {
+function affinityCalloutHtml(label, pair, { soli = false } = {}) {
+  return `
+    <div>
+      <div class="pair-group__label">${escapeHtml(label)}</div>
+      <div class="affinity-callout">
+        <div class="affinity-callout__names">${escapeHtml(pair.a)} &amp; ${escapeHtml(pair.b)}</div>
+        <div class="affinity-callout__detail">Differenza media di ${soli ? "soli " : ""}<b>${pair.avgDiff.toFixed(2).replace(".", ",")} punti</b> sui <b>${pair.sharedCount} titoli</b> votati da entrambi.</div>
+      </div>
+    </div>
+  `;
+}
+
+function extremesPodiumHtml(items) {
+  return podiumOrder(items).map(({ item, medal, first }) =>
+    curiositaCardHtml({
+      medal, title: item.title, meta: `${item.year} · ${item.count} voti`,
+      value: `±${item.sd.toFixed(1).replace(".", ",")}`, first, openDetailId: item.id,
+    })
+  ).join("");
+}
+
+export function renderCuriosita({ leaderboard, pair, divergentPair, divisive, unanimous }) {
   const wrap = document.getElementById("curiositaSection");
   if (!wrap) return;
 
@@ -403,22 +424,35 @@ export function renderCuriosita({ leaderboard, pair, divisive }) {
     : `<p class="empty-hint">Ancora nessun voto nel gruppo.</p>`;
 
   const pairEl = document.getElementById("curiositaPair");
-  pairEl.innerHTML = pair ? `
-    <div class="affinity-callout">
-      <div class="affinity-callout__names">${escapeHtml(pair.a)} &amp; ${escapeHtml(pair.b)}</div>
-      <div class="affinity-callout__detail">Differenza media di soli <b>${pair.avgDiff.toFixed(2).replace(".", ",")} punti</b> sui <b>${pair.sharedCount} titoli</b> votati da entrambi.</div>
-    </div>
-  ` : `<p class="empty-hint">Non ci sono ancora abbastanza titoli votati in comune tra due persone.</p>`;
+  pairEl.innerHTML = (pair || divergentPair)
+    ? `<div class="pair-group">
+        ${pair ? affinityCalloutHtml("Più affini", pair, { soli: true }) : ""}
+        ${divergentPair ? affinityCalloutHtml("Più litigiose", divergentPair) : ""}
+      </div>`
+    : `<p class="empty-hint">Non ci sono ancora abbastanza titoli votati in comune tra due persone.</p>`;
 
+  // "Gli estremi del gruppo": divisivi e unanimi condividono lo stesso
+  // toggle (vedi toggleCuriositaExtremes) — resta sempre "Divisivi" appena
+  // ridisegnato, coerente con la Classifica che riparte sempre collassata.
   const divisiveEl = document.getElementById("curiositaDivisive");
-  divisiveEl.innerHTML = divisive.length
-    ? podiumOrder(divisive).map(({ item, medal, first }) =>
-        curiositaCardHtml({
-          medal, title: item.title, meta: `${item.year} · ${item.count} voti`,
-          value: `±${item.sd.toFixed(1).replace(".", ",")}`, first, openDetailId: item.id,
-        })
-      ).join("")
+  const unanimousEl = document.getElementById("curiositaUnanimous");
+  divisiveEl.innerHTML = divisive.length ? extremesPodiumHtml(divisive)
     : `<p class="empty-hint">Ancora nessun titolo con abbastanza voti per dirlo.</p>`;
+  unanimousEl.innerHTML = unanimous.length ? extremesPodiumHtml(unanimous)
+    : `<p class="empty-hint">Ancora nessun titolo con abbastanza voti per dirlo.</p>`;
+  divisiveEl.classList.remove("hidden");
+  unanimousEl.classList.add("hidden");
+  document.querySelectorAll("#curiositaExtremesToggle .stats-toggle-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.panel === "divisive");
+  });
+}
+
+export function toggleCuriositaExtremes(view) {
+  document.querySelectorAll("#curiositaExtremesToggle .stats-toggle-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.panel === view);
+  });
+  document.getElementById("curiositaDivisive").classList.toggle("hidden", view !== "divisive");
+  document.getElementById("curiositaUnanimous").classList.toggle("hidden", view !== "unanimous");
 }
 
 // ─── TONIGHT (consigli, con affinità % e motivo, come CineTracker) ───────────
