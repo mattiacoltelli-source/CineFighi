@@ -40,7 +40,6 @@ export function normalizeGenres(item) {
 }
 
 export function posterUrl(path) { return path ? `${IMG}${path}` : ""; }
-export function backdropUrl(path) { return path ? `https://image.tmdb.org/t/p/w1280${path}` : ""; }
 
 export function yearOf(item) {
   const d = item.release_date || item.first_air_date || "";
@@ -97,13 +96,6 @@ export function rawNumberToFixed(value, digits = 1, fallback = "n.d.") {
   return Number.isFinite(n) && n > 0 ? n.toFixed(digits) : fallback;
 }
 
-export function formatReleaseDate(dateStr) {
-  if (!dateStr) return "Data non disponibile";
-  const d = new Date(dateStr + "T00:00:00");
-  if (isNaN(d.getTime())) return dateStr;
-  return d.toLocaleDateString("it-IT", { day: "numeric", month: "short" });
-}
-
 export function buildDateRange(startYear, endYear, type) {
   if (!startYear || !endYear) return "";
   return type === "movie"
@@ -112,14 +104,6 @@ export function buildDateRange(startYear, endYear, type) {
 }
 
 export function randomPage(max = 5) { return Math.floor(Math.random() * max) + 1; }
-
-// Voto: numero da 0 a 10, con mezzi punti. Niente sintassi speciale (7+, 8-),
-// teniamo la cosa semplice: si vota con uno slider.
-export function sanitizeVote(raw) {
-  const num = Number(raw);
-  if (!Number.isFinite(num)) return null;
-  return Math.max(0, Math.min(10, Math.round(num * 2) / 2));
-}
 
 // Calcola la media di gruppo di un titolo a partire dal suo oggetto voti
 // votesObj = { "Mattia": { vote: 8, comment: "..." }, "Luca": { vote: 6.5 } }
