@@ -45,6 +45,8 @@ let previewItem = null;    // titolo TMDB non ancora salvato, aperto solo per co
 let detailReturnScreen = "home";
 let currentType = "multi"; // per la ricerca
 let confirmYesAction = null;
+let reportTapCount = 0;   // gesto nascosto "7 tap sul titolo Report" per forzare una rigenerazione
+let reportTapTimer = null;
 // "Visto l'ultima volta" letto la prima volta all'avvio (vedi init()) e poi
 // riaggiornato ogni volta che si lascia la Home per un'altra scheda (vedi
 // goToScreen/markHomeSeen): così i puntini restano visibili per tutta la
@@ -251,8 +253,16 @@ async function renderUserPickerList() {
 
 // ─── CONFERMA AZIONI PERICOLOSE (es. eliminare un utente) ────────────────────
 
-function askConfirm(text, onYes) {
+// yesLabel/danger: le due chiamate storiche (elimina utente, rimuovi
+// titolo) sono azioni distruttive col bottone rosso "Elimina
+// definitivamente" — il gesto segreto dei 7 tap sotto (rigenera report)
+// non distrugge nulla, quindi usa un'etichetta e uno stile neutri invece
+// di riusare quelli allarmanti pensati per le cancellazioni.
+function askConfirm(text, onYes, { yesLabel = "Elimina definitivamente", danger = true } = {}) {
   document.getElementById("confirmText").textContent = text;
+  const yesBtn = document.getElementById("confirmYesBtn");
+  yesBtn.textContent = yesLabel;
+  yesBtn.classList.toggle("btn--danger", danger);
   confirmYesAction = onYes;
   document.getElementById("confirmOverlay").classList.remove("hidden");
 }
@@ -678,6 +688,7 @@ async function renderReport() {
   renderReportScreen();
   renderGroupReportScreen();
   maybeAutoRefreshReport();
+  maybeAutoRefreshGroupReport();
 }
 
 function renderReportScreen() {
@@ -800,6 +811,21 @@ function maybeAutoRefreshReport() {
   const nextDue = new Date(last);
   nextDue.setFullYear(nextDue.getFullYear() + 1);
   if (new Date() >= nextDue) handleReportRefresh();
+}
+
+// Stesso schema del report personale sopra: se è passato più di un anno
+// dall'ultima generazione, si rigenera da sola in background — così un
+// utente nuovo che nel frattempo ha iniziato a votare finisce comunque nel
+// report di gruppo entro un anno, senza che nessuno debba ricordarsi di
+// toccare "Aggiorna" (che resta comunque disponibile per un aggiornamento
+// immediato, es. appena arriva qualcuno di nuovo).
+function maybeAutoRefreshGroupReport() {
+  if (!groupReportCache || groupReportRefreshing) return;
+  const last = new Date(groupReportCache.generated_at);
+  if (isNaN(last.getTime())) return;
+  const nextDue = new Date(last);
+  nextDue.setFullYear(nextDue.getFullYear() + 1);
+  if (new Date() >= nextDue) handleGroupReportRefresh();
 }
 
 // ─── STASERA COSA GUARDO — algoritmo completo (come CineTracker) ─────────────
@@ -1399,6 +1425,30 @@ function bindGlobalEvents() {
     if (action) await action();
   });
   document.getElementById("confirmNoBtn").addEventListener("click", closeConfirm);
+
+  // Gesto nascosto: 7 tap rapidi sul titolo "Report" forzano, previa
+  // conferma, una rigenerazione immediata del report attualmente aperto
+  // (Io o Gruppo) — utile per non aspettare l'aggiornamento automatico
+  // annuale quando arriva un utente nuovo o sono cambiati un bel po' di
+  // voti. Il conteggio si azzera da solo se passano più di 2,5s tra un tap
+  // e il successivo, per non scattare per sbaglio con tap normali sparsi.
+  document.getElementById("reportTitleTap").addEventListener("click", () => {
+    reportTapCount++;
+    clearTimeout(reportTapTimer);
+    reportTapTimer = setTimeout(() => { reportTapCount = 0; }, 2500);
+    if (reportTapCount < 7) return;
+    reportTapCount = 0;
+    clearTimeout(reportTapTimer);
+    haptic(20);
+    const isIo = reportMode === "io";
+    askConfirm(
+      isIo
+        ? "Rigenerare ora il tuo report personale? Userà una chiamata a Claude, anche se non è ancora passato un anno dall'ultimo aggiornamento."
+        : "Rigenerare ora il report di gruppo? Userà una chiamata a Claude, anche se non è ancora passato un anno dall'ultimo aggiornamento.",
+      async () => { if (isIo) await handleReportRefresh(); else await handleGroupReportRefresh(); },
+      { yesLabel: "Rigenera", danger: false }
+    );
+  });
 
   document.querySelectorAll(".nav__btn[data-screen]").forEach(btn => {
     btn.addEventListener("click", () => {

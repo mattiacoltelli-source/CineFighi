@@ -446,6 +446,19 @@ function memberBarRowHtml(m) {
 // disponibile e gratuito.
 function userCardHtml(m, blurb) {
   const color = identityColor(m.user);
+
+  // Utente nuovo, appena entrato nel gruppo, ancora senza voti: nessun dato
+  // su cui costruire una riga statistiche o un paragrafo di fatti — non ha
+  // senso mostrare "0 voti · media 0,00" né inventare gusti.
+  if (m.n === 0) {
+    return `
+      <div class="user-card" style="--u-c:${color}">
+        <div class="user-card__name"><span class="dot"></span>${escapeHtml(m.user)}</div>
+        <div class="user-card__stats">Ancora nessun voto</div>
+      </div>
+    `;
+  }
+
   const statsParts = [`${m.n} voti`, `media ${m.avg.toFixed(2).replace(".", ",")}`];
   if (m.label === "costante") statsParts.push(`il più costante (dev.st. ${m.sd.toFixed(2).replace(".", ",")})`);
   else if (m.label === "polarizzato") statsParts.push(`il più polarizzato (dev.st. ${m.sd.toFixed(2).replace(".", ",")})`);

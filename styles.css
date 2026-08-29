@@ -374,7 +374,7 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 
 .user-grid { display:flex; flex-direction:column; gap:10px; }
 .user-card { background: var(--surface2); border:1px solid var(--border); border-left:3px solid var(--u-c);
-  border-radius: var(--radius-md); padding:13px 15px; }
+  border-radius: var(--radius-md); padding:13px 15px; width:100%; min-width:0; }
 .user-card__name { font-family: var(--font-display); font-weight:800; font-size:16px; color: var(--text);
   display:flex; align-items:center; gap:8px; }
 .user-card__name .dot { width:9px; height:9px; border-radius:50%; background: var(--u-c); display:inline-block; flex-shrink:0; }
