@@ -372,7 +372,7 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
    colore, deterministico per nome — vedi ui.js::identityColor). */
 .bar-row__dot { width:7px; height:7px; border-radius:50%; display:inline-block; margin-right:6px; vertical-align:1px; }
 
-.user-grid { display:flex; flex-direction:column; gap:10px; }
+.user-grid { display:flex; flex-direction:column; gap:10px; width:100%; }
 .user-card { background: var(--surface2); border:1px solid var(--border); border-left:3px solid var(--u-c);
   border-radius: var(--radius-md); padding:13px 15px; width:100%; min-width:0; }
 .user-card__name { font-family: var(--font-display); font-weight:800; font-size:16px; color: var(--text);
