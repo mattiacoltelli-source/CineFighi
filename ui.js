@@ -261,8 +261,8 @@ export function renderGenreBars(entries) {
 // "first" già risolti. Gestisce bene anche 1 o 2 soli elementi (il flag
 // si basa sulla posizione nell'array ORIGINALE, mai su un indice
 // ricalcolato dopo aver scartato gli slot vuoti — quello aveva già
-// causato un bug qui). Usata sia dalla Classifica sia da Curiosità
-// (vedi renderCuriosita) per un solo linguaggio di podio in tutta l'app.
+// causato un bug qui). Usata sia dalla Classifica sia dal Report di Gruppo
+// (vedi renderGroupReport) per un solo linguaggio di podio in tutta l'app.
 function podiumOrder(items) {
   return [
     items[1] ? { item: items[1], medal: "🥈", first: false } : null,
@@ -287,7 +287,8 @@ function rankRowHtml(item, pos, typeLabel) {
 
 // Righe mostrate SUBITO dopo il podio, prima del tasto "Mostra tutti" — con
 // centinaia di titoli votati (la Classifica non ha un minimo di voti, a
-// differenza di Curiosità: vedi mostDivisive in cine-core.js) mostrarli
+// differenza degli estremi del Report di Gruppo: vedi mostDivisive in
+// cine-core.js) mostrarli
 // tutti fin da subito significa caricare centinaia di locandine in un
 // colpo solo, ben prima che l'utente scorra fin laggiù.
 const RANKING_LIST_INITIAL = 2;
@@ -370,7 +371,7 @@ export function toggleRankingList() {
   }
 }
 
-// ─── STATS: Curiosità (solo vista Gruppo — vedi renderStats in app.js) ───────
+// ─── REPORT: tab Gruppo (calcolato lato client, nessuna chiamata a Claude) ───
 // Podio a 3 card, stessa forma di .podium-card già usata sopra per la
 // Classifica e stesso riordino 2°-1°-3° di podiumOrder() (coerenza
 // visiva: un solo linguaggio per "ecco un podio" in tutta l'app) — solo
@@ -378,7 +379,7 @@ export function toggleRankingList() {
 // naturale, e tre card sempre della stessa altezza restano più ordinate
 // di locandine finte.
 
-function curiositaCardHtml({ medal, title, meta, value, first, openDetailId }) {
+function groupPodiumCardHtml({ medal, title, meta, value, first, openDetailId }) {
   const cls = `podium-card${openDetailId != null ? " open-detail" : ""}${first ? " podium-card--first" : ""}`;
   const idAttr = openDetailId != null ? ` data-id="${openDetailId}"` : "";
   return `
@@ -405,25 +406,60 @@ function affinityCalloutHtml(label, pair, { soli = false } = {}) {
 
 function extremesPodiumHtml(items) {
   return podiumOrder(items).map(({ item, medal, first }) =>
-    curiositaCardHtml({
+    groupPodiumCardHtml({
       medal, title: item.title, meta: `${item.year} · ${item.count} voti`,
       value: `±${item.sd.toFixed(1).replace(".", ",")}`, first, openDetailId: item.id,
     })
   ).join("");
 }
 
-export function renderCuriosita({ leaderboard, pair, divergentPair, divisive, unanimous }) {
-  const wrap = document.getElementById("curiositaSection");
+function memberRowHtml(m) {
+  const devSign = m.dev >= 0 ? "+" : "−";
+  const devColor = m.dev >= 0 ? "var(--green, #3ec97a)" : "var(--red, #ff5f5f)";
+  const facts = [];
+  if (m.topGenre) facts.push(`genere top <b>${escapeHtml(m.topGenre.name)}</b> (${m.topGenre.avg.toFixed(2).replace(".", ",")})`);
+  if (m.topDirector) facts.push(`regista top <b>${escapeHtml(m.topDirector.name)}</b> (${m.topDirector.avg.toFixed(2).replace(".", ",")})`);
+  if (m.topFilms.length) facts.push(`voto più alto a <b>${escapeHtml(m.topFilms[0].title)}</b> (${m.topFilms[0].vote.toFixed(1).replace(".", ",")})`);
+
+  return `
+    <div style="margin-bottom:16px;">
+      <div style="display:flex; justify-content:space-between; align-items:baseline; gap:8px;">
+        <span style="font-weight:700;">${escapeHtml(m.user)}</span>
+        <span style="font-size:12px; color:var(--text3);">${m.n} voti · media ${m.avg.toFixed(2).replace(".", ",")} (<span style="color:${devColor};">${devSign}${Math.abs(m.dev).toFixed(2).replace(".", ",")}</span>)</span>
+      </div>
+      ${facts.length ? `<p style="margin:4px 0 0;">${facts.join(", ")}.</p>` : ""}
+    </div>
+  `;
+}
+
+export function renderGroupReport({ groupStats, memberProfiles, leaderboard, pair, divergentPair, divisive, unanimous }) {
+  const wrap = document.getElementById("groupReportBody");
   if (!wrap) return;
 
-  const votingEl = document.getElementById("curiositaVoting");
+  const profileEl = document.getElementById("groupReportProfile");
+  profileEl.innerHTML = `
+    <div class="stats-grid" style="margin-bottom:14px;">
+      <div class="stat-card"><div class="stat-card__num">${groupStats.userCount}</div><div class="stat-card__label">Votanti</div></div>
+      <div class="stat-card"><div class="stat-card__num">${groupStats.voteCount}</div><div class="stat-card__label">Voti totali</div></div>
+      <div class="stat-card"><div class="stat-card__num">${groupStats.avg.toFixed(2).replace(".", ",")}</div><div class="stat-card__label">Media gruppo</div></div>
+      <div class="stat-card"><div class="stat-card__num">${groupStats.allVotedCount}</div><div class="stat-card__label">Titoli visti da tutti</div></div>
+    </div>
+    ${groupStats.genreNote ? `<p>${groupStats.genreNote}</p>` : ""}
+  `;
+
+  const membersEl = document.getElementById("groupReportMembers");
+  membersEl.innerHTML = memberProfiles.length
+    ? memberProfiles.map(memberRowHtml).join("")
+    : `<p class="empty-hint">Ancora nessun voto nel gruppo.</p>`;
+
+  const votingEl = document.getElementById("groupReportVoting");
   votingEl.innerHTML = leaderboard.length
     ? podiumOrder(leaderboard).map(({ item, medal, first }) =>
-        curiositaCardHtml({ medal, title: item.user, value: `${item.count} voti`, first })
+        groupPodiumCardHtml({ medal, title: item.user, value: `${item.count} voti`, first })
       ).join("")
     : `<p class="empty-hint">Ancora nessun voto nel gruppo.</p>`;
 
-  const pairEl = document.getElementById("curiositaPair");
+  const pairEl = document.getElementById("groupReportPair");
   pairEl.innerHTML = (pair || divergentPair)
     ? `<div class="curiosita-stack">
         ${pair ? affinityCalloutHtml("Più affini", pair, { soli: true }) : ""}
@@ -433,9 +469,9 @@ export function renderCuriosita({ leaderboard, pair, divergentPair, divisive, un
 
   // "Gli estremi del gruppo": divisivi e unanimi sempre entrambi visibili,
   // impilati — stesso schema delle coppie di gusto sopra, niente toggle.
-  document.getElementById("curiositaDivisive").innerHTML = divisive.length ? extremesPodiumHtml(divisive)
+  document.getElementById("groupReportDivisive").innerHTML = divisive.length ? extremesPodiumHtml(divisive)
     : `<p class="empty-hint">Ancora nessun titolo con abbastanza voti per dirlo.</p>`;
-  document.getElementById("curiositaUnanimous").innerHTML = unanimous.length ? extremesPodiumHtml(unanimous)
+  document.getElementById("groupReportUnanimous").innerHTML = unanimous.length ? extremesPodiumHtml(unanimous)
     : `<p class="empty-hint">Ancora nessun titolo con abbastanza voti per dirlo.</p>`;
 }
 

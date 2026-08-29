@@ -135,12 +135,12 @@ export function firstVoter(votesObj) {
   return { name: names[0], others: names.length - 1 };
 }
 
-// ─── CURIOSITÀ (Statistiche → Gruppo) ────────────────────────────────────────
-// Tre metriche in più sugli stessi dati già caricati per la Home/Statistiche
-// (nessuna nuova query): chi ha votato di più, la coppia coi gusti più
-// simili, i titoli più divisivi. Pure, sola lettura, nessuna chiamata a
-// Supabase qui dentro — prendono `db` (l'array già restituito da
-// fetchLibrary(), ogni item con `.votes`) e basta.
+// ─── REPORT DI GRUPPO: metriche "di curiosità" ───────────────────────────────
+// Metriche sugli stessi dati già caricati per la Home/Statistiche (nessuna
+// nuova query): chi ha votato di più, la coppia coi gusti più simili, i
+// titoli più divisivi. Pure, sola lettura, nessuna chiamata a Supabase qui
+// dentro — prendono `db` (l'array già restituito da fetchLibrary(), ogni
+// item con `.votes`) e basta.
 
 export function votingLeaderboard(db) {
   const counts = new Map();
@@ -220,4 +220,98 @@ export function mostDivisive(db, { minVotes = 3, limit = 3 } = {}) {
 
 export function mostUnanimous(db, { minVotes = 3, limit = 3 } = {}) {
   return titlesBySd(db, minVotes).sort((a, b) => a.sd - b.sd).slice(0, limit);
+}
+
+// Un profilo per persona per il Report di Gruppo: quanto vota, quanto si
+// scosta dalla media del gruppo, il genere/regista che premia di più (solo
+// se ne ha votati abbastanza, altrimenti è rumore) e i suoi voti più alti.
+// Pure funzione su db/users, nessuna dipendenza DOM — stesso stile delle
+// altre funzioni di questo file.
+export function groupMemberProfiles(db, users) {
+  const allVotes = [];
+  db.forEach(item => Object.values(item.votes || {}).forEach(v => {
+    const n = Number(v.vote);
+    if (Number.isFinite(n)) allVotes.push(n);
+  }));
+  const groupAvg = allVotes.length ? allVotes.reduce((a, b) => a + b, 0) / allVotes.length : 0;
+
+  return users.map(user => {
+    const voted = db
+      .map(item => {
+        const v = item.votes?.[user];
+        const vote = Number(v?.vote);
+        return Number.isFinite(vote) ? { item, vote } : null;
+      })
+      .filter(Boolean);
+
+    const n = voted.length;
+    const avg = n ? voted.reduce((a, b) => a + b.vote, 0) / n : 0;
+
+    const genreVotes = {};
+    const directorVotes = {};
+    voted.forEach(({ item, vote }) => {
+      (item.genre_names || []).forEach(g => (genreVotes[g] ||= []).push(vote));
+      if (item.director) (directorVotes[item.director] ||= []).push(vote);
+    });
+
+    const bestByAvg = (acc, minCount) => {
+      const entries = Object.entries(acc)
+        .filter(([, votes]) => votes.length >= minCount)
+        .map(([name, votes]) => ({ name, avg: votes.reduce((a, b) => a + b, 0) / votes.length, count: votes.length }));
+      entries.sort((a, b) => b.avg - a.avg);
+      return entries[0] || null;
+    };
+
+    const topFilms = [...voted]
+      .sort((a, b) => b.vote - a.vote)
+      .slice(0, 3)
+      .map(({ item, vote }) => ({ title: item.title, vote }));
+
+    return {
+      user, n, avg, dev: avg - groupAvg,
+      topGenre: bestByAvg(genreVotes, 3),
+      topDirector: bestByAvg(directorVotes, 2),
+      topFilms,
+    };
+  }).sort((a, b) => b.n - a.n);
+}
+
+// Numeri di apertura del Report di Gruppo: quanti sono, quanti voti hanno
+// dato in totale, la media collettiva, quanti titoli hanno visto tutti
+// insieme, e un confronto genere più visto vs genere con la media più alta
+// (min. 3 voti per contare, altrimenti è un singolo voto isolato spacciato
+// per "il genere preferito"). Pure funzione su db/users.
+export function groupProfileStats(db, users) {
+  const allVotes = [];
+  db.forEach(item => Object.values(item.votes || {}).forEach(v => {
+    const n = Number(v.vote);
+    if (Number.isFinite(n)) allVotes.push(n);
+  }));
+  const avg = allVotes.length ? allVotes.reduce((a, b) => a + b, 0) / allVotes.length : 0;
+
+  const allVotedCount = users.length
+    ? db.filter(item => users.every(u => item.votes && item.votes[u])).length
+    : 0;
+
+  const genreCount = {};
+  const genreVotesAcc = {};
+  db.forEach(item => {
+    if (!item.votes || !Object.keys(item.votes).length) return;
+    const score = average(item.votes);
+    (item.genre_names || []).forEach(g => {
+      genreCount[g] = (genreCount[g] || 0) + 1;
+      if (Number.isFinite(score)) (genreVotesAcc[g] ||= []).push(score);
+    });
+  });
+  const byVolume = Object.entries(genreCount).sort((a, b) => b[1] - a[1])[0];
+  const byAvg = Object.entries(genreVotesAcc)
+    .filter(([, v]) => v.length >= 3)
+    .map(([name, v]) => ({ name, avg: v.reduce((a, b) => a + b, 0) / v.length }))
+    .sort((a, b) => b.avg - a.avg)[0];
+
+  const genreNote = (byVolume && byAvg)
+    ? `Il genere più visto dal gruppo è <b>${escapeHtml(byVolume[0])}</b> (${byVolume[1]} titoli); quello con la media più alta è <b>${escapeHtml(byAvg.name)}</b> (${byAvg.avg.toFixed(2).replace(".", ",")}).`
+    : "";
+
+  return { userCount: users.length, voteCount: allVotes.length, avg, allVotedCount, genreNote };
 }
