@@ -48,13 +48,18 @@ function normTitle(t: string): string {
 const ReportContentSchema = z.object({
   profile: z.array(z.string()).min(2).max(3),
   genres_note: z.string(),
+  // FIX: era .length(RECS_REQUESTED) — un vincolo esatto che falliva l'intera
+  // generazione (nessun report salvato) ogni volta che Claude ne restituiva
+  // uno in più o in meno del richiesto. Il codice sotto filtra i duplicati e
+  // poi taglia comunque a RECS_FINAL, quindi basta che ce ne siano abbastanza
+  // dopo il filtro — un range invece di un numero esatto.
   recommendations: z.array(z.object({
     title: z.string(),
     year: z.string(),
     media_type: z.enum(["movie", "tv"]),
     director: z.string(),
     why: z.string().min(15),
-  })).length(RECS_REQUESTED),
+  })).min(RECS_FINAL).max(RECS_REQUESTED + 6),
 });
 
 Deno.serve(async (req) => {
