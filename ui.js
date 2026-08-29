@@ -413,21 +413,56 @@ function extremesPodiumHtml(items) {
   ).join("");
 }
 
-function memberRowHtml(m) {
-  const devSign = m.dev >= 0 ? "+" : "−";
-  const devColor = m.dev >= 0 ? "var(--green, #3ec97a)" : "var(--red, #ff5f5f)";
-  const facts = [];
-  if (m.topGenre) facts.push(`genere top <b>${escapeHtml(m.topGenre.name)}</b> (${m.topGenre.avg.toFixed(2).replace(".", ",")})`);
-  if (m.topDirector) facts.push(`regista top <b>${escapeHtml(m.topDirector.name)}</b> (${m.topDirector.avg.toFixed(2).replace(".", ",")})`);
-  if (m.topFilms.length) facts.push(`voto più alto a <b>${escapeHtml(m.topFilms[0].title)}</b> (${m.topFilms[0].vote.toFixed(1).replace(".", ",")})`);
+// Colore identità per persona, deterministico dal nome (stessa persona =
+// sempre lo stesso colore, indipendentemente dall'ordine di rendering) —
+// usato sia nel grafico a barre "Il profilo del gruppo" sia nel bordo/
+// pallino delle user-card di "Chi siete, uno per uno".
+const IDENTITY_PALETTE = ["#38bdf8", "#ff9d4d", "#3ec97a", "#e0a640", "#d5719f", "#8b7cf6", "#4dd0e1"];
+function identityColor(name) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  return IDENTITY_PALETTE[hash % IDENTITY_PALETTE.length];
+}
+
+function memberBarRowHtml(m) {
+  const color = identityColor(m.user);
+  const width = Math.max(4, Math.min(100, Math.round(m.avg * 10)));
+  return `
+    <div class="bar-row">
+      <div class="bar-row__label">
+        <span class="bar-row__name"><span class="bar-row__dot" style="background:${color}"></span>${escapeHtml(m.user)}</span>
+        <span class="bar-row__meta"><span class="bar-row__vote">${m.avg.toFixed(2).replace(".", ",")}</span></span>
+      </div>
+      <div class="bar-track"><div class="bar__fill" style="width:${width}%; background:${color}"></div></div>
+    </div>
+  `;
+}
+
+function userCardHtml(m) {
+  const color = identityColor(m.user);
+  const statsParts = [`${m.n} voti`, `media ${m.avg.toFixed(2).replace(".", ",")}`];
+  if (m.label === "costante") statsParts.push(`il più costante (dev.st. ${m.sd.toFixed(2).replace(".", ",")})`);
+  else if (m.label === "polarizzato") statsParts.push(`il più polarizzato (dev.st. ${m.sd.toFixed(2).replace(".", ",")})`);
+  else if (m.topGenre) statsParts.push(`genere top: ${escapeHtml(m.topGenre.name)} (${m.topGenre.avg.toFixed(2).replace(".", ",")})`);
+
+  const factParts = [];
+  if (m.topDirector) factParts.push(`Regista top: <b>${escapeHtml(m.topDirector.name)}</b> (${m.topDirector.avg.toFixed(2).replace(".", ",")}).`);
+  if (m.topFilms.length) {
+    const top = m.topFilms[0];
+    const ties = m.topFilms.filter(f => f.vote === top.vote).slice(0, 2).map(f => `<b>${escapeHtml(f.title)}</b>`);
+    const list = ties.length > 1 ? ties.join(" e ") : ties[0];
+    factParts.push(`Voto più alto: ${list} (${top.vote.toFixed(1).replace(".", ",")}).`);
+  }
+  if (m.label === "polarizzato" && m.bottomFilms.length) {
+    const low = m.bottomFilms[0];
+    factParts.push(`Ma stronca senza pietà: <b>${escapeHtml(low.title)}</b> (${low.vote.toFixed(1).replace(".", ",")}).`);
+  }
 
   return `
-    <div style="margin-bottom:16px;">
-      <div style="display:flex; justify-content:space-between; align-items:baseline; gap:8px;">
-        <span style="font-weight:700;">${escapeHtml(m.user)}</span>
-        <span style="font-size:12px; color:var(--text3);">${m.n} voti · media ${m.avg.toFixed(2).replace(".", ",")} (<span style="color:${devColor};">${devSign}${Math.abs(m.dev).toFixed(2).replace(".", ",")}</span>)</span>
-      </div>
-      ${facts.length ? `<p style="margin:4px 0 0;">${facts.join(", ")}.</p>` : ""}
+    <div class="user-card" style="--u-c:${color}">
+      <div class="user-card__name"><span class="dot"></span>${escapeHtml(m.user)}</div>
+      <div class="user-card__stats">${statsParts.join(" · ")}</div>
+      ${factParts.length ? `<p class="user-card__fact">${factParts.join(" ")}</p>` : ""}
     </div>
   `;
 }
@@ -437,19 +472,16 @@ export function renderGroupReport({ groupStats, memberProfiles, leaderboard, pai
   if (!wrap) return;
 
   const profileEl = document.getElementById("groupReportProfile");
+  const barsHtml = [...memberProfiles].sort((a, b) => a.avg - b.avg).map(memberBarRowHtml).join("");
   profileEl.innerHTML = `
-    <div class="stats-grid" style="margin-bottom:14px;">
-      <div class="stat-card"><div class="stat-card__num">${groupStats.userCount}</div><div class="stat-card__label">Votanti</div></div>
-      <div class="stat-card"><div class="stat-card__num">${groupStats.voteCount}</div><div class="stat-card__label">Voti totali</div></div>
-      <div class="stat-card"><div class="stat-card__num">${groupStats.avg.toFixed(2).replace(".", ",")}</div><div class="stat-card__label">Media gruppo</div></div>
-      <div class="stat-card"><div class="stat-card__num">${groupStats.allVotedCount}</div><div class="stat-card__label">Titoli visti da tutti</div></div>
-    </div>
-    ${groupStats.genreNote ? `<p>${groupStats.genreNote}</p>` : ""}
+    ${groupStats.curatorNote ? `<p>${groupStats.curatorNote}</p>` : ""}
+    ${groupStats.contributionNote ? `<p>${groupStats.contributionNote}</p>` : ""}
+    ${barsHtml}
   `;
 
   const membersEl = document.getElementById("groupReportMembers");
   membersEl.innerHTML = memberProfiles.length
-    ? memberProfiles.map(memberRowHtml).join("")
+    ? `<div class="user-grid">${memberProfiles.map(userCardHtml).join("")}</div>`
     : `<p class="empty-hint">Ancora nessun voto nel gruppo.</p>`;
 
   const votingEl = document.getElementById("groupReportVoting");

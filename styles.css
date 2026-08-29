@@ -365,6 +365,23 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 
 .curiosita-fine-print { font-size: 11px; color: var(--text3); margin-top: 10px; line-height: 1.5; }
 
+/* REPORT DI GRUPPO: pallino colore identità sul bar-row (riusa .bar-row/
+   .bar-track/.bar__fill già definiti sopra per i Generi, solo con un
+   colore per persona invece del gradiente arancio fisso) e le user-card
+   di "Chi siete, uno per uno" (bordo sinistro + pallino nello stesso
+   colore, deterministico per nome — vedi ui.js::identityColor). */
+.bar-row__dot { width:7px; height:7px; border-radius:50%; display:inline-block; margin-right:6px; vertical-align:1px; }
+
+.user-grid { display:flex; flex-direction:column; gap:10px; }
+.user-card { background: var(--surface2); border:1px solid var(--border); border-left:3px solid var(--u-c);
+  border-radius: var(--radius-md); padding:13px 15px; }
+.user-card__name { font-family: var(--font-display); font-weight:800; font-size:16px; color: var(--text);
+  display:flex; align-items:center; gap:8px; }
+.user-card__name .dot { width:9px; height:9px; border-radius:50%; background: var(--u-c); display:inline-block; flex-shrink:0; }
+.user-card__stats { font-size:11px; color: var(--text3); margin:4px 0 8px; font-variant-numeric:tabular-nums; }
+.user-card__fact { font-size:12.5px; color: var(--text2); line-height:1.55; margin:0; }
+.user-card__fact b { color: var(--text); font-weight:700; }
+
 /* TONIGHT */
 .tonight__intro { font-size:13px; color: var(--text3); margin-bottom:16px; }
 
