@@ -13,7 +13,8 @@ import {
   fetchUsers, addUser, deleteUser,
   fetchLibrary, addTitle, updateTitleStatus, removeTitle,
   upsertVote, removeVote,
-  loadLatestReport, regenerateReport
+  loadLatestReport, regenerateReport,
+  loadLatestGroupReport, regenerateGroupReport
 } from "./storage.js?v=9f88b14";
 import {
   tmdbFetchDetail, tmdbSearch, tmdbFetchDiscoverLevel, tmdbFetchDecadeCandidates,
@@ -654,6 +655,8 @@ function renderStats() {
 
 let reportCache = null;
 let reportRefreshing = false;
+let groupReportCache = null;
+let groupReportRefreshing = false;
 
 function myVotedSeenCount() {
   return db.filter(x => x.status === "seen" && x.votes && x.votes[currentUser]).length;
@@ -665,6 +668,12 @@ async function renderReport() {
     renderReportScreen();
   });
   if (report) reportCache = report;
+
+  const groupReport = await loadLatestGroupReport(updated => {
+    groupReportCache = updated;
+    renderGroupReportScreen();
+  });
+  if (groupReport) groupReportCache = groupReport;
 
   renderReportScreen();
   renderGroupReportScreen();
@@ -692,16 +701,25 @@ function renderReportScreen() {
   const btn = document.getElementById("reportRefreshBtn");
   // Il bottone compare solo per generare il PRIMO report (e solo quando si
   // hanno abbastanza titoli votati): dopo, gli aggiornamenti sono automatici.
-  // Ha senso solo in vista "Io" — il Report di Gruppo non ha un tasto
-  // "Aggiorna", si ricalcola da solo ad ogni apertura (vedi renderGroupReportScreen).
+  // Ha senso solo in vista "Io".
   btn.classList.toggle("hidden", !isIo || hasReport || votedCount < MIN_VOTED_FOR_REPORT);
+
+  // Il tasto "Aggiorna" del Report di Gruppo è sempre visibile in vista
+  // "Gruppo" (nessuna soglia, nessun auto-refresh annuale): la composizione
+  // del gruppo cambia raramente, ha senso solo un trigger manuale quando
+  // arriva un utente nuovo o i dati sono cambiati parecchio.
+  document.getElementById("groupReportRefreshBtn").classList.toggle("hidden", isIo);
 }
 
-// Report di Gruppo: nessuna chiamata di rete, tutto ricalcolato al volo da
-// `db` (già in memoria) — stesso identico modello di affidabilità delle
-// Statistiche. Richiamata ad ogni apertura della tab Report, indipendentemente
-// da quale sotto-vista (Io/Gruppo) sia attiva al momento, così il toggle è
-// sempre pronto senza dover ricalcolare al click.
+// Report di Gruppo: le statistiche/podi restano SEMPRE ricalcolate al volo
+// da `db` (già in memoria, nessuna chiamata di rete) — stesso identico
+// modello di affidabilità delle Statistiche. Il profilo di gruppo e le
+// descrizioni per persona usano invece groupReportCache quando presente
+// (scritto da Claude, vedi handleGroupReportRefresh) — renderGroupReport
+// in ui.js sa già ripiegare sul testo templato se è null. Richiamata ad
+// ogni apertura della tab Report, indipendentemente da quale sotto-vista
+// (Io/Gruppo) sia attiva al momento, così il toggle è sempre pronto senza
+// dover ricalcolare al click.
 function renderGroupReportScreen() {
   renderGroupReport({
     groupStats: groupProfileStats(db, users),
@@ -711,6 +729,7 @@ function renderGroupReportScreen() {
     divergentPair: mostDivergentPair(db),
     divisive: mostDivisive(db),
     unanimous: mostUnanimous(db),
+    claudeReport: groupReportCache,
   });
 }
 
@@ -737,6 +756,34 @@ async function handleReportRefresh() {
     showToast(e.message || "Generazione non riuscita. Riprova.", "error", "Report");
   } finally {
     reportRefreshing = false;
+    btn.disabled = false;
+    btn.classList.remove("spinning");
+  }
+}
+
+async function handleGroupReportRefresh() {
+  if (groupReportRefreshing) return;
+  const btn = document.getElementById("groupReportRefreshBtn");
+
+  if (!navigator.onLine) {
+    showToast("Sei offline. Connettiti per generare il report.", "error", "Report");
+    return;
+  }
+
+  groupReportRefreshing = true;
+  btn.disabled = true;
+  btn.classList.add("spinning");
+
+  try {
+    const report = await regenerateGroupReport();
+    groupReportCache = report;
+    renderGroupReportScreen();
+    showToast("Report di gruppo generato.", "success", "Report");
+  } catch (e) {
+    console.error(e);
+    showToast(e.message || "Generazione non riuscita. Riprova.", "error", "Report");
+  } finally {
+    groupReportRefreshing = false;
     btn.disabled = false;
     btn.classList.remove("spinning");
   }
@@ -1420,6 +1467,7 @@ function bindGlobalEvents() {
   document.getElementById("rankingExpandBtn").addEventListener("click", () => { haptic(8); toggleRankingList(); });
 
   document.getElementById("reportRefreshBtn").addEventListener("click", () => { haptic(8); handleReportRefresh(); });
+  document.getElementById("groupReportRefreshBtn").addEventListener("click", () => { haptic(8); handleGroupReportRefresh(); });
 
   document.getElementById("tonightBtn").addEventListener("click", recommendTonightFive);
   document.getElementById("tonightDiscoverBtn").addEventListener("click", discoverByTaste);

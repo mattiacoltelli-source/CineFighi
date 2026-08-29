@@ -438,53 +438,74 @@ function memberBarRowHtml(m) {
   `;
 }
 
-function userCardHtml(m) {
+// blurb: paragrafo editoriale opzionale scritto da Claude (Edge Function
+// generate-group-report, tramite groupReportBlurbFor sotto) — quando c'è,
+// sostituisce interamente i fatti templati qui sotto (stesso testo che
+// piaceva nell'artefatto originale, non un'approssimazione algoritmica).
+// Senza un report Claude mai generato resta il fallback templato, sempre
+// disponibile e gratuito.
+function userCardHtml(m, blurb) {
   const color = identityColor(m.user);
   const statsParts = [`${m.n} voti`, `media ${m.avg.toFixed(2).replace(".", ",")}`];
   if (m.label === "costante") statsParts.push(`il più costante (dev.st. ${m.sd.toFixed(2).replace(".", ",")})`);
   else if (m.label === "polarizzato") statsParts.push(`il più polarizzato (dev.st. ${m.sd.toFixed(2).replace(".", ",")})`);
 
-  const factParts = [];
-  if (m.topDirector) factParts.push(`Regista top: <b>${escapeHtml(m.topDirector.name)}</b> (${m.topDirector.avg.toFixed(2).replace(".", ",")}).`);
-  if (m.topFilms.length) {
-    const top = m.topFilms[0];
-    const ties = m.topFilms.filter(f => f.vote === top.vote).slice(0, 2).map(f => `<b>${escapeHtml(f.title)}</b>`);
-    const list = ties.length > 1 ? ties.join(" e ") : ties[0];
-    factParts.push(`Voto più alto: ${list} (${top.vote.toFixed(1).replace(".", ",")}).`);
+  let factHtml;
+  if (blurb) {
+    factHtml = mdBold(escapeHtml(blurb));
+  } else {
+    const factParts = [];
+    if (m.topDirector) factParts.push(`Regista top: <b>${escapeHtml(m.topDirector.name)}</b> (${m.topDirector.avg.toFixed(2).replace(".", ",")}).`);
+    if (m.topFilms.length) {
+      const top = m.topFilms[0];
+      const ties = m.topFilms.filter(f => f.vote === top.vote).slice(0, 2).map(f => `<b>${escapeHtml(f.title)}</b>`);
+      const list = ties.length > 1 ? ties.join(" e ") : ties[0];
+      factParts.push(`Voto più alto: ${list} (${top.vote.toFixed(1).replace(".", ",")}).`);
+    }
+    if (m.label === "polarizzato" && m.bottomFilms.length) {
+      const low = m.bottomFilms[0];
+      factParts.push(`Ma stronca senza pietà: <b>${escapeHtml(low.title)}</b> (${low.vote.toFixed(1).replace(".", ",")}).`);
+    }
+    // Riga di chiusura sui gusti personali, presente su ogni card indipendentemente
+    // dagli altri fatti sopra (regista/voto più alto): il genere che premia di
+    // più, quando ne ha votati abbastanza da non essere un dato isolato.
+    if (m.topGenre) factParts.push(`Il genere che ama di più è <b>${escapeHtml(m.topGenre.name)}</b> (media ${m.topGenre.avg.toFixed(2).replace(".", ",")}).`);
+    factHtml = factParts.join(" ");
   }
-  if (m.label === "polarizzato" && m.bottomFilms.length) {
-    const low = m.bottomFilms[0];
-    factParts.push(`Ma stronca senza pietà: <b>${escapeHtml(low.title)}</b> (${low.vote.toFixed(1).replace(".", ",")}).`);
-  }
-  // Riga di chiusura sui gusti personali, presente su ogni card indipendentemente
-  // dagli altri fatti sopra (regista/voto più alto): il genere che premia di
-  // più, quando ne ha votati abbastanza da non essere un dato isolato.
-  if (m.topGenre) factParts.push(`Il genere che ama di più è <b>${escapeHtml(m.topGenre.name)}</b> (media ${m.topGenre.avg.toFixed(2).replace(".", ",")}).`);
 
   return `
     <div class="user-card" style="--u-c:${color}">
       <div class="user-card__name"><span class="dot"></span>${escapeHtml(m.user)}</div>
       <div class="user-card__stats">${statsParts.join(" · ")}</div>
-      ${factParts.length ? `<p class="user-card__fact">${factParts.join(" ")}</p>` : ""}
+      ${factHtml ? `<p class="user-card__fact">${factHtml}</p>` : ""}
     </div>
   `;
 }
 
-export function renderGroupReport({ groupStats, memberProfiles, leaderboard, pair, divergentPair, divisive, unanimous }) {
+const CLAUDE_BADGE = `<span class="by">scritto da Claude</span>`;
+
+export function renderGroupReport({ groupStats, memberProfiles, leaderboard, pair, divergentPair, divisive, unanimous, claudeReport }) {
   const wrap = document.getElementById("groupReportBody");
   if (!wrap) return;
 
+  const claudeProfile = claudeReport?.payload?.group_profile;
+  const claudeMembers = new Map((claudeReport?.payload?.members || []).map(m => [m.user, m.blurb]));
+
+  const profileTitleEl = document.getElementById("groupReportProfileTitle");
+  if (profileTitleEl) profileTitleEl.innerHTML = `Il profilo del gruppo${claudeProfile?.length ? CLAUDE_BADGE : ""}`;
+  const membersTitleEl = document.getElementById("groupReportMembersTitle");
+  if (membersTitleEl) membersTitleEl.innerHTML = `Chi siete, uno per uno${claudeMembers.size ? CLAUDE_BADGE : ""}`;
+
   const profileEl = document.getElementById("groupReportProfile");
   const barsHtml = [...memberProfiles].sort((a, b) => a.avg - b.avg).map(memberBarRowHtml).join("");
-  profileEl.innerHTML = `
-    ${groupStats.curatorNote ? `<p>${groupStats.curatorNote}</p>` : ""}
-    ${groupStats.contributionNote ? `<p>${groupStats.contributionNote}</p>` : ""}
-    ${barsHtml}
-  `;
+  const profileTextHtml = claudeProfile?.length
+    ? claudeProfile.map(p => `<p>${mdBold(escapeHtml(p))}</p>`).join("")
+    : `${groupStats.curatorNote ? `<p>${groupStats.curatorNote}</p>` : ""}${groupStats.contributionNote ? `<p>${groupStats.contributionNote}</p>` : ""}`;
+  profileEl.innerHTML = `${profileTextHtml}${barsHtml}`;
 
   const membersEl = document.getElementById("groupReportMembers");
   membersEl.innerHTML = memberProfiles.length
-    ? `<div class="user-grid">${memberProfiles.map(userCardHtml).join("")}</div>`
+    ? `<div class="user-grid">${memberProfiles.map(m => userCardHtml(m, claudeMembers.get(m.user))).join("")}</div>`
     : `<p class="empty-hint">Ancora nessun voto nel gruppo.</p>`;
 
   const votingEl = document.getElementById("groupReportVoting");

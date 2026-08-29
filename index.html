@@ -228,6 +228,10 @@
             <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.36"/><path d="M21 3v6h-6"/></svg>
             Aggiorna
           </button>
+          <button class="refresh-btn hidden" id="groupReportRefreshBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.36"/><path d="M21 3v6h-6"/></svg>
+            Aggiorna
+          </button>
         </div>
 
         <div class="stats-toggle" id="reportIoGruppoToggle" style="margin-bottom:16px;">
@@ -243,17 +247,22 @@
           <p class="empty-hint">Tocca "Aggiorna" per generare il tuo primo report.</p>
         </div>
 
-        <!-- REPORT DI GRUPPO: calcolato lato client da db, nessuna chiamata a
-             Claude — per questo niente badge "scritto da Claude" sui blocchi
-             sotto (a differenza del report personale sopra). -->
+        <!-- REPORT DI GRUPPO: le statistiche/podi sotto restano SEMPRE calcolate
+             lato client da db (gratis, istantaneo, mai rotto). Il profilo di
+             gruppo e le descrizioni per persona possono invece venire da
+             Claude (tasto "Aggiorna", Edge Function generate-group-report,
+             tabella group_report) — quando c'è un report salvato prendono il
+             badge "scritto da Claude" (vedi renderGroupReport in ui.js);
+             finché non è mai stato generato restano il testo templato
+             calcolato qui, sempre disponibile come fallback. -->
         <div id="groupReportBody">
           <div class="taste-block">
-            <div class="taste-block__title">Il profilo del gruppo</div>
+            <div class="taste-block__title" id="groupReportProfileTitle">Il profilo del gruppo</div>
             <div id="groupReportProfile"></div>
           </div>
 
           <div class="taste-block">
-            <div class="taste-block__title">Chi siete, uno per uno</div>
+            <div class="taste-block__title" id="groupReportMembersTitle">Chi siete, uno per uno</div>
             <div id="groupReportMembers"></div>
           </div>
 

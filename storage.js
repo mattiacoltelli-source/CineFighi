@@ -257,3 +257,72 @@ export async function regenerateReport(userName) {
   }
   return data;
 }
+
+// ─── REPORT DI GRUPPO (profilo + descrizioni per persona, scritte da Claude
+// on-demand — vedi Edge Function "generate-group-report") ────────────────
+// Stesso pattern del report personale sopra, ma un solo record condiviso
+// (nessun user_name): tutti leggono lo stesso ultimo report generato.
+// Se non è mai stato generato, resta null e il Report di Gruppo mostra il
+// fallback calcolato lato client (sempre disponibile, vedi app.js).
+
+const GROUP_REPORT_CACHE_KEY = "cinefighiGroupReportCache";
+
+function saveLocalGroupReportCache(report) {
+  try {
+    if (report) localStorage.setItem(GROUP_REPORT_CACHE_KEY, JSON.stringify(report));
+  } catch (e) {
+    console.warn("Cache locale report di gruppo non salvata:", e);
+  }
+}
+
+function loadLocalGroupReportCache() {
+  try {
+    const raw = localStorage.getItem(GROUP_REPORT_CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+export async function loadLatestGroupReport(onUpdate) {
+  const localCache = loadLocalGroupReportCache();
+
+  const fetchTask = (async () => {
+    try {
+      const res = await supabase
+        .from("group_report")
+        .select("generated_at, payload")
+        .order("generated_at", { ascending: false })
+        .limit(1);
+
+      if (!res || res.error || !res.data?.length) return null;
+      const remoteReport = res.data[0];
+
+      saveLocalGroupReportCache(remoteReport);
+
+      if (onUpdate && JSON.stringify(remoteReport) !== JSON.stringify(localCache)) {
+        onUpdate(remoteReport);
+      }
+      return remoteReport;
+    } catch (e) {
+      console.warn("Lettura report di gruppo remota fallita:", e);
+      return null;
+    }
+  })();
+
+  if (localCache) {
+    return localCache;
+  }
+
+  return await fetchTask;
+}
+
+export async function regenerateGroupReport() {
+  const { data, error } = await supabase.functions.invoke("generate-group-report", { body: {} });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+  if (data) {
+    saveLocalGroupReportCache(data);
+  }
+  return data;
+}
