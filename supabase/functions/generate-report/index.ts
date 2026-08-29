@@ -177,7 +177,7 @@ Deno.serve(async (req) => {
     // ── 3. Claude: solo profilo, nota generi e raccomandazioni ────────────────
     const client = new Anthropic({ apiKey: ANTHROPIC_KEY });
 
-    const response = await client.messages.parse({
+    const requestParams = {
       model: "claude-sonnet-5",
       max_tokens: 4000,
       output_config: {
@@ -206,11 +206,31 @@ Scrivi:
 
 Formattazione: in "profile", "genres_note" e in ogni "why", evidenzia con **doppi asterischi** solo i 2-3 dati o nomi davvero rilevanti per frase (un numero, un genere, un regista) — non l'intera frase, non ogni numero. Es: "con **286 titoli** visti sei un divoratore di **Thriller**". Niente altra formattazione markdown.`,
       }],
-    });
+    };
 
-    const parsed = response.parsed_output;
+    // Lo schema è rigido (min RECS_FINAL raccomandazioni, ogni "why" con
+    // almeno 15 caratteri) e il modello ogni tanto non lo rispetta alla
+    // prima — verificato dal vivo: senza retry, un solo "why" troppo corto
+    // fa fallire l'intera generazione con 500, sia dal tasto "Aggiorna" sia
+    // dal rinnovo automatico annuale. Stesso fix già applicato a Cos90.
+    const MAX_ATTEMPTS = 3;
+    let parsed;
+    let lastError;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        const response = await client.messages.parse(requestParams);
+        if (!response.parsed_output) {
+          throw new Error("Claude non ha restituito un output valido.");
+        }
+        parsed = response.parsed_output;
+        break;
+      } catch (e) {
+        lastError = e;
+        console.warn(`generate-report: tentativo ${attempt}/${MAX_ATTEMPTS} fallito`, e);
+      }
+    }
     if (!parsed) {
-      throw new Error("Claude non ha restituito un output valido.");
+      throw lastError instanceof Error ? lastError : new Error(String(lastError));
     }
 
     // ── 4. Filtro anti-duplicati (deterministico, non ci fidiamo solo del prompt) ──
