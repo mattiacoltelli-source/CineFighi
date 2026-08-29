@@ -23,7 +23,7 @@ import {
 import {
   showToast, avatarHtml, initScreens, switchScreen,
   renderShelf, renderSearchResults, renderLibraryList, renderGenreFilters,
-  renderGenreBars, renderRanking, toggleRankingList, renderGroupReport, renderTonightList, renderDiscoverResult, renderClassicResult,
+  renderGenreBars, renderRanking, toggleRankingList, renderGroupReport, toggleUserCardFact, renderTonightList, renderDiscoverResult, renderClassicResult,
   renderDetailFacts, renderVotesList, renderReportMeta, renderReportContent, renderReportGate,
   haptic, animateValue
 } from "./ui.js?v=d039684";
@@ -712,14 +712,10 @@ function renderReportScreen() {
   const btn = document.getElementById("reportRefreshBtn");
   // Il bottone compare solo per generare il PRIMO report (e solo quando si
   // hanno abbastanza titoli votati): dopo, gli aggiornamenti sono automatici.
-  // Ha senso solo in vista "Io".
+  // Ha senso solo in vista "Io". Il Gruppo non ha un tasto equivalente:
+  // si aggiorna da solo ogni anno (maybeAutoRefreshGroupReport), o subito
+  // col gesto nascosto dei 7 tap sul titolo "Report".
   btn.classList.toggle("hidden", !isIo || hasReport || votedCount < MIN_VOTED_FOR_REPORT);
-
-  // Il tasto "Aggiorna" del Report di Gruppo è sempre visibile in vista
-  // "Gruppo" (nessuna soglia, nessun auto-refresh annuale): la composizione
-  // del gruppo cambia raramente, ha senso solo un trigger manuale quando
-  // arriva un utente nuovo o i dati sono cambiati parecchio.
-  document.getElementById("groupReportRefreshBtn").classList.toggle("hidden", isIo);
 }
 
 // Report di Gruppo: le statistiche/podi restano SEMPRE ricalcolate al volo
@@ -772,9 +768,14 @@ async function handleReportRefresh() {
   }
 }
 
+// Nessun tasto visibile per questo (rimosso: si aggiornava da solo ogni
+// anno comunque, vedi maybeAutoRefreshGroupReport sotto) — chiamata solo
+// dal gesto nascosto dei 7 tap (vedi bindGlobalEvents), che mostra già
+// la sua conferma prima e un toast di esito dopo: niente stato "spinning"
+// da gestire qui, solo il flag groupReportRefreshing per evitare doppie
+// chiamate in corsa.
 async function handleGroupReportRefresh() {
   if (groupReportRefreshing) return;
-  const btn = document.getElementById("groupReportRefreshBtn");
 
   if (!navigator.onLine) {
     showToast("Sei offline. Connettiti per generare il report.", "error", "Report");
@@ -782,8 +783,6 @@ async function handleGroupReportRefresh() {
   }
 
   groupReportRefreshing = true;
-  btn.disabled = true;
-  btn.classList.add("spinning");
 
   try {
     const report = await regenerateGroupReport();
@@ -795,8 +794,6 @@ async function handleGroupReportRefresh() {
     showToast(e.message || "Generazione non riuscita. Riprova.", "error", "Report");
   } finally {
     groupReportRefreshing = false;
-    btn.disabled = false;
-    btn.classList.remove("spinning");
   }
 }
 
@@ -1492,6 +1489,8 @@ function bindGlobalEvents() {
     if (card) { openDetail(card.dataset.id); return; }
     const previewBtn = e.target.closest(".open-preview");
     if (previewBtn) { openPreview(previewBtn.dataset.id, previewBtn.dataset.type); return; }
+    const expandBtn = e.target.closest("[data-expand-fact]");
+    if (expandBtn) { haptic(6); toggleUserCardFact(expandBtn); return; }
   });
 
   document.querySelectorAll(".filter-pill[data-filter]").forEach(btn => {
@@ -1517,7 +1516,6 @@ function bindGlobalEvents() {
   document.getElementById("rankingExpandBtn").addEventListener("click", () => { haptic(8); toggleRankingList(); });
 
   document.getElementById("reportRefreshBtn").addEventListener("click", () => { haptic(8); handleReportRefresh(); });
-  document.getElementById("groupReportRefreshBtn").addEventListener("click", () => { haptic(8); handleGroupReportRefresh(); });
 
   document.getElementById("tonightBtn").addEventListener("click", recommendTonightFive);
   document.getElementById("tonightDiscoverBtn").addEventListener("click", discoverByTaste);
