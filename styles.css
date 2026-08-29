@@ -43,7 +43,10 @@
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { scroll-behavior: smooth; }
+/* overscroll-behavior: none — su iOS, installata come PWA (standalone),
+   Safari applica di default il rimbalzo elastico su tocco/scroll vicino ai
+   bordi: senza questo la pagina intera "scivola" invece di restare ferma. */
+html { scroll-behavior: smooth; overscroll-behavior: none; }
 
 body {
   background: var(--bg);
@@ -54,6 +57,7 @@ body {
   padding: 0 0 100px;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
 }
 
 h1, h2, h3 { font-family: var(--font-display); font-weight: 800; line-height: 1.1; }
