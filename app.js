@@ -660,10 +660,6 @@ function myVotedSeenCount() {
 }
 
 async function renderReport() {
-  document.querySelectorAll("#reportIoGruppoToggle .stats-toggle-btn").forEach(btn => {
-    btn.classList.toggle("active", btn.dataset.mode === reportMode);
-  });
-
   const report = await loadLatestReport(currentUser, updated => {
     reportCache = updated;
     renderReportScreen();
@@ -676,6 +672,10 @@ async function renderReport() {
 }
 
 function renderReportScreen() {
+  document.querySelectorAll("#reportIoGruppoToggle .stats-toggle-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.mode === reportMode);
+  });
+
   const votedCount = myVotedSeenCount();
   const hasReport = !!reportCache;
   const isIo = reportMode === "io";
