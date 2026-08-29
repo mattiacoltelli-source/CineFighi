@@ -179,42 +179,6 @@
           <div id="genreBars"></div>
         </div>
       </div>
-
-      <!-- CURIOSITÀ: solo dati "di gruppo" (vedi renderStats in app.js), mai
-           in vista "Io" — nascosto/mostrato con .hidden, non re-inserito nel
-           DOM ad ogni render. -->
-      <div id="curiositaSection">
-        <div class="curiosita-divider">
-          <div class="curiosita-divider__line"></div>
-          <span class="curiosita-divider__label">🍿 Curiosità</span>
-          <div class="curiosita-divider__line"></div>
-        </div>
-
-        <div class="section">
-          <h3 class="section__title" style="margin-bottom:14px;">Chi ha votato di più</h3>
-          <div id="curiositaVoting" class="podium-grid podium-grid--compact"></div>
-        </div>
-
-        <div class="section">
-          <h3 class="section__title" style="margin-bottom:14px;">Le coppie di gusto</h3>
-          <div id="curiositaPair"></div>
-        </div>
-
-        <div class="section">
-          <h3 class="section__title" style="margin-bottom:14px;">Gli estremi del gruppo</h3>
-          <div class="curiosita-stack">
-            <div>
-              <div class="curiosita-stack__label">😤 Più divisivi</div>
-              <div id="curiositaDivisive" class="podium-grid podium-grid--compact"></div>
-            </div>
-            <div>
-              <div class="curiosita-stack__label">🤝 Più unanimi</div>
-              <div id="curiositaUnanimous" class="podium-grid podium-grid--compact"></div>
-            </div>
-          </div>
-          <p class="curiosita-fine-print">± = quanto in media un voto si allontana dalla media del titolo (non un voto alto — qui è "quanto il gruppo litiga", o quanto va d'accordo). Solo titoli con almeno 3 voti.</p>
-        </div>
-      </div>
     </section>
 
     <!-- STASERA -->
@@ -265,12 +229,58 @@
             Aggiorna
           </button>
         </div>
+
+        <div class="stats-toggle" id="reportIoGruppoToggle" style="margin-bottom:16px;">
+          <button class="stats-toggle-btn active" data-mode="gruppo">Gruppo</button>
+          <button class="stats-toggle-btn" data-mode="io">Io</button>
+        </div>
+
         <div id="reportMetaLine" class="report-meta-line">Nessun report ancora generato.</div>
 
         <div id="reportGate" class="empty-state hidden"></div>
 
         <div id="reportBody">
           <p class="empty-hint">Tocca "Aggiorna" per generare il tuo primo report.</p>
+        </div>
+
+        <!-- REPORT DI GRUPPO: calcolato lato client da db, nessuna chiamata a
+             Claude — per questo niente badge "scritto da Claude" sui blocchi
+             sotto (a differenza del report personale sopra). -->
+        <div id="groupReportBody">
+          <div class="taste-block">
+            <div class="taste-block__title">Il profilo del gruppo</div>
+            <div id="groupReportProfile"></div>
+          </div>
+
+          <div class="taste-block">
+            <div class="taste-block__title">Chi siete, uno per uno</div>
+            <div id="groupReportMembers"></div>
+          </div>
+
+          <div class="section">
+            <h3 class="section__title" style="margin-bottom:14px;">Chi ha votato di più</h3>
+            <div id="groupReportVoting" class="podium-grid podium-grid--compact"></div>
+          </div>
+
+          <div class="section">
+            <h3 class="section__title" style="margin-bottom:14px;">Le coppie di gusto</h3>
+            <div id="groupReportPair"></div>
+          </div>
+
+          <div class="section">
+            <h3 class="section__title" style="margin-bottom:14px;">Gli estremi del gruppo</h3>
+            <div class="curiosita-stack">
+              <div>
+                <div class="curiosita-stack__label">😤 Più divisivi</div>
+                <div id="groupReportDivisive" class="podium-grid podium-grid--compact"></div>
+              </div>
+              <div>
+                <div class="curiosita-stack__label">🤝 Più unanimi</div>
+                <div id="groupReportUnanimous" class="podium-grid podium-grid--compact"></div>
+              </div>
+            </div>
+            <p class="curiosita-fine-print">± = quanto in media un voto si allontana dalla media del titolo (non un voto alto — qui è "quanto il gruppo litiga", o quanto va d'accordo). Solo titoli con almeno 3 voti.</p>
+          </div>
         </div>
       </div>
     </section>

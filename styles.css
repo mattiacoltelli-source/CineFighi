@@ -337,22 +337,17 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .rank-expand-btn.is-up svg { transform: rotate(180deg); }
 .rank-expand-btn__count { color: var(--text3); font-weight:600; }
 
-/* CURIOSITÀ (Statistiche → Gruppo): un solo linguaggio di podio riusato in
-   tutta la pagina — vedi podium-card--first qui sotto, condiviso con la
-   Classifica sopra (ui.js::podiumOrder). Nessun colore nuovo per posizione
-   ("oro/argento/bronzo"): solo il centro (1° posto) leggermente sollevato
-   con lo stesso --cyan-glow già usato altrove per l'enfasi. */
-.curiosita-divider { display:flex; align-items:center; gap:10px; margin: 22px 0 18px; }
-.curiosita-divider__line { flex:1; height:1px; background: linear-gradient(90deg, transparent, var(--border2), transparent); }
-.curiosita-divider__label { font-family: var(--font-display); font-size: 11px; font-weight:800; letter-spacing:.6px;
-  text-transform:uppercase; color: var(--text3); white-space:nowrap; }
-
+/* REPORT DI GRUPPO (podio "chi ha votato di più"/estremi): un solo
+   linguaggio di podio riusato in tutta la pagina — vedi podium-card--first
+   qui sotto, condiviso con la Classifica (ui.js::podiumOrder). Nessun
+   colore nuovo per posizione ("oro/argento/bronzo"): solo il centro (1°
+   posto) leggermente sollevato con lo stesso --cyan-glow usato altrove. */
 .podium-card--first { transform: translateY(-8px); border-color: rgba(56,189,248,.28); box-shadow: var(--cyan-glow); }
 .podium-card--first .podium-card__medal { font-size: 26px; }
 
-/* Card di Curiosità senza locandina (leaderboard/divisivi non ne hanno
-   una naturale): meno padding in alto, dato che manca il riquadro poster
-   che normalmente lo occupa. */
+/* Card del Report di Gruppo senza locandina (leaderboard/divisivi non ne
+   hanno una naturale): meno padding in alto, dato che manca il riquadro
+   poster che normalmente lo occupa. */
 .podium-grid--compact .podium-card { padding-top: 16px; }
 
 .affinity-callout { background: linear-gradient(160deg, rgba(56,189,248,.1), rgba(56,189,248,.02));

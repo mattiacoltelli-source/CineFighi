@@ -4,7 +4,8 @@
 
 import {
   uniqueKey, average, escapeHtml, decadeOf, GENRE_NAME_TO_ID,
-  votingLeaderboard, mostAffinePair, mostDivergentPair, mostDivisive, mostUnanimous
+  votingLeaderboard, mostAffinePair, mostDivergentPair, mostDivisive, mostUnanimous,
+  groupMemberProfiles, groupProfileStats
 } from "./cine-core.js?v=82fff64";
 import {
   getCurrentUser, setCurrentUser, clearCurrentUser, MAX_USERS,
@@ -21,7 +22,7 @@ import {
 import {
   showToast, avatarHtml, initScreens, switchScreen,
   renderShelf, renderSearchResults, renderLibraryList, renderGenreFilters,
-  renderGenreBars, renderRanking, toggleRankingList, renderCuriosita, renderTonightList, renderDiscoverResult, renderClassicResult,
+  renderGenreBars, renderRanking, toggleRankingList, renderGroupReport, renderTonightList, renderDiscoverResult, renderClassicResult,
   renderDetailFacts, renderVotesList, renderReportMeta, renderReportContent, renderReportGate,
   haptic, animateValue
 } from "./ui.js?v=82fff64";
@@ -36,6 +37,7 @@ let libraryFilter = "all"; // all | movie | tv
 let libraryGenre = "all";
 let watchlistMode = "me";  // me | group (Home)
 let statsMode = "group";   // group | me
+let reportMode = "gruppo"; // gruppo | io
 let rankingMedia = "movie"; // movie | tv
 let currentDetailId = null;
 let previewItem = null;    // titolo TMDB non ancora salvato, aperto solo per consultazione
@@ -640,27 +642,6 @@ function renderStats() {
     .sort((a, b) => b.__score - a.__score);
 
   renderRanking(ranked, rankingMedia === "movie" ? "Film" : "Serie TV");
-
-  // Curiosità: solo in vista Gruppo, non ha un senso "personale" (chi vota
-  // di più, le coppie affini, i titoli divisivi sono per forza cose del
-  // gruppo intero, non del singolo utente). Il contenitore resta nel DOM,
-  // si nasconde/mostra con .hidden — stesso pattern già in uso altrove
-  // (es. userPickerAddRow, reportGate).
-  const curiositaEl = document.getElementById("curiositaSection");
-  if (curiositaEl) {
-    if (statsMode === "me") {
-      curiositaEl.classList.add("hidden");
-    } else {
-      curiositaEl.classList.remove("hidden");
-      renderCuriosita({
-        leaderboard: votingLeaderboard(db),
-        pair: mostAffinePair(db),
-        divergentPair: mostDivergentPair(db),
-        divisive: mostDivisive(db),
-        unanimous: mostUnanimous(db),
-      });
-    }
-  }
 }
 
 // ─── REPORT ───────────────────────────────────────────────────────────────
@@ -679,6 +660,10 @@ function myVotedSeenCount() {
 }
 
 async function renderReport() {
+  document.querySelectorAll("#reportIoGruppoToggle .stats-toggle-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.mode === reportMode);
+  });
+
   const report = await loadLatestReport(currentUser, updated => {
     reportCache = updated;
     renderReportScreen();
@@ -686,24 +671,47 @@ async function renderReport() {
   if (report) reportCache = report;
 
   renderReportScreen();
+  renderGroupReportScreen();
   maybeAutoRefreshReport();
 }
 
 function renderReportScreen() {
   const votedCount = myVotedSeenCount();
   const hasReport = !!reportCache;
+  const isIo = reportMode === "io";
 
   renderReportMeta(reportCache);
   renderReportContent(reportCache);
   renderReportGate(votedCount, MIN_VOTED_FOR_REPORT);
 
-  document.getElementById("reportGate").classList.toggle("hidden", hasReport || votedCount >= MIN_VOTED_FOR_REPORT);
-  document.getElementById("reportBody").classList.toggle("hidden", !hasReport && votedCount < MIN_VOTED_FOR_REPORT);
+  document.getElementById("reportMetaLine").classList.toggle("hidden", !isIo);
+  document.getElementById("reportGate").classList.toggle("hidden", !isIo || hasReport || votedCount >= MIN_VOTED_FOR_REPORT);
+  document.getElementById("reportBody").classList.toggle("hidden", !isIo || (!hasReport && votedCount < MIN_VOTED_FOR_REPORT));
+  document.getElementById("groupReportBody").classList.toggle("hidden", isIo);
 
   const btn = document.getElementById("reportRefreshBtn");
   // Il bottone compare solo per generare il PRIMO report (e solo quando si
   // hanno abbastanza titoli votati): dopo, gli aggiornamenti sono automatici.
-  btn.classList.toggle("hidden", hasReport || votedCount < MIN_VOTED_FOR_REPORT);
+  // Ha senso solo in vista "Io" — il Report di Gruppo non ha un tasto
+  // "Aggiorna", si ricalcola da solo ad ogni apertura (vedi renderGroupReportScreen).
+  btn.classList.toggle("hidden", !isIo || hasReport || votedCount < MIN_VOTED_FOR_REPORT);
+}
+
+// Report di Gruppo: nessuna chiamata di rete, tutto ricalcolato al volo da
+// `db` (già in memoria) — stesso identico modello di affidabilità delle
+// Statistiche. Richiamata ad ogni apertura della tab Report, indipendentemente
+// da quale sotto-vista (Io/Gruppo) sia attiva al momento, così il toggle è
+// sempre pronto senza dover ricalcolare al click.
+function renderGroupReportScreen() {
+  renderGroupReport({
+    groupStats: groupProfileStats(db, users),
+    memberProfiles: groupMemberProfiles(db, users),
+    leaderboard: votingLeaderboard(db),
+    pair: mostAffinePair(db),
+    divergentPair: mostDivergentPair(db),
+    divisive: mostDivisive(db),
+    unanimous: mostUnanimous(db),
+  });
 }
 
 async function handleReportRefresh() {
@@ -1167,9 +1175,7 @@ function pushHistoryState(screen) {
 }
 
 // Tornando a Statistiche dal dettaglio di un film aperto dalla Classifica
-// (podio, righe sotto, o il podio "Film più divisivi" di Curiosità — stesso
-// meccanismo open-detail/data-id ovunque, nessun caso speciale per l'uno o
-// l'altro), riporta la vista esattamente sulla sua card invece di lasciare
+// (podio o righe sotto), riporta la vista esattamente sulla sua card invece di lasciare
 // la Statistiche scrollata in cima. renderStats() appena chiamato ha già
 // ridisegnato tutto da capo (Classifica sempre collassata a podio + 2 righe,
 // vedi RANKING_LIST_INITIAL in ui.js): se il film non è tra le prime 5, va
@@ -1404,6 +1410,9 @@ function bindGlobalEvents() {
   });
   document.querySelectorAll("#statsIoGruppoToggle .stats-toggle-btn").forEach(btn => {
     btn.addEventListener("click", () => { statsMode = btn.dataset.mode; renderStats(); });
+  });
+  document.querySelectorAll("#reportIoGruppoToggle .stats-toggle-btn").forEach(btn => {
+    btn.addEventListener("click", () => { haptic(8); reportMode = btn.dataset.mode; renderReportScreen(); });
   });
   document.querySelectorAll("#rankingMediaToggle .stats-toggle-btn").forEach(btn => {
     btn.addEventListener("click", () => { rankingMedia = btn.dataset.media; renderStats(); });
