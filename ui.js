@@ -463,9 +463,10 @@ function userCardHtml(m, blurb) {
   if (m.label === "costante") statsParts.push(`il più costante (dev.st. ${m.sd.toFixed(2).replace(".", ",")})`);
   else if (m.label === "polarizzato") statsParts.push(`il più polarizzato (dev.st. ${m.sd.toFixed(2).replace(".", ",")})`);
 
-  let factHtml;
+  let factHtml, plainLength;
   if (blurb) {
     factHtml = mdBold(escapeHtml(blurb));
+    plainLength = blurb.length;
   } else {
     const factParts = [];
     if (m.topDirector) factParts.push(`Regista top: <b>${escapeHtml(m.topDirector.name)}</b> (${m.topDirector.avg.toFixed(2).replace(".", ",")}).`);
@@ -484,15 +485,46 @@ function userCardHtml(m, blurb) {
     // più, quando ne ha votati abbastanza da non essere un dato isolato.
     if (m.topGenre) factParts.push(`Il genere che ama di più è <b>${escapeHtml(m.topGenre.name)}</b> (media ${m.topGenre.avg.toFixed(2).replace(".", ",")}).`);
     factHtml = factParts.join(" ");
+    plainLength = factParts.join(" ").length;
   }
+
+  // Un paragrafo scritto da Claude gira sulle 3-5 frasi ed è alto quanto (o
+  // più di) l'intero schermo su mobile: da chiuso a 4 righe con "Leggi
+  // tutto", stesso linguaggio già usato in Classifica per "Mostra tutti/
+  // Mostra meno" (vedi toggleRankingList). Il fallback templato è quasi
+  // sempre più corto e ci sta comunque in 4 righe, quindi il bottone
+  // comparirebbe senza far vedere nulla di nuovo: lo mostriamo solo oltre
+  // una soglia di lunghezza, non sempre.
+  const needsClamp = plainLength > 200;
+  const factBlock = !factHtml ? "" : needsClamp
+    ? `
+      <div class="user-card__fact-wrap is-clamped">
+        <p class="user-card__fact">${factHtml}</p>
+        <button class="user-card__expand" data-expand-fact>
+          <span class="user-card__expand-label">Leggi tutto</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+      </div>
+    `
+    : `<p class="user-card__fact">${factHtml}</p>`;
 
   return `
     <div class="user-card" style="--u-c:${color}">
       <div class="user-card__name"><span class="dot"></span>${escapeHtml(m.user)}</div>
       <div class="user-card__stats">${statsParts.join(" · ")}</div>
-      ${factHtml ? `<p class="user-card__fact">${factHtml}</p>` : ""}
+      ${factBlock}
     </div>
   `;
+}
+
+// Chiamata dal click su ".user-card__expand" (delegato in app.js, vedi
+// bindGlobalEvents) — stesso schema toggle di toggleRankingList sopra.
+export function toggleUserCardFact(btn) {
+  const wrap = btn.closest(".user-card__fact-wrap");
+  if (!wrap) return;
+  const open = wrap.classList.toggle("is-open");
+  wrap.classList.toggle("is-clamped", !open);
+  btn.querySelector(".user-card__expand-label").textContent = open ? "Mostra meno" : "Leggi tutto";
 }
 
 const CLAUDE_BADGE = `<span class="by">scritto da Claude</span>`;
