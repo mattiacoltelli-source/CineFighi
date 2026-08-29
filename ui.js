@@ -443,7 +443,6 @@ function userCardHtml(m) {
   const statsParts = [`${m.n} voti`, `media ${m.avg.toFixed(2).replace(".", ",")}`];
   if (m.label === "costante") statsParts.push(`il più costante (dev.st. ${m.sd.toFixed(2).replace(".", ",")})`);
   else if (m.label === "polarizzato") statsParts.push(`il più polarizzato (dev.st. ${m.sd.toFixed(2).replace(".", ",")})`);
-  else if (m.topGenre) statsParts.push(`genere top: ${escapeHtml(m.topGenre.name)} (${m.topGenre.avg.toFixed(2).replace(".", ",")})`);
 
   const factParts = [];
   if (m.topDirector) factParts.push(`Regista top: <b>${escapeHtml(m.topDirector.name)}</b> (${m.topDirector.avg.toFixed(2).replace(".", ",")}).`);
@@ -457,6 +456,10 @@ function userCardHtml(m) {
     const low = m.bottomFilms[0];
     factParts.push(`Ma stronca senza pietà: <b>${escapeHtml(low.title)}</b> (${low.vote.toFixed(1).replace(".", ",")}).`);
   }
+  // Riga di chiusura sui gusti personali, presente su ogni card indipendentemente
+  // dagli altri fatti sopra (regista/voto più alto): il genere che premia di
+  // più, quando ne ha votati abbastanza da non essere un dato isolato.
+  if (m.topGenre) factParts.push(`Il genere che ama di più è <b>${escapeHtml(m.topGenre.name)}</b> (media ${m.topGenre.avg.toFixed(2).replace(".", ",")}).`);
 
   return `
     <div class="user-card" style="--u-c:${color}">
