@@ -730,7 +730,7 @@ function renderReportScreen() {
 function renderGroupReportScreen() {
   renderGroupReport({
     groupStats: groupProfileStats(db, users),
-    memberProfiles: groupMemberProfiles(db, users),
+    memberProfiles: groupMemberProfiles(db, users, { minVotes: MIN_VOTED_FOR_REPORT }),
     leaderboard: votingLeaderboard(db),
     pair: mostAffinePair(db),
     divergentPair: mostDivergentPair(db),

@@ -551,7 +551,7 @@ export function renderGroupReport({ groupStats, memberProfiles, leaderboard, pai
   const membersEl = document.getElementById("groupReportMembers");
   membersEl.innerHTML = memberProfiles.length
     ? `<div class="user-grid">${memberProfiles.map(m => userCardHtml(m, claudeMembers.get(m.user))).join("")}</div>`
-    : `<p class="empty-hint">Ancora nessun voto nel gruppo.</p>`;
+    : `<p class="empty-hint">Nessuno ha ancora votato abbastanza titoli per un profilo personale.</p>`;
 
   const votingEl = document.getElementById("groupReportVoting");
   votingEl.innerHTML = leaderboard.length
