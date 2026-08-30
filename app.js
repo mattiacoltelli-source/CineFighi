@@ -24,7 +24,7 @@ import {
   showToast, avatarHtml, initScreens, switchScreen,
   renderShelf, renderSearchResults, renderLibraryList, renderGenreFilters,
   renderGenreBars, renderRanking, toggleRankingList, renderGroupReport, toggleUserCardFact, renderTonightList, renderDiscoverResult, renderClassicResult,
-  renderDetailFacts, renderVotesList, renderReportMeta, renderReportContent, renderReportGate,
+  renderDetailFacts, renderVotesList, renderReportMeta, renderGroupReportMeta, renderReportContent, renderReportGate,
   haptic, animateValue
 } from "./ui.js?v=ff49ada";
 
@@ -707,14 +707,17 @@ function renderReportScreen() {
   document.getElementById("reportMetaLine").classList.toggle("hidden", !isIo);
   document.getElementById("reportGate").classList.toggle("hidden", !isIo || hasReport || votedCount >= MIN_VOTED_FOR_REPORT);
   document.getElementById("reportBody").classList.toggle("hidden", !isIo || (!hasReport && votedCount < MIN_VOTED_FOR_REPORT));
+  document.getElementById("groupReportMetaLine").classList.toggle("hidden", isIo);
   document.getElementById("groupReportBody").classList.toggle("hidden", isIo);
 
   const btn = document.getElementById("reportRefreshBtn");
   // Il bottone compare solo per generare il PRIMO report (e solo quando si
   // hanno abbastanza titoli votati): dopo, gli aggiornamenti sono automatici.
   // Ha senso solo in vista "Io". Il Gruppo non ha un tasto equivalente:
-  // si aggiorna da solo ogni anno (maybeAutoRefreshGroupReport), o subito
-  // col gesto nascosto dei 7 tap sul titolo "Report".
+  // si aggiorna da solo ogni lunedì alle 8 (cron reale lato Supabase, vedi
+  // la migrazione weekly_group_report_cron — maybeAutoRefreshGroupReport
+  // qui resta solo come rete di sicurezza), o subito col gesto nascosto
+  // dei 7 tap sul titolo "Report".
   btn.classList.toggle("hidden", !isIo || hasReport || votedCount < MIN_VOTED_FOR_REPORT);
 }
 
@@ -728,6 +731,7 @@ function renderReportScreen() {
 // (Io/Gruppo) sia attiva al momento, così il toggle è sempre pronto senza
 // dover ricalcolare al click.
 function renderGroupReportScreen() {
+  renderGroupReportMeta(groupReportCache);
   renderGroupReport({
     groupStats: groupProfileStats(db, users),
     memberProfiles: groupMemberProfiles(db, users, { minVotes: MIN_VOTED_FOR_REPORT }),
