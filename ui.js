@@ -513,6 +513,34 @@ function userCardHtml(m, blurb) {
       <div class="user-card__name"><span class="dot"></span>${escapeHtml(m.user)}</div>
       <div class="user-card__stats">${statsParts.join(" · ")}</div>
       ${factBlock}
+      ${genreChartHtml(m.topGenres)}
+    </div>
+  `;
+}
+
+// Mini-grafico "Generi preferiti" nella card di ogni utente — stesso
+// linguaggio visivo di .bar-row/.bar-track/.bar__fill già usato per i
+// generi nel report personale (vedi renderTasteReport), solo in versione
+// compatta. Puramente aggiuntivo: non tocca né sostituisce il testo sopra
+// (templato o scritto da Claude), che resta invariato.
+function genreChartHtml(topGenres) {
+  if (!topGenres || !topGenres.length) return "";
+  const rows = topGenres.map(g => {
+    const width = Math.max(4, Math.min(100, Math.round(g.avg * 10)));
+    return `
+      <div class="mini-row">
+        <div class="mini-row__label">
+          <span class="mini-row__name">${escapeHtml(g.name)}</span>
+          <span class="mini-row__vote">${g.avg.toFixed(2).replace(".", ",")}</span>
+        </div>
+        <div class="mini-track"><div class="mini-fill" style="width:${width}%"></div></div>
+      </div>
+    `;
+  }).join("");
+  return `
+    <div class="genre-block">
+      <div class="genre-block__label">Generi preferiti</div>
+      ${rows}
     </div>
   `;
 }

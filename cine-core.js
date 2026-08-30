@@ -251,13 +251,14 @@ export function groupMemberProfiles(db, users, { minVotes = 0 } = {}) {
       if (item.director) (directorVotes[item.director] ||= []).push(vote);
     });
 
-    const bestByAvg = (acc, minCount) => {
+    const rankByAvg = (acc, minCount) => {
       const entries = Object.entries(acc)
         .filter(([, votes]) => votes.length >= minCount)
         .map(([name, votes]) => ({ name, avg: votes.reduce((a, b) => a + b, 0) / votes.length, count: votes.length }));
       entries.sort((a, b) => b.avg - a.avg);
-      return entries[0] || null;
+      return entries;
     };
+    const genreRanking = rankByAvg(genreVotes, 3);
 
     const sorted = [...voted].sort((a, b) => b.vote - a.vote);
     const topFilms = sorted.slice(0, 3).map(({ item, vote }) => ({ title: item.title, vote }));
@@ -265,8 +266,12 @@ export function groupMemberProfiles(db, users, { minVotes = 0 } = {}) {
 
     return {
       user, n, avg, sd,
-      topGenre: bestByAvg(genreVotes, 3),
-      topDirector: bestByAvg(directorVotes, 2),
+      topGenre: genreRanking[0] || null,
+      // Fino a 3 generi per il mini-grafico "Generi preferiti" della card
+      // (renderGroupReport in ui.js) — stessa soglia minima di 3 voti sul
+      // genere di topGenre, solo non troncata a un solo risultato.
+      topGenres: genreRanking.slice(0, 3),
+      topDirector: rankByAvg(directorVotes, 2)[0] || null,
       topFilms, bottomFilms,
       label: null,
     };
