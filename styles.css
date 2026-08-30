@@ -69,7 +69,10 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 800; line-height: 1.
 .app { max-width: 720px; margin: 0 auto; padding: 0 16px; }
 
 /* TOPBAR */
-.topbar { display:flex; align-items:center; justify-content:space-between; padding: 22px 0 16px; }
+/* padding-top con safe-area: in PWA installata (standalone + viewport-fit=
+   cover) il contenuto può estendersi sotto la status bar/notch/Dynamic
+   Island — senza questo il titolo "CineFighi" rischia di finirci sotto. */
+.topbar { display:flex; align-items:center; justify-content:space-between; padding: calc(22px + env(safe-area-inset-top)) 0 16px; }
 .topbar__title {
   font-family: var(--font-display); font-size: 28px; font-weight: 900; letter-spacing:-.5px;
   background: linear-gradient(135deg, var(--cyan2), var(--cyan));
@@ -123,7 +126,11 @@ button:active { transform: scale(.96); }
 .btn--secondary { background: var(--surface2); color: var(--text); border:1px solid var(--border); }
 
 input, textarea {
-  font: inherit; width:100%; background: var(--surface); color: var(--text);
+  /* font-size 16px, non "inherit": sotto i 16px Safari iOS zooma l'intera
+     pagina al focus di un campo di testo (comportamento nativo, non un bug
+     browser) — 16px è la soglia minima per evitarlo, indipendentemente dal
+     font-size di 15px usato nel resto dell'app. */
+  font-family: inherit; font-size: 16px; width:100%; background: var(--surface); color: var(--text);
   border:1px solid var(--border); border-radius: var(--radius-md); padding: 13px 16px; outline:none;
   transition: border-color var(--t-mid), background var(--t-mid);
 }
@@ -420,7 +427,7 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .tonight-select-wrap select {
   appearance:none; -webkit-appearance:none; -moz-appearance:none; width:100%;
   background: var(--surface2); color: var(--text); border:1px solid var(--border); border-radius: var(--radius-md);
-  min-height:56px; padding:0 44px 0 16px; font-family: var(--font-display); font-size:15px; font-weight:700;
+  min-height:56px; padding:0 44px 0 16px; font-family: var(--font-display); font-size:16px; font-weight:700;
 }
 .tonight-select-wrap select:focus { border-color: rgba(56,189,248,.45); outline:none; }
 .tonight-discover-btn { width:100%; }

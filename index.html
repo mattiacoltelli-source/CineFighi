@@ -6,6 +6,13 @@
   <title>CineFighi</title>
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#080c12">
+  <!-- iOS non segue sempre il manifest per lo stile della status bar in PWA
+       installata: "black-translucent" lascia il contenuto estendersi sotto
+       la barra (coerente con lo sfondo scuro dell'app) invece della barra
+       chiara di default. apple-mobile-web-app-capable="yes" è richiesto
+       perché status-bar-style abbia effetto. -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="stylesheet" href="styles.css?v=d039684">
   <!-- Sentry: solo monitoraggio errori, nessun impatto sull'avvio se il CDN non risponde -->
