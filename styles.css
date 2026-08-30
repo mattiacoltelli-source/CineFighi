@@ -411,6 +411,21 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .user-card__expand svg { width: 10px; height: 10px; stroke: currentColor; transition: transform var(--t-mid) var(--ease); }
 .user-card__fact-wrap.is-open .user-card__expand svg { transform: rotate(180deg); }
 
+/* Mini-grafico "Generi preferiti" dentro la user-card del Report di
+   Gruppo (vedi genreChartHtml in ui.js) — stessa palette di .bar-row/
+   .bar-track/.bar__fill dei Generi nel report personale, in scala ridotta. */
+.genre-block { margin-top: 11px; }
+.genre-block__label { font-family: var(--font-display); font-weight:700; font-size:10px;
+  text-transform:uppercase; letter-spacing:.5px; color: var(--text3); margin-bottom:8px; }
+.mini-row { margin-bottom:7px; }
+.mini-row:last-child { margin-bottom:0; }
+.mini-row__label { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px; font-size:11.5px; }
+.mini-row__name { color: var(--text2); font-weight:500; }
+.mini-row__vote { font-family: var(--font-display); font-size:11.5px; font-weight:800; color: var(--cyan2);
+  font-variant-numeric:tabular-nums; }
+.mini-track { width:100%; height:4px; background: var(--surface3); border-radius: var(--radius-pill); overflow:hidden; }
+.mini-fill { height:100%; border-radius: var(--radius-pill); background: linear-gradient(90deg, var(--orange), var(--orange2)); }
+
 /* TONIGHT */
 .tonight__intro { font-size:13px; color: var(--text3); margin-bottom:16px; }
 
