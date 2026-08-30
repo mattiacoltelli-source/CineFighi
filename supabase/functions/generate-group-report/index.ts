@@ -155,13 +155,18 @@ Deno.serve(async (req) => {
     const addedCount: Record<string, number> = {};
     for (const t of allTitles) if (t.added_by) addedCount[t.added_by] = (addedCount[t.added_by] || 0) + 1;
 
-    // Chi ha 0 voti (utente appena entrato nel gruppo, non ha ancora votato
-    // nulla) non entra nel prompt: non c'è alcun dato reale su cui scrivere
-    // un paragrafo, e chiederlo a Claude comunque rischierebbe solo di
-    // inventare gusti. Il client mostra "Ancora nessun voto" per queste
-    // persone (vedi ui.js::userCardHtml) finché non iniziano a votare.
+    // Chi non ha ancora votato abbastanza (utente appena entrato, o poco
+    // attivo) non entra nel prompt: sotto la soglia non c'è abbastanza dato
+    // reale per un paragrafo vero, e chiederlo a Claude comunque
+    // rischierebbe solo di inventare gusti da pochissimi voti. Il client
+    // (cine-core.js::groupMemberProfiles) applica lo stesso taglio e nasconde
+    // del tutto la card per queste persone (vedi ui.js::renderGroupReport) —
+    // qui evitiamo di pagare per generare un paragrafo che poi non verrebbe
+    // mai mostrato.
+    // Stessa soglia di app.js::MIN_VOTED_FOR_REPORT (50) — se cambi lì, cambia anche qui.
+    const MIN_VOTES_FOR_MEMBER_BLURB = 50;
     const allMembers = users.map(u => memberStats(allTitles, votesByUser, u)).sort((a, b) => b.n - a.n);
-    const members = allMembers.filter(m => m.n > 0);
+    const members = allMembers.filter(m => m.n >= MIN_VOTES_FOR_MEMBER_BLURB);
 
     // ── 3. Claude: solo il profilo di gruppo e un paragrafo per persona ────
     const client = new Anthropic({ apiKey: ANTHROPIC_KEY });
