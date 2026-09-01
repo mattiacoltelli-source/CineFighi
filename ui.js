@@ -4,7 +4,7 @@
 
 import {
   escapeHtml, mediaLabel, mediaBadgeClass, posterUrl, uniqueKey,
-  average, voteCount, rawNumberToFixed, firstVoter
+  average, voteCount, rawNumberToFixed, firstVoter, firstOfNames
 } from "./cine-core.js?v=b1ed1b8";
 
 // ─── ANIMAZIONI (numeri che contano, barre che si riempiono, tattile) ───────
@@ -140,6 +140,7 @@ export function renderShelf(containerId, items, lastSeenAt, showAdder = false) {
   el.innerHTML = items.map(item => {
     const avg = average(item.votes);
     const voter = firstVoter(item.votes);
+    const adder = showAdder ? firstOfNames(item.watchlist_by) : null;
     const isNew = !!(lastSeenAt && item.created_at && item.created_at > lastSeenAt);
     return `
       <div class="shelf-card open-detail" data-id="${item.id}">
@@ -156,10 +157,11 @@ export function renderShelf(containerId, items, lastSeenAt, showAdder = false) {
               ` : ""}
               <span class="shelf-card__vote">★ ${avg.toFixed(1)}</span>
             </div>
-          ` : (showAdder && item.added_by ? `
+          ` : (adder ? `
             <div class="shelf-card__bottom">
               <span class="shelf-card__voter">
-                <span class="shelf-card__voter-name">${escapeHtml(item.added_by)}</span>
+                <span class="shelf-card__voter-name">${escapeHtml(adder.name)}</span>
+                ${adder.others > 0 ? `<span class="shelf-card__voter-count">+${adder.others}</span>` : ""}
               </span>
             </div>
           ` : "")}
@@ -175,21 +177,29 @@ export function renderShelf(containerId, items, lastSeenAt, showAdder = false) {
 
 // ─── SEARCH RESULTS ──────────────────────────────────────────────────────────
 
-export function renderSearchResults(items, libraryMap) {
+export function renderSearchResults(items, libraryMap, currentUser) {
   return items.map(item => {
     const key = `${item.media_type}_${item.id}`;
-    const libId = libraryMap.get(key);
+    const lib = libraryMap.get(key);
+    // "già mio" = l'ho già visto/votato, oppure è già nella mia watchlist.
+    // Se invece è in watchlist di qualcun altro ma non ancora mia, resta
+    // agganciabile: i due bottoni restano attivi (♡ mi unisce alla stessa
+    // watchlist condivisa, vedi addToWatchlist in storage.js) invece del
+    // tag bloccante "già in libreria".
+    const alreadyMine = !!lib && (lib.status === "seen" || !!lib.watchlist_by?.includes(currentUser));
+    const canJoinWatchlist = !!lib && !alreadyMine && lib.status === "watchlist";
+    const showTag = !!lib && alreadyMine;
     return `
       <div class="poster-card">
-        <div class="poster-card__img ${libId ? "open-detail" : ""}" data-id="${libId || ""}"
+        <div class="poster-card__img ${showTag ? "open-detail" : ""}" data-id="${showTag ? lib.id : ""}"
              style="background-image:url('${posterUrl(item.poster_path)}')">
           <span class="badge ${mediaBadgeClass(item)}">${mediaLabel(item)}</span>
-          ${libId
+          ${showTag
             ? `<span class="poster-card__tag">✓ Già in libreria · tocca per votare</span>`
             : `
               <div class="poster-card__actions">
                 <button class="poster-btn poster-btn--watch action-add" data-id="${item.id}" data-type="${item.media_type}" data-status="watchlist">
-                  ♡ Lista
+                  ♡ ${canJoinWatchlist ? "Anche a me" : "Lista"}
                 </button>
                 <button class="poster-btn poster-btn--seen action-add" data-id="${item.id}" data-type="${item.media_type}" data-status="seen">
                   ✓ Visto
@@ -200,7 +210,7 @@ export function renderSearchResults(items, libraryMap) {
         <div class="poster-card__info">
           <div class="poster-card__title">${escapeHtml(item.title)}</div>
           <div class="poster-card__meta">${item.year} · ${mediaLabel(item)}</div>
-          ${!libId ? `<button class="poster-card__scheda open-preview" data-id="${item.id}" data-type="${item.media_type}">Scheda →</button>` : ""}
+          ${!lib ? `<button class="poster-card__scheda open-preview" data-id="${item.id}" data-type="${item.media_type}">Scheda →</button>` : ""}
         </div>
       </div>
     `;

@@ -11,7 +11,7 @@ import {
   getCurrentUser, setCurrentUser, clearCurrentUser, MAX_USERS,
   getLastSeenAt, setLastSeenAt,
   fetchUsers, addUser, deleteUser,
-  fetchLibrary, addTitle, updateTitleStatus, removeTitle,
+  fetchLibrary, addTitle, addToWatchlist, removeFromWatchlist, ensureWatchlistMembership, updateTitleStatus, removeTitle,
   upsertVote, removeVote,
   loadLatestReport, regenerateReport,
   loadLatestGroupReport, regenerateGroupReport
@@ -346,7 +346,7 @@ function renderHome() {
   });
 
   const watch = db
-    .filter(x => x.status === "watchlist" && (watchlistMode === "group" || x.added_by === currentUser))
+    .filter(x => x.status === "watchlist" && (watchlistMode === "group" || x.watchlist_by?.includes(currentUser)))
     .slice(0, 10);
   const seenMovies = db.filter(x => x.status === "seen" && x.media_type === "movie").slice(0, 10);
   const seenSeries = db.filter(x => x.status === "seen" && x.media_type === "tv").slice(0, 10);
@@ -409,8 +409,8 @@ async function doSearch(q) {
     }
 
     empty.classList.add("hidden");
-    const libraryMap = new Map(db.map(x => [`${x.media_type}_${x.tmdb_id}`, x.id]));
-    res.innerHTML = renderSearchResults(normalized, libraryMap);
+    const libraryMap = new Map(db.map(x => [`${x.media_type}_${x.tmdb_id}`, x]));
+    res.innerHTML = renderSearchResults(normalized, libraryMap, currentUser);
     res.dataset.cache = JSON.stringify(normalized);
   } catch (e) {
     console.error(e);
@@ -429,15 +429,34 @@ async function addItemFromCache(containerId, tmdbId, type, status) {
   if (!item) return null;
 
   const fullItem = await tmdbFetchDetail(type, tmdbId).catch(() => item);
-  const res = await addTitle(fullItem, status, currentUser);
+  const res = status === "watchlist"
+    ? await addToWatchlist(fullItem, currentUser)
+    : await addTitle(fullItem, status, currentUser);
 
   if (!res.ok) {
-    showToast(res.reason === "duplicate" ? "Già in libreria" : "Errore, riprova", "error");
+    const msg = res.reason === "already_seen" ? "Il gruppo l'ha già segnato come visto"
+      : res.reason === "duplicate" ? "Già in libreria" : "Errore, riprova";
+    showToast(msg, "error");
     return null;
   }
-  showToast(`${fullItem.title} aggiunto`, "success");
+
   haptic(12);
-  db.unshift({ ...res.title, votes: {} });
+  if (res.joined) {
+    // Titolo già esistente in watchlist (di qualcun altro): ci siamo solo
+    // uniti, non è un nuovo titolo — aggiorna l'item già presente in db
+    // invece di duplicarlo.
+    const existing = byId(res.title.id);
+    if (existing) {
+      existing.watchlist_by = existing.watchlist_by || [];
+      if (!existing.watchlist_by.includes(currentUser)) existing.watchlist_by.push(currentUser);
+    } else {
+      db.unshift({ ...res.title, votes: {}, watchlist_by: [currentUser] });
+    }
+    showToast(`${fullItem.title} aggiunto alla tua watchlist`, "success");
+  } else {
+    showToast(`${fullItem.title} aggiunto`, "success");
+    db.unshift({ ...res.title, votes: {}, watchlist_by: res.title.watchlist_by || [] });
+  }
   return res.title.id;
 }
 
@@ -1293,6 +1312,8 @@ function openDetail(id, options = {}) {
 
   document.getElementById("detailStatusBtn").textContent =
     item.status === "watchlist" ? "✓ Segna come visto" : "♡ Sposta in watchlist";
+  document.getElementById("detailRemoveBtn").textContent =
+    item.status === "watchlist" ? "Rimuovi dalla mia watchlist" : "Rimuovi";
   document.getElementById("detailRemoveBtn").classList.remove("hidden");
 
   goToScreen("detail");
@@ -1300,11 +1321,26 @@ function openDetail(id, options = {}) {
 }
 
 // Salva in libreria il titolo attualmente in "consultazione" (previewItem,
-// non ancora in libreria), con lo status indicato. Se qualcun altro l'ha
-// già aggiunto nel frattempo (duplicate), recupera comunque l'id esistente.
-// Usata sia da handleSaveVote (status "seen") che da handleToggleStatus
-// (status "watchlist"). Ritorna l'id salvato, o null in caso di errore vero.
+// non ancora in libreria), con lo status indicato. Usata sia da
+// handleSaveVote (status "seen") che da handleToggleStatus (status
+// "watchlist"). Ritorna l'id salvato, o null in caso di errore vero.
 async function promotePreviewItem(status) {
+  if (status === "watchlist") {
+    // Se qualcun altro l'ha già messo in watchlist nel frattempo, ci
+    // uniamo alla stessa riga condivisa invece di fallire come duplicato
+    // (vedi addToWatchlist in storage.js).
+    const res = await addToWatchlist(previewItem, currentUser);
+    if (!res.ok) return null;
+    const existing = res.joined ? byId(res.title.id) : null;
+    if (existing) {
+      existing.watchlist_by = existing.watchlist_by || [];
+      if (!existing.watchlist_by.includes(currentUser)) existing.watchlist_by.push(currentUser);
+    } else {
+      db.unshift({ ...res.title, votes: {}, watchlist_by: res.title.watchlist_by || [currentUser] });
+    }
+    return res.title.id;
+  }
+
   const res = await addTitle(previewItem, status, currentUser);
   if (!res.ok && res.reason !== "duplicate") return null;
   if (res.ok) db.unshift({ ...res.title, votes: {} });
@@ -1382,6 +1418,15 @@ async function handleToggleStatus() {
   const nextStatus = item.status === "watchlist" ? "seen" : "watchlist";
   const res = await updateTitleStatus(item.id, nextStatus);
   if (!res.ok) { showToast("Errore, riprova", "error"); return; }
+  // Tornando in watchlist da "visto", assicuriamoci che chi ha appena
+  // premuto il tasto sia registrato come uno di chi la vuole vedere —
+  // altrimenti sparirebbe subito dalla SUA watchlist (vedi
+  // ensureWatchlistMembership in storage.js).
+  if (nextStatus === "watchlist") {
+    await ensureWatchlistMembership(item.id, currentUser);
+    item.watchlist_by = item.watchlist_by || [];
+    if (!item.watchlist_by.includes(currentUser)) item.watchlist_by.push(currentUser);
+  }
   haptic(12);
   item.status = nextStatus;
   renderAfterLocalChange();
@@ -1391,6 +1436,28 @@ async function handleToggleStatus() {
 async function handleRemove() {
   const item = byId(currentDetailId);
   if (!item) return;
+
+  // Un titolo ancora in watchlist non ha voti da perdere: rimuovere significa
+  // solo "non lo voglio più nella MIA lista" — se qualcun altro ce l'ha
+  // ancora, il titolo condiviso resta (vedi removeFromWatchlist), quindi non
+  // serve la conferma pesante usata per un titolo già visto e votato.
+  if (item.status === "watchlist") {
+    const res = await removeFromWatchlist(item.id, currentUser);
+    if (!res.ok) { showToast("Errore, riprova", "error"); return; }
+    haptic(12);
+    showToast("Rimosso dalla tua watchlist", "success");
+    currentDetailId = null;
+    if (res.deleted) {
+      db = db.filter(x => x.id !== item.id);
+    } else {
+      item.watchlist_by = (item.watchlist_by || []).filter(u => u !== currentUser);
+    }
+    renderAfterLocalChange();
+    goToScreen("home");
+    try { history.replaceState({ screen: "home" }, "", location.href); } catch {}
+    return;
+  }
+
   // La libreria è condivisa da tutto il gruppo: un tocco per sbaglio non deve
   // cancellare un titolo (e i voti di tutti collegati) senza possibilità di
   // annullare. Stessa conferma già usata per eliminare un utente dal gruppo.
