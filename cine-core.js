@@ -294,12 +294,10 @@ export function groupMemberProfiles(db, users, { minVotes = 0 } = {}) {
   }
 
   // Applicato DOPO l'assegnazione delle etichette sopra (che devono girare
-  // sulla lista completa, non su quella già tagliata) — chi non supera
+  // sulla lista completa, non su quella già tagliata) — chi non raggiunge
   // minVotes non ha abbastanza dati per un profilo vero, sparisce dal
-  // risultato invece di mostrare una card striminzita o vuota. Soglia
-  // rigorosa (>, non >=): con exactly minVotes voti si è ancora "in
-  // ingresso", entra nel report solo superandola davvero.
-  return profiles.filter(m => m.n > minVotes);
+  // risultato invece di mostrare una card striminzita o vuota.
+  return profiles.filter(m => m.n >= minVotes);
 }
 
 // Prosa di apertura del Report di Gruppo: quali titoli ha visto tutto il
