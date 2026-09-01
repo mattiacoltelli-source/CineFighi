@@ -129,7 +129,12 @@ export function switchScreen(name) {
 // apertura in assoluto dell'app su questo dispositivo: in quel caso nessun
 // titolo viene marcato "nuovo", per non riempire di puntini tutta la libreria
 // esistente al primo avvio.
-export function renderShelf(containerId, items, lastSeenAt) {
+// showAdder: mostra un badge "chi l'ha aggiunto" per i titoli senza ancora
+// voti (watchlist) — usato solo dalla shelf Watchlist in vista Gruppo, dove
+// il nome di chi ha aggiunto è l'informazione utile equivalente a "chi ha
+// votato" nelle shelf dei titoli visti (in vista Io è sempre l'utente
+// stesso, quindi ridondante).
+export function renderShelf(containerId, items, lastSeenAt, showAdder = false) {
   const el = document.getElementById(containerId);
   if (!el) return;
   el.innerHTML = items.map(item => {
@@ -151,7 +156,13 @@ export function renderShelf(containerId, items, lastSeenAt) {
               ` : ""}
               <span class="shelf-card__vote">★ ${avg.toFixed(1)}</span>
             </div>
-          ` : ""}
+          ` : (showAdder && item.added_by ? `
+            <div class="shelf-card__bottom">
+              <span class="shelf-card__voter">
+                <span class="shelf-card__voter-name">${escapeHtml(item.added_by)}</span>
+              </span>
+            </div>
+          ` : "")}
         </div>
         <div class="shelf-card__info">
           <div class="shelf-card__title">${escapeHtml(item.title)}</div>

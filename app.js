@@ -359,7 +359,7 @@ function renderHome() {
   toggleEmpty("seenMovieShelf", "seenMovieShelfEmpty", seenMovies);
   toggleEmpty("seenSeriesShelf", "seenSeriesShelfEmpty", seenSeries);
 
-  renderShelf("watchShelf", watch, sessionLastSeenAt);
+  renderShelf("watchShelf", watch, sessionLastSeenAt, watchlistMode === "group");
   renderShelf("seenMovieShelf", seenMovies, sessionLastSeenAt);
   renderShelf("seenSeriesShelf", seenSeries, sessionLastSeenAt);
 }
@@ -1338,6 +1338,12 @@ async function handleSaveVote() {
   if (!item) return;
   const res = await upsertVote(item.id, currentUser, vote, comment);
   if (!res.ok) { showToast("Errore nel salvare il voto, riprova", "error"); return; }
+  // Stesso principio di promotePreviewItem sopra: un voto significa sempre
+  // "l'ho visto", anche se il titolo era già in libreria come watchlist.
+  if (item.status === "watchlist") {
+    const statusRes = await updateTitleStatus(item.id, "seen");
+    if (statusRes.ok) item.status = "seen";
+  }
   haptic(12);
   showToast("Voto salvato", "success");
   item.votes = item.votes || {};

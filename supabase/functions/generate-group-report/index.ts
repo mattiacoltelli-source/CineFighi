@@ -3,11 +3,12 @@
 // Mirror di generate-report, ma per il gruppo intero invece che per un
 // singolo utente: un solo report condiviso, nessun user_name.
 //
-// Chiamata: on-demand dal tasto "Aggiorna" nel tab Gruppo della schermata
-// Report — nessun cron, nessuna rigenerazione automatica (a differenza del
-// report personale, che si auto-rigenera una volta all'anno: qui la
-// composizione del gruppo cambia raramente, ha senso solo un trigger
-// manuale quando arriva un utente nuovo o i dati sono cambiati parecchio).
+// Chiamata: on-demand dal gesto nascosto (7 tap sul titolo "Report"), o
+// automaticamente ogni lunedì alle 8 (ora italiana) tramite un cron reale
+// lato Supabase — vedi la migrazione weekly_group_report_cron. A differenza
+// del report personale (auto-rigenerato una volta all'anno, per utente,
+// controllato lato client), qui il trigger periodico è server-side: nessuno
+// deve aprire l'app perché il report si aggiorni in tempo.
 //
 // Le statistiche (medie, deviazioni standard, chi ha votato di più, coppie
 // di gusto, titoli divisivi/unanimi) restano calcolate lato client in
@@ -152,9 +153,6 @@ Deno.serve(async (req) => {
         return { title: t.title, avg: average(vals) };
       });
 
-    const addedCount: Record<string, number> = {};
-    for (const t of allTitles) if (t.added_by) addedCount[t.added_by] = (addedCount[t.added_by] || 0) + 1;
-
     // Chi non ha ancora votato abbastanza (utente appena entrato, o poco
     // attivo) non entra nel prompt: sotto la soglia non c'è abbastanza dato
     // reale per un paragrafo vero, e chiederlo a Claude comunque
@@ -164,9 +162,23 @@ Deno.serve(async (req) => {
     // qui evitiamo di pagare per generare un paragrafo che poi non verrebbe
     // mai mostrato.
     // Stessa soglia di app.js::MIN_VOTED_FOR_REPORT (50) — se cambi lì, cambia anche qui.
+    // Rigorosa (>, non >=): con esattamente 50 voti non si entra ancora.
     const MIN_VOTES_FOR_MEMBER_BLURB = 50;
     const allMembers = users.map(u => memberStats(allTitles, votesByUser, u)).sort((a, b) => b.n - a.n);
-    const members = allMembers.filter(m => m.n >= MIN_VOTES_FOR_MEMBER_BLURB);
+    const members = allMembers.filter(m => m.n > MIN_VOTES_FOR_MEMBER_BLURB);
+    const memberNames = new Set(members.map(m => m.user));
+
+    // "Titoli aggiunti per persona" è un dato editoriale quanto i voti (Claude
+    // lo usa per dire chi cataloga di più) — se lo lasciassimo per TUTTI gli
+    // utenti, Claude potrebbe nominare per nome anche chi non ha superato la
+    // soglia voti sopra, solo perché ha aggiunto tanti titoli. Filtrato sugli
+    // stessi membri per non nominare mai nessuno fuori da quella lista.
+    const addedCount: Record<string, number> = {};
+    for (const t of allTitles) {
+      if (t.added_by && memberNames.has(t.added_by)) {
+        addedCount[t.added_by] = (addedCount[t.added_by] || 0) + 1;
+      }
+    }
 
     // ── 3. Claude: solo il profilo di gruppo e un paragrafo per persona ────
     const client = new Anthropic({ apiKey: ANTHROPIC_KEY });
@@ -192,7 +204,7 @@ Profilo per persona (n voti, media, deviazione standard dei SUOI voti, genere to
 ${JSON.stringify(members, null, 0)}
 
 Scrivi:
-1. "group_profile": 2-3 paragrafi sul gruppo nel suo complesso — quanto guardano insieme davvero (usa i titoli votati da tutti, se ce ne sono), chi si comporta da curatore della collezione (chi ha aggiunto più titoli) vs. chi vota poco ma premia parecchio, o altri contrasti che i numeri suggeriscono.
+1. "group_profile": 2-3 paragrafi sul gruppo nel suo complesso — quanto guardano insieme davvero (usa i titoli votati da tutti, se ce ne sono), chi si comporta da curatore della collezione (chi ha aggiunto più titoli) vs. chi vota poco ma premia parecchio, o altri contrasti che i numeri suggeriscono. Nomina per nome SOLO le persone elencate nel "Profilo per persona" sotto — se vuoi parlare del gruppo nel suo insieme senza nominare qualcuno specifico, va bene restare generico ("qualcuno nel gruppo...").
 2. "members": un oggetto {"user", "blurb"} per OGNI persona elencata sopra (stesso identico nome, non tradurlo/abbreviarlo), un paragrafo di 2-4 frasi che ne racconta il gusto personale usando i suoi dati concreti — regista o genere che ama, i titoli a cui ha dato il voto più alto, e se ha una deviazione standard nettamente più alta o più bassa delle altre persone del gruppo fallo emergere (è "costante"/prevedibile oppure "polarizzato"/estremo — ma solo se il dato lo giustifica davvero, non forzarlo per tutti).
 
 Formattazione: evidenzia con **doppi asterischi** solo i 2-3 dati o nomi davvero rilevanti per frase (un titolo, un regista, un numero) — non l'intera frase, non ogni numero. Niente altra formattazione markdown.`,
