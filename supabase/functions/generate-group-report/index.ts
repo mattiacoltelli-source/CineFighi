@@ -146,12 +146,6 @@ Deno.serve(async (req) => {
       if (!votesByTitle.has(v.title_id)) votesByTitle.set(v.title_id, {});
       votesByTitle.get(v.title_id)![v.user_name] = Number(v.vote);
     }
-    const allVotedTitles = allTitles
-      .filter(t => users.every(u => votesByTitle.get(t.id)?.[u] !== undefined))
-      .map(t => {
-        const vals = Object.values(votesByTitle.get(t.id)!);
-        return { title: t.title, avg: average(vals) };
-      });
 
     // Chi non ha ancora votato abbastanza (utente appena entrato, o poco
     // attivo) non entra nel prompt: sotto la soglia non c'è abbastanza dato
@@ -166,6 +160,19 @@ Deno.serve(async (req) => {
     const allMembers = users.map(u => memberStats(allTitles, votesByUser, u)).sort((a, b) => b.n - a.n);
     const members = allMembers.filter(m => m.n >= MIN_VOTES_FOR_MEMBER_BLURB);
     const memberNames = new Set(members.map(m => m.user));
+
+    // "Tutti" nel prompt (sia il conteggio persone che "titoli votati da
+    // tutti") è sempre riferito ai membri sopra soglia, MAI al totale utenti
+    // registrati: altrimenti Claude scrive frasi come "tutti e 9" quando in
+    // realtà solo una parte di quei 9 viene davvero profilata nel report —
+    // un numero che il lettore non riesce a ricollegare a nessuno dei nomi
+    // effettivamente citati sotto.
+    const allVotedTitles = allTitles
+      .filter(t => members.length > 0 && [...memberNames].every(u => votesByTitle.get(t.id)?.[u] !== undefined))
+      .map(t => {
+        const vals = Object.values(votesByTitle.get(t.id)!);
+        return { title: t.title, avg: average(vals) };
+      });
 
     // "Titoli aggiunti per persona" è un dato editoriale quanto i voti (Claude
     // lo usa per dire chi cataloga di più) — se lo lasciassimo per TUTTI gli
@@ -194,16 +201,16 @@ Deno.serve(async (req) => {
       messages: [{
         role: "user",
         content: `Statistiche di gruppo già calcolate (non ricalcolarle):
-- Persone nel gruppo: ${users.length}, voti totali: ${allVoteValues.length}, media di gruppo: ${avgVote.toFixed(2)}
+- Persone profilate in questo report (almeno ${MIN_VOTES_FOR_MEMBER_BLURB} voti a testa): ${members.length}, voti totali: ${allVoteValues.length}, media di gruppo: ${avgVote.toFixed(2)}
 - Titoli catalogati: ${allTitles.length}
-- Titoli votati da tutti e ${users.length}: ${JSON.stringify(allVotedTitles)}
+- Titoli votati da tutte e ${members.length} le persone profilate: ${JSON.stringify(allVotedTitles)}
 - Titoli aggiunti per persona: ${JSON.stringify(addedCount)}
 
 Profilo per persona (n voti, media, deviazione standard dei SUOI voti, genere top con almeno 3 voti in quel genere, regista top con almeno 2 titoli, i suoi 3 voti più alti, i suoi 3 voti più bassi):
 ${JSON.stringify(members, null, 0)}
 
 Scrivi:
-1. "group_profile": 2-3 paragrafi sul gruppo nel suo complesso — quanto guardano insieme davvero (usa i titoli votati da tutti, se ce ne sono), chi si comporta da curatore della collezione (chi ha aggiunto più titoli) vs. chi vota poco ma premia parecchio, o altri contrasti che i numeri suggeriscono. Nomina per nome SOLO le persone elencate nel "Profilo per persona" sotto — se vuoi parlare del gruppo nel suo insieme senza nominare qualcuno specifico, va bene restare generico ("qualcuno nel gruppo...").
+1. "group_profile": 2-3 paragrafi sul gruppo nel suo complesso — quanto guardano insieme davvero (usa i titoli votati da tutte le persone profilate, se ce ne sono), chi si comporta da curatore della collezione (chi ha aggiunto più titoli) vs. chi vota poco ma premia parecchio, o altri contrasti che i numeri suggeriscono. Il gruppo "nel suo complesso" qui significa le persone profilate elencate sotto, NON il numero totale di utenti dell'app — nomina per nome SOLO le persone elencate nel "Profilo per persona", e non dire mai un numero di persone diverso da quello dato sopra. Se vuoi parlare del gruppo senza nominare qualcuno specifico, va bene restare generico ("qualcuno nel gruppo...").
 2. "members": un oggetto {"user", "blurb"} per OGNI persona elencata sopra (stesso identico nome, non tradurlo/abbreviarlo), un paragrafo di 2-4 frasi che ne racconta il gusto personale usando i suoi dati concreti — regista o genere che ama, i titoli a cui ha dato il voto più alto, e se ha una deviazione standard nettamente più alta o più bassa delle altre persone del gruppo fallo emergere (è "costante"/prevedibile oppure "polarizzato"/estremo — ma solo se il dato lo giustifica davvero, non forzarlo per tutti).
 
 Formattazione: evidenzia con **doppi asterischi** solo i 2-3 dati o nomi davvero rilevanti per frase (un titolo, un regista, un numero) — non l'intera frase, non ogni numero. Niente altra formattazione markdown.`,
