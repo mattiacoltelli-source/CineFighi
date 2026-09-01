@@ -162,10 +162,9 @@ Deno.serve(async (req) => {
     // qui evitiamo di pagare per generare un paragrafo che poi non verrebbe
     // mai mostrato.
     // Stessa soglia di app.js::MIN_VOTED_FOR_REPORT (50) — se cambi lì, cambia anche qui.
-    // Rigorosa (>, non >=): con esattamente 50 voti non si entra ancora.
     const MIN_VOTES_FOR_MEMBER_BLURB = 50;
     const allMembers = users.map(u => memberStats(allTitles, votesByUser, u)).sort((a, b) => b.n - a.n);
-    const members = allMembers.filter(m => m.n > MIN_VOTES_FOR_MEMBER_BLURB);
+    const members = allMembers.filter(m => m.n >= MIN_VOTES_FOR_MEMBER_BLURB);
     const memberNames = new Set(members.map(m => m.user));
 
     // "Titoli aggiunti per persona" è un dato editoriale quanto i voti (Claude
