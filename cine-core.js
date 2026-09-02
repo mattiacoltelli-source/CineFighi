@@ -135,6 +135,15 @@ export function firstVoter(votesObj) {
   return { name: names[0], others: names.length - 1 };
 }
 
+// Stessa logica di firstVoter, ma per una lista di nomi già pronta (es.
+// watchlist_by) invece che per le chiavi di un oggetto voti — usata per il
+// badge "chi l'ha aggiunta alla propria watchlist" nella shelf di gruppo.
+export function firstOfNames(names) {
+  const sorted = [...(names || [])].sort((a, b) => a.localeCompare(b, "it"));
+  if (!sorted.length) return null;
+  return { name: sorted[0], others: sorted.length - 1 };
+}
+
 // ─── REPORT DI GRUPPO: metriche "di curiosità" ───────────────────────────────
 // Metriche sugli stessi dati già caricati per la Home/Statistiche (nessuna
 // nuova query): chi ha votato di più, la coppia coi gusti più simili, i

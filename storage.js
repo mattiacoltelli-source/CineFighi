@@ -84,10 +84,12 @@ export async function deleteUser(name) {
 export async function fetchLibrary() {
   const [
     { data: titles, error: e1 },
-    { data: votes, error: e2 }
+    { data: votes, error: e2 },
+    { data: watchlistAdds, error: e3 }
   ] = await Promise.all([
     supabase.from("titles").select("*").order("created_at", { ascending: false }),
-    supabase.from("votes").select("*")
+    supabase.from("votes").select("*"),
+    supabase.from("watchlist_adds").select("title_id, user_name")
   ]);
 
   // FIX: come fetchUsers, non ritorniamo piu' [] su errore (svuotava
@@ -95,11 +97,20 @@ export async function fetchLibrary() {
   // se mantenere i dati precedenti mostrando un avviso.
   if (e1) { console.error("fetchLibrary/titles:", e1); throw e1; }
   if (e2) { console.error("fetchLibrary/votes:", e2); throw e2; }
+  if (e3) { console.error("fetchLibrary/watchlist_adds:", e3); throw e3; }
 
   const votesByTitle = {};
   (votes || []).forEach(v => {
     if (!votesByTitle[v.title_id]) votesByTitle[v.title_id] = {};
     votesByTitle[v.title_id][v.user_name] = { vote: Number(v.vote), comment: v.comment || "" };
+  });
+
+  // Chi ha aggiunto il titolo alla PROPRIA watchlist (una riga per persona,
+  // vedi watchlist_adds) — added_by resta solo "chi lo ha catalogato per
+  // primo", non più "di chi è la watchlist".
+  const watchlistByTitle = {};
+  (watchlistAdds || []).forEach(w => {
+    (watchlistByTitle[w.title_id] ||= []).push(w.user_name);
   });
 
   return (titles || []).map(t => ({
@@ -116,6 +127,7 @@ export async function fetchLibrary() {
     status: t.status,          // 'watchlist' | 'seen'
     added_by: t.added_by,
     created_at: t.created_at,
+    watchlist_by: watchlistByTitle[t.id] || [],
     votes: votesByTitle[t.id] || {}
   }));
 }
@@ -146,6 +158,104 @@ export async function addTitle(item, status, addedBy) {
     return { ok: false, reason: "error" };
   }
   return { ok: true, title: data };
+}
+
+// Aggiunge un titolo alla PROPRIA watchlist. Se il titolo non esiste ancora
+// nella libreria condivisa lo crea (status 'watchlist', added_by = chi lo
+// cataloga per primo — solo un dato di provenienza, non più "di chi è la
+// watchlist"); se esiste già ed è ancora in watchlist, si limita a
+// registrare che anche userName lo vuole vedere (join, non un errore di
+// duplicato). Se invece è già stato segnato "visto" dal gruppo, non ha
+// senso rimetterlo in watchlist: segnaliamo l'errore.
+export async function addToWatchlist(item, userName) {
+  const { data: inserted, error: insertErr } = await supabase
+    .from("titles")
+    .insert({
+      tmdb_id: item.id,
+      media_type: item.media_type,
+      title: item.title,
+      year: item.year,
+      poster_path: item.poster_path,
+      backdrop_path: item.backdrop_path || "",
+      overview: item.overview || "",
+      genre_names: item.genre_names || [],
+      director: item.director || "",
+      status: "watchlist",
+      added_by: userName
+    })
+    .select()
+    .single();
+
+  if (!insertErr) {
+    const { error: waErr } = await supabase.from("watchlist_adds").insert({ title_id: inserted.id, user_name: userName });
+    if (waErr) console.error("addToWatchlist/watchlist_adds:", waErr);
+    return { ok: true, title: { ...inserted, watchlist_by: [userName] } };
+  }
+
+  if (insertErr.code !== "23505") {
+    console.error("addToWatchlist:", insertErr);
+    return { ok: false, reason: "error" };
+  }
+
+  const { data: existing, error: fetchErr } = await supabase
+    .from("titles")
+    .select("*")
+    .eq("tmdb_id", item.id)
+    .eq("media_type", item.media_type)
+    .single();
+  if (fetchErr || !existing) {
+    console.error("addToWatchlist/fetch:", fetchErr);
+    return { ok: false, reason: "error" };
+  }
+  if (existing.status !== "watchlist") {
+    return { ok: false, reason: "already_seen" };
+  }
+
+  const { error: joinErr } = await supabase
+    .from("watchlist_adds")
+    .insert({ title_id: existing.id, user_name: userName });
+  // 23505 qui vuol dire "ce l'hai già nella tua watchlist" — non un errore vero.
+  if (joinErr && joinErr.code !== "23505") {
+    console.error("addToWatchlist/join:", joinErr);
+    return { ok: false, reason: "error" };
+  }
+  return { ok: true, title: existing, joined: true };
+}
+
+// Rimuove il titolo dalla PROPRIA watchlist. Se dopo la rimozione nessun
+// altro lo ha più in watchlist, il titolo condiviso viene eliminato del
+// tutto (nessun titolo "orfano" invisibile a tutti).
+export async function removeFromWatchlist(titleId, userName) {
+  const { error: delErr } = await supabase
+    .from("watchlist_adds")
+    .delete()
+    .eq("title_id", titleId)
+    .eq("user_name", userName);
+  if (delErr) { console.error("removeFromWatchlist:", delErr); return { ok: false }; }
+
+  const { count, error: countErr } = await supabase
+    .from("watchlist_adds")
+    .select("id", { count: "exact", head: true })
+    .eq("title_id", titleId);
+  if (countErr) { console.error("removeFromWatchlist/count:", countErr); return { ok: true, deleted: false }; }
+
+  if ((count || 0) === 0) {
+    const { error: rmErr } = await supabase.from("titles").delete().eq("id", titleId);
+    if (rmErr) { console.error("removeFromWatchlist/title:", rmErr); return { ok: true, deleted: false }; }
+    return { ok: true, deleted: true };
+  }
+  return { ok: true, deleted: false };
+}
+
+// Usata quando un titolo torna in watchlist da "visto" (detailStatusBtn):
+// se chi tocca il pulsante non ha già una riga in watchlist_adds (es. il
+// titolo era stato aggiunto direttamente come "visto", mai passato dalla
+// watchlist), gliela creiamo — altrimenti sparirebbe subito dalla SUA
+// watchlist pur avendo appena chiesto di rimettercelo.
+export async function ensureWatchlistMembership(titleId, userName) {
+  const { error } = await supabase.from("watchlist_adds").insert({ title_id: titleId, user_name: userName });
+  if (error && error.code !== "23505") { console.error("ensureWatchlistMembership:", error); return { ok: false }; }
+  return { ok: true };
 }
 
 export async function updateTitleStatus(titleId, status) {
