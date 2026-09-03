@@ -1406,6 +1406,7 @@ async function handleClearVote() {
   const res = await removeVote(item.id, currentUser);
   if (!res.ok) { showToast("Errore, riprova", "error"); return; }
   haptic(10);
+  showToast("Voto rimosso", "success");
   if (item.votes) delete item.votes[currentUser];
   renderAfterLocalChange();
   openDetail(item.id, { push: false });
