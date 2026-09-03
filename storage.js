@@ -146,7 +146,8 @@ export async function addTitle(item, status, addedBy) {
       genre_names: item.genre_names || [],
       director: item.director || "",
       status,
-      added_by: addedBy
+      added_by: addedBy,
+      seen_at: status === "seen" ? new Date().toISOString() : null
     })
     .select()
     .single();
@@ -258,8 +259,15 @@ export async function ensureWatchlistMembership(titleId, userName) {
   return { ok: true };
 }
 
+// seen_at: quando il titolo passa a "seen" registra il momento vero (usato
+// per ordinare "Ultimi film visti"/"Ultime serie viste" in Home — prima si
+// ordinava per created_at, cioè per quando era stato CATALOGATO, non per
+// quando è stato davvero visto: un titolo in watchlist da tempo, appena
+// votato, restava sepolto nella sua vecchia posizione). Tornando indietro a
+// "watchlist" lo azzeriamo, per coerenza (non è più "visto").
 export async function updateTitleStatus(titleId, status) {
-  const { error } = await supabase.from("titles").update({ status }).eq("id", titleId);
+  const seen_at = status === "seen" ? new Date().toISOString() : null;
+  const { error } = await supabase.from("titles").update({ status, seen_at }).eq("id", titleId);
   if (error) { console.error("updateTitleStatus:", error); return { ok: false }; }
   return { ok: true };
 }
