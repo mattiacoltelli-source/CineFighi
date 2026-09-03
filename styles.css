@@ -518,6 +518,15 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
   0% { background: rgba(56,189,248,.32); }
   100% { background: var(--surface2); }
 }
+/* --spring (con overshoot) va bene per un rimbalzo/atterraggio, ma su
+   un'opacità fa "scattare" il fade quasi subito invece di sfumarlo — qui
+   serve --ease, una decelerazione pulita senza superare il 100%. */
+.vote-row.is-leaving { animation: voteRowLeave .34s var(--ease) both; }
+@keyframes voteRowLeave {
+  0% { transform: translateY(0) scale(1); opacity: 1; background: var(--surface2); }
+  30% { background: rgba(255,95,95,.22); }
+  100% { transform: translateY(-10px) scale(.92); opacity: 0; background: rgba(255,95,95,.22); }
+}
 
 /* BOTTOM NAV */
 .bottom-nav { position:fixed; left:0; right:0; bottom:0; padding:10px 16px calc(10px + env(safe-area-inset-bottom));

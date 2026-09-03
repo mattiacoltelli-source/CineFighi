@@ -1407,23 +1407,34 @@ async function handleClearVote() {
   const item = byId(currentDetailId);
   if (!item) return;
   const myVote = item.votes?.[currentUser]?.vote;
-  // Misurate PRIMA che removeVote/openDetail tolgano la riga e nascondano
-  // il bottone: dopo il redraw non esisterebbero più (vedi flyVoteToken).
-  let fromRect = null;
+  let myRow = null;
   for (const row of document.querySelectorAll("#detailVotesList .vote-row")) {
     const nameEl = row.querySelector(".vote-row__name");
-    if (nameEl && nameEl.textContent === `${currentUser} (tu)`) { fromRect = row.getBoundingClientRect(); break; }
+    if (nameEl && nameEl.textContent === `${currentUser} (tu)`) { myRow = row; break; }
   }
-  const toRect = document.getElementById("detailClearVoteBtn").getBoundingClientRect();
+  const clearBtn = document.getElementById("detailClearVoteBtn");
+  const fromRect = myRow?.getBoundingClientRect() ?? null;
+  const toRect = clearBtn.getBoundingClientRect();
 
   const res = await removeVote(item.id, currentUser);
   if (!res.ok) { showToast("Errore, riprova", "error"); return; }
   haptic(10);
   if (item.votes) delete item.votes[currentUser];
   renderAfterLocalChange();
-  openDetail(item.id, { push: false });
-  if (fromRect && Number.isFinite(myVote)) {
+
+  if (myRow && fromRect && Number.isFinite(myVote)) {
+    // A differenza di handleSaveVote (redraw subito, poi si anima verso la
+    // riga già ridisegnata), qui il redraw va RITARDATO: openDetail() nasconde
+    // subito "Rimuovi voto" e cancella la riga, quindi se ridisegnassimo prima
+    // il gettone volerebbe verso un bottone già sparito, nel vuoto. Si anima
+    // prima (riga che si ritira, gettone che torna verso il bottone ancora
+    // visibile), e solo alla fine si ridisegna lo schermo nello stato finale.
+    myRow.classList.add("is-leaving");
+    clearBtn.disabled = true;
     flyVoteToken({ from: fromRect, to: toRect, label: Number(myVote).toFixed(1), color: "linear-gradient(150deg, #ff9d9d, #ff5f5f)" });
+    setTimeout(() => openDetail(item.id, { push: false }), 680);
+  } else {
+    openDetail(item.id, { push: false });
   }
 }
 
