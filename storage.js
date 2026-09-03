@@ -127,6 +127,7 @@ export async function fetchLibrary() {
     status: t.status,          // 'watchlist' | 'seen'
     added_by: t.added_by,
     created_at: t.created_at,
+    seen_at: t.seen_at,
     watchlist_by: watchlistByTitle[t.id] || [],
     votes: votesByTitle[t.id] || {}
   }));
