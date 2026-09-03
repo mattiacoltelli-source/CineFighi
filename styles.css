@@ -37,6 +37,7 @@
   --t-fast: 120ms;
   --t-mid: 200ms;
   --ease: cubic-bezier(.22,1,.36,1);
+  --spring: cubic-bezier(.34,1.56,.64,1);
 
   --font-display: 'Outfit', system-ui, sans-serif;
   --font-body: 'Inter', system-ui, sans-serif;
@@ -497,6 +498,26 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .vote-row__name { font-family: var(--font-display); font-weight:700; font-size:13px; }
 .vote-row__comment { font-size:12px; color: var(--text2); font-style:italic; margin-top:2px; }
 .vote-row__score { font-family: var(--font-display); font-weight:800; font-size:14px; color: var(--cyan2); }
+
+/* Gettone di conferma voto (ui.js::flyVoteToken) — posizionato una sola
+   volta via left/top (senza transition lì), poi animato SOLO su transform/
+   opacity: le uniche due proprietà composte dalla GPU senza ricalcolare il
+   layout ad ogni fotogramma, per restare fluido anche su telefoni datati. */
+.vote-token {
+  position: fixed; z-index: 300; top: 0; left: 0; width: 44px; height: 44px; border-radius: 50%;
+  color: #062a3a; display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-display); font-weight: 900; font-size: 13px;
+  box-shadow: 0 10px 26px rgba(0,0,0,.35); pointer-events: none;
+  transition: transform .68s var(--spring), opacity .68s var(--spring);
+  opacity: 0; will-change: transform;
+}
+.vote-token.is-gone { opacity: 0 !important; }
+
+.vote-row.is-new { animation: voteRowLand .7s var(--spring) both; }
+@keyframes voteRowLand {
+  0% { background: rgba(56,189,248,.32); }
+  100% { background: var(--surface2); }
+}
 
 /* BOTTOM NAV */
 .bottom-nav { position:fixed; left:0; right:0; bottom:0; padding:10px 16px calc(10px + env(safe-area-inset-bottom));

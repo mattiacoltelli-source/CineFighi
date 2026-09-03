@@ -25,7 +25,7 @@ import {
   renderShelf, renderSearchResults, renderLibraryList, renderGenreFilters,
   renderGenreBars, renderRanking, toggleRankingList, renderGroupReport, toggleUserCardFact, renderTonightList, renderDiscoverResult, renderClassicResult,
   renderDetailFacts, renderVotesList, renderReportMeta, renderGroupReportMeta, renderReportContent, renderReportGate,
-  haptic, animateValue
+  haptic, animateValue, flyVoteToken, highlightMyVoteRow
 } from "./ui.js?v=eb41cdc";
 
 const MIN_VOTED_FOR_REPORT = 50;
@@ -1349,9 +1349,24 @@ async function promotePreviewItem(status) {
     : (db.find(x => x.tmdb_id === previewItem.id && x.media_type === previewItem.media_type)?.id ?? null);
 }
 
+// Al posto del toast "Voto salvato": fa volare un gettone dal bottone Salva
+// voto fino alla riga appena arrivata in "Voti del gruppo" (già visibile
+// sotto, vedi flyVoteToken/highlightMyVoteRow in ui.js). fromRect va
+// misurato PRIMA del redraw di openDetail (il bottone esiste già), toRect
+// dopo (la riga con "(tu)" non esiste finché renderVotesList non la disegna).
+function playVoteSaveAnimation(fromRect, vote) {
+  requestAnimationFrame(() => {
+    const toRect = highlightMyVoteRow(currentUser);
+    if (toRect) {
+      flyVoteToken({ from: fromRect, to: toRect, label: Number(vote).toFixed(1), color: "linear-gradient(150deg, var(--cyan2), var(--cyan))" });
+    }
+  });
+}
+
 async function handleSaveVote() {
   const vote = Number(document.getElementById("detailVoteSlider").value);
   const comment = document.getElementById("detailCommentInput").value.trim();
+  const saveBtnRect = document.getElementById("detailSaveVoteBtn").getBoundingClientRect();
 
   if (previewItem) {
     // Un voto significa sempre "l'ho già visto": lo salviamo come visto, mai in watchlist
@@ -1360,13 +1375,13 @@ async function handleSaveVote() {
     const res = await upsertVote(savedId, currentUser, vote, comment);
     if (!res.ok) { showToast("Errore nel salvare il voto, riprova", "error"); return; }
     haptic(12);
-    showToast("Voto salvato", "success");
     removeFromTonightCard(previewItem.id, previewItem.media_type);
     previewItem = null;
     const saved = byId(savedId);
     if (saved) { saved.votes = saved.votes || {}; saved.votes[currentUser] = { vote, comment }; }
     renderAfterLocalChange();
     openDetail(savedId, { push: false });
+    playVoteSaveAnimation(saveBtnRect, vote);
     return;
   }
 
@@ -1381,22 +1396,35 @@ async function handleSaveVote() {
     if (statusRes.ok) item.status = "seen";
   }
   haptic(12);
-  showToast("Voto salvato", "success");
   item.votes = item.votes || {};
   item.votes[currentUser] = { vote, comment };
   renderAfterLocalChange();
   openDetail(item.id, { push: false });
+  playVoteSaveAnimation(saveBtnRect, vote);
 }
 
 async function handleClearVote() {
   const item = byId(currentDetailId);
   if (!item) return;
+  const myVote = item.votes?.[currentUser]?.vote;
+  // Misurate PRIMA che removeVote/openDetail tolgano la riga e nascondano
+  // il bottone: dopo il redraw non esisterebbero più (vedi flyVoteToken).
+  let fromRect = null;
+  for (const row of document.querySelectorAll("#detailVotesList .vote-row")) {
+    const nameEl = row.querySelector(".vote-row__name");
+    if (nameEl && nameEl.textContent === `${currentUser} (tu)`) { fromRect = row.getBoundingClientRect(); break; }
+  }
+  const toRect = document.getElementById("detailClearVoteBtn").getBoundingClientRect();
+
   const res = await removeVote(item.id, currentUser);
   if (!res.ok) { showToast("Errore, riprova", "error"); return; }
   haptic(10);
   if (item.votes) delete item.votes[currentUser];
   renderAfterLocalChange();
   openDetail(item.id, { push: false });
+  if (fromRect && Number.isFinite(myVote)) {
+    flyVoteToken({ from: fromRect, to: toRect, label: Number(myVote).toFixed(1), color: "linear-gradient(150deg, #ff9d9d, #ff5f5f)" });
+  }
 }
 
 async function handleToggleStatus() {
