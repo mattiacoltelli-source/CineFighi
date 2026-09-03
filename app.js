@@ -360,8 +360,15 @@ function renderHome() {
   const watch = db
     .filter(x => x.status === "watchlist" && (watchlistMode === "group" || x.watchlist_by?.includes(currentUser)))
     .slice(0, 10);
-  const seenMovies = db.filter(x => x.status === "seen" && x.media_type === "movie").slice(0, 10);
-  const seenSeries = db.filter(x => x.status === "seen" && x.media_type === "tv").slice(0, 10);
+  // db è ordinato per created_at (quando il titolo è stato CATALOGATO): va
+  // bene per la watchlist ("cosa ho aggiunto di recente"), ma "Ultimi film/
+  // serie visti" deve riflettere quando sono stati davvero VISTI — un
+  // titolo in watchlist da tempo, appena votato, altrimenti resterebbe
+  // sepolto nella sua vecchia posizione invece di comparire qui. Ordiniamo
+  // esplicitamente per seen_at (vedi storage.js::updateTitleStatus/addTitle).
+  const byRecentlySeen = (a, b) => new Date(b.seen_at || 0) - new Date(a.seen_at || 0);
+  const seenMovies = db.filter(x => x.status === "seen" && x.media_type === "movie").sort(byRecentlySeen).slice(0, 10);
+  const seenSeries = db.filter(x => x.status === "seen" && x.media_type === "tv").sort(byRecentlySeen).slice(0, 10);
 
   document.getElementById("watchShelfEmpty").textContent = watchlistMode === "group"
     ? "La watchlist del gruppo è vuota."
@@ -1390,7 +1397,7 @@ async function handleSaveVote() {
   // "l'ho visto", anche se il titolo era già in libreria come watchlist.
   if (item.status === "watchlist") {
     const statusRes = await updateTitleStatus(item.id, "seen");
-    if (statusRes.ok) item.status = "seen";
+    if (statusRes.ok) { item.status = "seen"; item.seen_at = new Date().toISOString(); }
   }
   haptic(12);
   showToast("Voto salvato", "success");
@@ -1442,6 +1449,7 @@ async function handleToggleStatus() {
   }
   haptic(12);
   item.status = nextStatus;
+  item.seen_at = nextStatus === "seen" ? new Date().toISOString() : null;
   renderAfterLocalChange();
   openDetail(item.id, { push: false });
 }
