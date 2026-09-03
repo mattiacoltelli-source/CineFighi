@@ -870,3 +870,51 @@ export function renderVotesList(votesObj, currentUser) {
     </div>
   `).join("");
 }
+
+// ─── ANIMAZIONE DI CONFERMA VOTO ───────────────────────────────────────────
+// Al posto del solo toast "Voto salvato": un gettone vola dal bottone Salva/
+// Rimuovi voto fino alla riga in "Voti del gruppo" (e viceversa quando si
+// rimuove) — i voti sono già visibili lì sotto, quindi il gettone è solo la
+// conferma del salvataggio, non un modo per "scoprire" qualcosa di nascosto.
+// Overlay indipendente dal DOM reale (posizionato via left/top UNA SOLA
+// volta, senza transition — poi animato solo su transform/opacity, mai su
+// left/top, per restare composto dalla GPU anche su telefoni datati): non
+// serve intercettare il redraw di renderVotesList, bastano le posizioni di
+// partenza/arrivo misurate prima e dopo (vedi handleSaveVote/handleClearVote
+// in app.js).
+export function flyVoteToken({ from, to, label, color }) {
+  if (!from || !to) return;
+  const fx = from.left + from.width / 2, fy = from.top + from.height / 2;
+  const tx = to.left + to.width / 2, ty = to.top + to.height / 2;
+  const token = document.createElement("div");
+  token.className = "vote-token";
+  token.textContent = label;
+  token.style.left = `${fx}px`;
+  token.style.top = `${fy}px`;
+  token.style.background = color;
+  token.style.transform = "translate(-50%,-50%) rotateY(0deg) scale(1)";
+  document.body.appendChild(token);
+
+  requestAnimationFrame(() => {
+    token.style.transform = `translate(calc(-50% + ${tx - fx}px), calc(-50% + ${ty - fy}px)) rotateY(720deg) scale(.8)`;
+    token.style.opacity = "1";
+  });
+  setTimeout(() => token.classList.add("is-gone"), 560);
+  setTimeout(() => token.remove(), 700);
+}
+
+// Trova, dopo un redraw di #detailVotesList, la riga del voto dell'utente
+// corrente ("Nome (tu)"), la evidenzia brevemente e ne ritorna la posizione
+// (per fare da punto di arrivo a flyVoteToken). null se non la trova.
+export function highlightMyVoteRow(currentUser) {
+  const rows = document.querySelectorAll("#detailVotesList .vote-row");
+  for (const row of rows) {
+    const nameEl = row.querySelector(".vote-row__name");
+    if (nameEl && nameEl.textContent === `${currentUser} (tu)`) {
+      row.classList.add("is-new");
+      setTimeout(() => row.classList.remove("is-new"), 700);
+      return row.getBoundingClientRect();
+    }
+  }
+  return null;
+}
