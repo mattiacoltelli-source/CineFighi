@@ -87,6 +87,18 @@ function initUpdateCheck() {
         }
       });
     });
+
+    // Installata da home screen, "chiudere e riaprire" spesso NON ricarica
+    // davvero la pagina: iOS/Android la riprendono da dove era rimasta
+    // (bfcache) invece di rieseguire questo script, quindi reg.update() qui
+    // sopra non gira mai più — un aggiornamento reale può restare invisibile
+    // a tempo indeterminato anche dopo un vero riavvio dell'app. pageshow
+    // (con persisted=true proprio per il ripristino da bfcache) copre
+    // questo caso; visibilitychange copre anche il semplice "torno dal
+    // background" senza passare da bfcache.
+    const recheckForUpdate = () => { if (document.visibilityState === "visible") reg.update(); };
+    window.addEventListener("pageshow", recheckForUpdate);
+    document.addEventListener("visibilitychange", recheckForUpdate);
   }).catch(() => {});
 
   let alreadyReloading = false;
