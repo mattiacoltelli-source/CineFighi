@@ -2,7 +2,7 @@
 // Tutte le chiamate a TMDB: ricerca, dettaglio titolo, e "discover" usato
 // dall'algoritmo di "Stasera cosa guardo" (a più livelli, come CineTracker).
 
-import { normalizedItem, uniqueKey, buildDateRange, randomPage, GENRE_NAME_TO_ID } from "./cine-core.js?v=4e76de3";
+import { normalizedItem, uniqueKey, buildDateRange, randomPage, GENRE_NAME_TO_ID } from "./cine-core.js?v=f9c8f30";
 
 const API_KEY = "c9ebaca404bbc26bad39cce1c3aa9677";
 const BASE_URL = "https://api.themoviedb.org/3";
