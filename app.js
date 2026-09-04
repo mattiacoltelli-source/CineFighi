@@ -390,6 +390,22 @@ function toggleEmpty(shelfId, emptyId, items) {
 
 // ─── RICERCA ────────────────────────────────────────────────────────────────
 
+// Mostra/nasconde la "X" per svuotare la ricerca in base al contenuto reale
+// del campo — funzione condivisa invece che chiusura locale a bindGlobalEvents,
+// perché va richiamata anche da handleAddFromSearch qui sotto: quel percorso
+// svuota #searchInput scrivendo .value direttamente, che NON genera un evento
+// "input" (a differenza di quando l'utente cancella a mano), quindi senza
+// questa chiamata esplicita la X restava visibile e non funzionante dopo aver
+// aggiunto un titolo dai risultati.
+function syncSearchClearBtn() {
+  const searchInput = document.getElementById("searchInput");
+  const searchClearBtn = document.getElementById("searchClearBtn");
+  if (!searchInput || !searchClearBtn) return;
+  const hasValue = !!searchInput.value;
+  searchClearBtn.classList.toggle("hidden", !hasValue);
+  document.querySelector(".search-input-wrap")?.classList.toggle("has-value", hasValue);
+}
+
 async function doSearch(q) {
   const sec = document.getElementById("resultsSection");
   const res = document.getElementById("results");
@@ -484,6 +500,7 @@ async function handleAddFromSearch(tmdbId, type, status) {
   if (!savedId) return;
   renderAfterLocalChange();
   document.getElementById("searchInput").value = "";
+  syncSearchClearBtn();
   document.getElementById("resultsSection").classList.add("hidden");
   openDetail(savedId);
 }
@@ -1576,21 +1593,15 @@ function bindGlobalEvents() {
   {
     const searchInput = document.getElementById("searchInput");
     const searchClearBtn = document.getElementById("searchClearBtn");
-    const searchInputWrap = document.querySelector(".search-input-wrap");
-    const syncClearBtn = () => {
-      const hasValue = !!searchInput.value;
-      searchClearBtn.classList.toggle("hidden", !hasValue);
-      searchInputWrap?.classList.toggle("has-value", hasValue);
-    };
-    searchInput.addEventListener("input", syncClearBtn);
+    searchInput.addEventListener("input", syncSearchClearBtn);
     searchClearBtn.addEventListener("click", () => {
       haptic(8);
       searchInput.value = "";
-      syncClearBtn();
+      syncSearchClearBtn();
       doSearch("");
       searchInput.focus();
     });
-    syncClearBtn();
+    syncSearchClearBtn();
   }
 
   document.querySelectorAll(".tab[data-type]").forEach(tab => {
