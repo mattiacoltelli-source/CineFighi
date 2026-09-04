@@ -140,7 +140,20 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 /* SEARCH */
 .search-box { background: var(--surface); border:1px solid var(--border); border-radius: var(--radius-lg); padding:16px; margin-bottom:6px; }
 .search-row { display:flex; gap:10px; }
-.search-row input { flex:1; border-radius: var(--radius-md); }
+.search-input-wrap { position:relative; flex:1; }
+.search-input-wrap input { border-radius: var(--radius-md); transition: padding-right var(--t-fast); }
+/* Il posto per la X si apre solo quando c'è davvero testo (quindi il
+   bottone è visibile) — riservarlo sempre tronca inutilmente il
+   placeholder anche quando non serve. */
+.search-input-wrap.has-value input { padding-right: 40px; }
+.search-clear-btn {
+  position:absolute; right:6px; top:50%; transform:translateY(-50%);
+  width:26px; height:26px; border-radius:50%; border:none;
+  background: var(--surface3); color: var(--text3);
+  display:flex; align-items:center; justify-content:center;
+  font-size:13px; line-height:1; padding:0; cursor:pointer;
+}
+.search-clear-btn:active { transform: translateY(-50%) scale(.92); }
 .search-row .btn { flex-shrink:0; width:auto; padding:13px 20px; }
 .tabs { display:flex; gap:8px; margin-top:12px; overflow-x:auto; }
 .tab {

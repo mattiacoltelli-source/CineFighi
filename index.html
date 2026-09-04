@@ -81,7 +81,10 @@
     <section id="screen-home">
       <div class="search-box">
         <div class="search-row">
-          <input id="searchInput" type="text" placeholder="Cerca film o serie…" />
+          <div class="search-input-wrap">
+            <input id="searchInput" type="text" placeholder="Cerca film o serie…" />
+            <button class="search-clear-btn hidden" id="searchClearBtn" type="button" aria-label="Cancella ricerca">✕</button>
+          </div>
           <button class="btn" id="searchBtn">Cerca</button>
         </div>
         <div class="tabs">

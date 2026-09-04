@@ -1569,6 +1569,30 @@ function bindGlobalEvents() {
     haptic(8);
     doSearch(document.getElementById("searchInput").value.trim());
   });
+
+  // "X" per svuotare la ricerca in un tap, invece di cancellare a mano e
+  // ripremere Cerca: appare solo quando c'è testo, e riusa la stessa logica
+  // di reset già usata da doSearch() per una query vuota.
+  {
+    const searchInput = document.getElementById("searchInput");
+    const searchClearBtn = document.getElementById("searchClearBtn");
+    const searchInputWrap = document.querySelector(".search-input-wrap");
+    const syncClearBtn = () => {
+      const hasValue = !!searchInput.value;
+      searchClearBtn.classList.toggle("hidden", !hasValue);
+      searchInputWrap?.classList.toggle("has-value", hasValue);
+    };
+    searchInput.addEventListener("input", syncClearBtn);
+    searchClearBtn.addEventListener("click", () => {
+      haptic(8);
+      searchInput.value = "";
+      syncClearBtn();
+      doSearch("");
+      searchInput.focus();
+    });
+    syncClearBtn();
+  }
+
   document.querySelectorAll(".tab[data-type]").forEach(tab => {
     tab.addEventListener("click", () => {
       currentType = tab.dataset.type;
