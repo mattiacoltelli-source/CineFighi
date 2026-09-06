@@ -1347,7 +1347,7 @@ function openDetail(id, options = {}) {
   document.getElementById("detailClearVoteBtn").classList.toggle("hidden", !hasMyVote);
 
   document.getElementById("detailStatusBtn").textContent =
-    item.status === "watchlist" ? "✓ Segna come visto" : "♡ Sposta in watchlist";
+    item.status === "watchlist" ? "✓ Segna come visto" : "Sposta in watchlist";
   document.getElementById("detailRemoveBtn").textContent =
     item.status === "watchlist" ? "Rimuovi dalla mia watchlist" : "Rimuovi";
   document.getElementById("detailRemoveBtn").classList.remove("hidden");
