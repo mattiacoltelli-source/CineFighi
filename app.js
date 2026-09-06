@@ -564,8 +564,12 @@ async function openPreview(tmdbId, type) {
 
   document.getElementById("detailSaveVoteBtn").textContent = "✓ Salva voto (segna come visto)";
   document.getElementById("detailClearVoteBtn").classList.add("hidden");
-  document.getElementById("detailStatusBtn").textContent = "♡ Aggiungi a watchlist";
+  const previewStatusBtn = document.getElementById("detailStatusBtn");
+  previewStatusBtn.textContent = "♡ Aggiungi a watchlist";
+  previewStatusBtn.classList.add("btn");
+  previewStatusBtn.classList.remove("btn-link-quiet");
   document.getElementById("detailRemoveBtn").classList.add("hidden");
+  document.getElementById("detailPrimaryActions").classList.remove("detail-primary-actions--seen");
 
   goToScreen("detail");
   pushHistoryState("detail");
@@ -1346,11 +1350,15 @@ function openDetail(id, options = {}) {
   document.getElementById("detailSaveVoteBtn").textContent = hasMyVote ? "Aggiorna voto" : "Salva voto";
   document.getElementById("detailClearVoteBtn").classList.toggle("hidden", !hasMyVote);
 
-  document.getElementById("detailStatusBtn").textContent =
-    item.status === "watchlist" ? "✓ Segna come visto" : "Sposta in watchlist";
+  const isSeen = item.status !== "watchlist";
+  const statusBtn = document.getElementById("detailStatusBtn");
+  statusBtn.textContent = isSeen ? "Segna come non visto" : "✓ Segna come visto";
+  statusBtn.classList.toggle("btn", !isSeen);
+  statusBtn.classList.toggle("btn-link-quiet", isSeen);
   document.getElementById("detailRemoveBtn").textContent =
-    item.status === "watchlist" ? "Rimuovi dalla mia watchlist" : "Rimuovi";
+    isSeen ? "Rimuovi" : "Rimuovi dalla mia watchlist";
   document.getElementById("detailRemoveBtn").classList.remove("hidden");
+  document.getElementById("detailPrimaryActions").classList.toggle("detail-primary-actions--seen", isSeen);
 
   goToScreen("detail");
   if (push) pushHistoryState("detail");

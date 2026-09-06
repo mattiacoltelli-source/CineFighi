@@ -513,6 +513,17 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
   font-family: var(--font-display); font-weight:600; font-size:13px; color: var(--red);
   text-decoration: underline; text-decoration-color: rgba(255,95,95,.35); text-underline-offset:3px;
 }
+/* Titolo già visto: niente più azione "principale" qui (il voto sopra lo è
+   già) — "Segna come non visto" è solo la correzione di un errore, non una
+   scelta di pianificazione come "Sposta in watchlist" lasciava intendere.
+   Stessa logica di .btn-link-danger, tono neutro invece che rosso. */
+.detail-primary-actions--seen { flex-direction: row; justify-content: center; gap: 20px; }
+.detail-primary-actions--seen .btn-link-danger { width: auto; }
+.btn-link-quiet {
+  background:none; border:none; width:auto; padding:6px; text-align:center;
+  font-family: var(--font-display); font-weight:600; font-size:13px; color: var(--text3);
+  text-decoration: underline; text-decoration-color: rgba(98,120,142,.35); text-underline-offset:3px;
+}
 
 .votes-list { display:flex; flex-direction:column; gap:8px; }
 .vote-row { display:flex; align-items:center; gap:10px; background: var(--surface2); border:1px solid var(--border); border-radius: var(--radius-md); padding:10px 12px; }
