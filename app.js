@@ -565,7 +565,7 @@ async function openPreview(tmdbId, type) {
   document.getElementById("detailSaveVoteBtn").textContent = "✓ Salva voto (segna come visto)";
   document.getElementById("detailClearVoteBtn").classList.add("hidden");
   const previewStatusBtn = document.getElementById("detailStatusBtn");
-  previewStatusBtn.textContent = "♡ Aggiungi a watchlist";
+  previewStatusBtn.textContent = "Aggiungi a watchlist";
   previewStatusBtn.classList.add("btn");
   previewStatusBtn.classList.remove("btn-link-quiet");
   document.getElementById("detailRemoveBtn").classList.add("hidden");
