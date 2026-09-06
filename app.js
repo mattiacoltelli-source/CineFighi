@@ -563,6 +563,7 @@ async function openPreview(tmdbId, type) {
   document.getElementById("detailCommentInput").value = "";
 
   document.getElementById("detailSaveVoteBtn").textContent = "✓ Salva voto (segna come visto)";
+  document.getElementById("detailSaveVoteBtn").classList.add("btn--full-row");
   document.getElementById("detailClearVoteBtn").classList.add("hidden");
   const previewStatusBtn = document.getElementById("detailStatusBtn");
   previewStatusBtn.textContent = "Aggiungi a watchlist";
@@ -1348,6 +1349,7 @@ function openDetail(id, options = {}) {
 
   const hasMyVote = !!item.votes?.[currentUser];
   document.getElementById("detailSaveVoteBtn").textContent = hasMyVote ? "Aggiorna voto" : "Salva voto";
+  document.getElementById("detailSaveVoteBtn").classList.toggle("btn--full-row", !hasMyVote);
   document.getElementById("detailClearVoteBtn").classList.toggle("hidden", !hasMyVote);
 
   const isSeen = item.status !== "watchlist";

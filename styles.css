@@ -503,6 +503,11 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .vote-slider-value { font-family: var(--font-display); font-weight:900; font-size:22px; color: var(--cyan2); min-width:40px; text-align:right; }
 
 .detail-actions-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:14px; }
+/* Quando "Rimuovi voto" è nascosto (nessun voto ancora salvato), "Salva
+   voto" resterebbe comunque fissato a metà colonna della grid a 2 — questa
+   classe gli fa occupare tutta la riga (vedi app.js, stesso punto dove si
+   nasconde/mostra detailClearVoteBtn). */
+.detail-actions-row .btn--full-row { grid-column: 1 / -1; }
 /* "Segna come visto" è l'azione che si usa di continuo, "Rimuovi" è
    distruttiva e rara (il titolo può avere voti di altre persone del
    gruppo) — niente più stesso peso in griglia 2x2: pulsante pieno +
