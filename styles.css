@@ -603,6 +603,7 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 
 .report-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px; }
 .report-head .section__title { font-size:26px; font-weight:800; }
+#reportTitleTap { padding: 10px 8px; margin: -10px -8px; }
 
 .refresh-btn {
   flex:none; display:inline-flex; align-items:center; gap:6px; padding:8px 13px;
