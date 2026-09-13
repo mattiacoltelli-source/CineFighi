@@ -1427,13 +1427,15 @@ function bindGlobalEvents() {
   // conferma, una rigenerazione immediata del report attualmente aperto
   // (Io o Gruppo) — utile per non aspettare l'aggiornamento automatico
   // annuale quando arriva un utente nuovo o sono cambiati un bel po' di
-  // voti. Il conteggio si azzera da solo se passano più di 2,5s tra un tap
+  // voti. Il conteggio si azzera da solo se passano più di 4s tra un tap
   // e il successivo, per non scattare per sbaglio con tap normali sparsi.
+  // Ogni tap dà un feedback tattile leggero così l'utente sente che viene
+  // contato, senza doverlo verificare a schermo.
   document.getElementById("reportTitleTap").addEventListener("click", () => {
     reportTapCount++;
     clearTimeout(reportTapTimer);
-    reportTapTimer = setTimeout(() => { reportTapCount = 0; }, 2500);
-    if (reportTapCount < 7) return;
+    reportTapTimer = setTimeout(() => { reportTapCount = 0; }, 4000);
+    if (reportTapCount < 7) { haptic(6); return; }
     reportTapCount = 0;
     clearTimeout(reportTapTimer);
     haptic(20);
