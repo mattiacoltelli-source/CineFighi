@@ -774,10 +774,13 @@ function renderReportScreen() {
   // Il bottone compare solo per generare il PRIMO report (e solo quando si
   // hanno abbastanza titoli votati): dopo, gli aggiornamenti sono automatici.
   // Ha senso solo in vista "Io". Il Gruppo non ha un tasto equivalente:
-  // si aggiorna da solo ogni lunedì alle 8 (cron reale lato Supabase, vedi
-  // la migrazione weekly_group_report_cron — maybeAutoRefreshGroupReport
-  // qui resta solo come rete di sicurezza), o subito col gesto nascosto
-  // dei 7 tap sul titolo "Report".
+  // il cron gira ogni lunedì alle 8 (vedi la migrazione
+  // weekly_group_report_cron) ma rigenera solo se sono passati almeno 4
+  // mesi dall'ultimo report (controllo dentro
+  // maybe_trigger_group_report_regen, lato SQL — maybeAutoRefreshGroupReport
+  // qui resta solo come rete di sicurezza), o si aggiorna subito col gesto
+  // nascosto dei 7 tap sul titolo "Report" (che invece forza sempre la
+  // rigenerazione, senza controllare l'intervallo).
   btn.classList.toggle("hidden", !isIo || hasReport || votedCount < MIN_VOTED_FOR_REPORT);
 }
 
@@ -874,18 +877,17 @@ function maybeAutoRefreshReport() {
   if (new Date() >= nextDue) handleReportRefresh();
 }
 
-// Stesso schema del report personale sopra: se è passato più di un anno
-// dall'ultima generazione, si rigenera da sola in background — così un
-// utente nuovo che nel frattempo ha iniziato a votare finisce comunque nel
-// report di gruppo entro un anno, senza che nessuno debba ricordarsi di
-// toccare "Aggiorna" (che resta comunque disponibile per un aggiornamento
-// immediato, es. appena arriva qualcuno di nuovo).
+// Rete di sicurezza, non il trigger principale (quello è il cron
+// settimanale + maybe_trigger_group_report_regen lato SQL, vedi sopra): se
+// per qualche motivo il cron non ha rigenerato e sono comunque passati più
+// di 4 mesi dall'ultima generazione, la tab Report lo fa qui appena
+// qualcuno la apre, senza aspettare il prossimo lunedì.
 function maybeAutoRefreshGroupReport() {
   if (!groupReportCache || groupReportRefreshing) return;
   const last = new Date(groupReportCache.generated_at);
   if (isNaN(last.getTime())) return;
   const nextDue = new Date(last);
-  nextDue.setFullYear(nextDue.getFullYear() + 1);
+  nextDue.setMonth(nextDue.getMonth() + 4);
   if (new Date() >= nextDue) handleGroupReportRefresh();
 }
 
@@ -1568,7 +1570,7 @@ function bindGlobalEvents() {
     askConfirm(
       isIo
         ? "Rigenerare ora il tuo report personale? Userà una chiamata a Claude, anche se non è ancora passato un anno dall'ultimo aggiornamento."
-        : "Rigenerare ora il report di gruppo? Userà una chiamata a Claude, anche se non è ancora passato un anno dall'ultimo aggiornamento.",
+        : "Rigenerare ora il report di gruppo? Userà una chiamata a Claude, anche se non sono ancora passati 4 mesi dall'ultimo aggiornamento.",
       async () => { if (isIo) await handleReportRefresh(); else await handleGroupReportRefresh(); },
       { yesLabel: "Rigenera", danger: false }
     );
