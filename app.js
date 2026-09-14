@@ -669,7 +669,7 @@ function renderStats() {
 // personale per ogni utente (basato SOLO sui titoli che ha votato lui).
 // Il tasto "Aggiorna" è attivo solo finché non esiste ancora un report: una
 // volta generato per la prima volta, gli aggiornamenti successivi avvengono
-// da soli una volta all'anno (controllato qui, ad ogni apertura della tab).
+// da soli ogni 3 mesi (controllato qui, ad ogni apertura della tab).
 
 let reportCache = null;
 let reportRefreshing = false;
@@ -734,16 +734,16 @@ async function handleReportRefresh() {
   }
 }
 
-// Nessun cron lato Supabase (a differenza di Cos90): il controllo "è passato
-// più di un anno dall'ultimo report?" avviene qui, ad ogni apertura della
-// tab Report — se sì, si rigenera da sola in background, senza bisogno che
-// l'utente tocchi alcun bottone.
+// Nessun cron lato Supabase (a differenza di Cos90): il controllo "sono
+// passati più di 3 mesi dall'ultimo report?" avviene qui, ad ogni apertura
+// della tab Report — se sì, si rigenera da sola in background, senza
+// bisogno che l'utente tocchi alcun bottone.
 function maybeAutoRefreshReport() {
   if (!reportCache || reportRefreshing) return;
   const last = new Date(reportCache.generated_at);
   if (isNaN(last.getTime())) return;
   const nextDue = new Date(last);
-  nextDue.setFullYear(nextDue.getFullYear() + 1);
+  nextDue.setMonth(nextDue.getMonth() + 3);
   if (new Date() >= nextDue) handleReportRefresh();
 }
 

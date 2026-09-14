@@ -6,8 +6,8 @@
 // libreria condivisa del gruppo.
 //
 // Chiamata: on-demand dal tasto "Aggiorna" nella tab Report (solo la prima
-// volta), poi in automatico una volta all'anno controllato lato client
-// (vedi storage.js::loadLatestReport) — nessun cron lato Supabase.
+// volta), poi in automatico ogni 3 mesi controllato lato client
+// (vedi app.js::maybeAutoRefreshReport) — nessun cron lato Supabase.
 //
 // Le statistiche (medie, conteggi, registi con più titoli) sono calcolate
 // qui in codice, NON dal modello — a Claude chiediamo solo il profilo

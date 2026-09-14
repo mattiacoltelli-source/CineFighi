@@ -185,7 +185,7 @@ export async function removeVote(titleId, userName) {
 
 
 
-// ─── REPORT (profilo + consigli generati da Claude, una volta all'anno per utente) ──
+// ─── REPORT (profilo + consigli generati da Claude, ogni 3 mesi per utente) ──
 // Sola lettura dal client: la riga viene scritta solo dalla Edge Function
 // "generate-report" (chiave service_role, mai esposta qui). Il client legge
 // l'ultimo report di QUESTO utente e può richiederne la generazione tramite
