@@ -529,14 +529,15 @@ export function formatReportDate(iso) {
   return d.toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" });
 }
 
-// Il ciclo è ogni 3 mesi: la data del prossimo aggiornamento automatico è
-// solo indicativa (mostrata in UI) — il controllo vero avviene lato client
-// ad ogni apertura della tab (vedi app.js::maybeAutoRefreshReport).
+// Il ciclo è ogni 4 mesi (profilo di gruppo): la data del prossimo
+// aggiornamento automatico è solo indicativa (mostrata in UI) — il
+// controllo vero avviene lato client ad ogni apertura della tab (vedi
+// app.js::maybeAutoRefreshReport).
 export function nextReportDate(iso) {
   if (!iso) return "";
   const d = new Date(iso);
   if (isNaN(d.getTime())) return "";
-  d.setMonth(d.getMonth() + 3);
+  d.setMonth(d.getMonth() + 4);
   return d.toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" });
 }
 

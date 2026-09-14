@@ -6,7 +6,7 @@
 // libreria condivisa del gruppo.
 //
 // Chiamata: on-demand dal tasto "Aggiorna" nella tab Report (solo la prima
-// volta), poi in automatico ogni 3 mesi controllato lato client
+// volta), poi in automatico ogni 4 mesi controllato lato client
 // (vedi app.js::maybeAutoRefreshReport) — nessun cron lato Supabase.
 //
 // Le statistiche (medie, conteggi, registi con più titoli) sono calcolate
