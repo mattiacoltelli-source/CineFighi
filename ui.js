@@ -4,8 +4,8 @@
 
 import {
   escapeHtml, mediaLabel, mediaBadgeClass, posterUrl, uniqueKey,
-  average, voteCount, rawNumberToFixed, firstVoter
-} from "./cine-core.js?v=d039684";
+  average, voteCount, rawNumberToFixed, firstVoter, firstOfNames
+} from "./cine-core.js?v=106c2af";
 
 // ─── ANIMAZIONI (numeri che contano, barre che si riempiono, tattile) ───────
 
@@ -129,12 +129,18 @@ export function switchScreen(name) {
 // apertura in assoluto dell'app su questo dispositivo: in quel caso nessun
 // titolo viene marcato "nuovo", per non riempire di puntini tutta la libreria
 // esistente al primo avvio.
-export function renderShelf(containerId, items, lastSeenAt) {
+// showAdder: mostra un badge "chi l'ha aggiunto" per i titoli senza ancora
+// voti (watchlist) — usato solo dalla shelf Watchlist in vista Gruppo, dove
+// il nome di chi ha aggiunto è l'informazione utile equivalente a "chi ha
+// votato" nelle shelf dei titoli visti (in vista Io è sempre l'utente
+// stesso, quindi ridondante).
+export function renderShelf(containerId, items, lastSeenAt, showAdder = false) {
   const el = document.getElementById(containerId);
   if (!el) return;
   el.innerHTML = items.map(item => {
     const avg = average(item.votes);
     const voter = firstVoter(item.votes);
+    const adder = showAdder ? firstOfNames(item.watchlist_by) : null;
     const isNew = !!(lastSeenAt && item.created_at && item.created_at > lastSeenAt);
     return `
       <div class="shelf-card open-detail" data-id="${item.id}">
@@ -151,7 +157,14 @@ export function renderShelf(containerId, items, lastSeenAt) {
               ` : ""}
               <span class="shelf-card__vote">★ ${avg.toFixed(1)}</span>
             </div>
-          ` : ""}
+          ` : (adder ? `
+            <div class="shelf-card__bottom">
+              <span class="shelf-card__voter">
+                <span class="shelf-card__voter-name">${escapeHtml(adder.name)}</span>
+                ${adder.others > 0 ? `<span class="shelf-card__voter-count">+${adder.others}</span>` : ""}
+              </span>
+            </div>
+          ` : "")}
         </div>
         <div class="shelf-card__info">
           <div class="shelf-card__title">${escapeHtml(item.title)}</div>
@@ -164,21 +177,29 @@ export function renderShelf(containerId, items, lastSeenAt) {
 
 // ─── SEARCH RESULTS ──────────────────────────────────────────────────────────
 
-export function renderSearchResults(items, libraryMap) {
+export function renderSearchResults(items, libraryMap, currentUser) {
   return items.map(item => {
     const key = `${item.media_type}_${item.id}`;
-    const libId = libraryMap.get(key);
+    const lib = libraryMap.get(key);
+    // "già mio" = l'ho già visto/votato, oppure è già nella mia watchlist.
+    // Se invece è in watchlist di qualcun altro ma non ancora mia, resta
+    // agganciabile: i due bottoni restano attivi (♡ mi unisce alla stessa
+    // watchlist condivisa, vedi addToWatchlist in storage.js) invece del
+    // tag bloccante "già in libreria".
+    const alreadyMine = !!lib && (lib.status === "seen" || !!lib.watchlist_by?.includes(currentUser));
+    const canJoinWatchlist = !!lib && !alreadyMine && lib.status === "watchlist";
+    const showTag = !!lib && alreadyMine;
     return `
       <div class="poster-card">
-        <div class="poster-card__img ${libId ? "open-detail" : ""}" data-id="${libId || ""}"
+        <div class="poster-card__img ${showTag ? "open-detail" : ""}" data-id="${showTag ? lib.id : ""}"
              style="background-image:url('${posterUrl(item.poster_path)}')">
           <span class="badge ${mediaBadgeClass(item)}">${mediaLabel(item)}</span>
-          ${libId
+          ${showTag
             ? `<span class="poster-card__tag">✓ Già in libreria · tocca per votare</span>`
             : `
               <div class="poster-card__actions">
                 <button class="poster-btn poster-btn--watch action-add" data-id="${item.id}" data-type="${item.media_type}" data-status="watchlist">
-                  ♡ Lista
+                  ♡ ${canJoinWatchlist ? "Anche a me" : "Lista"}
                 </button>
                 <button class="poster-btn poster-btn--seen action-add" data-id="${item.id}" data-type="${item.media_type}" data-status="seen">
                   ✓ Visto
@@ -189,7 +210,7 @@ export function renderSearchResults(items, libraryMap) {
         <div class="poster-card__info">
           <div class="poster-card__title">${escapeHtml(item.title)}</div>
           <div class="poster-card__meta">${item.year} · ${mediaLabel(item)}</div>
-          ${!libId ? `<button class="poster-card__scheda open-preview" data-id="${item.id}" data-type="${item.media_type}">Scheda →</button>` : ""}
+          ${!lib ? `<button class="poster-card__scheda open-preview" data-id="${item.id}" data-type="${item.media_type}">Scheda →</button>` : ""}
         </div>
       </div>
     `;
@@ -261,8 +282,8 @@ export function renderGenreBars(entries) {
 // "first" già risolti. Gestisce bene anche 1 o 2 soli elementi (il flag
 // si basa sulla posizione nell'array ORIGINALE, mai su un indice
 // ricalcolato dopo aver scartato gli slot vuoti — quello aveva già
-// causato un bug qui). Usata sia dalla Classifica sia da Curiosità
-// (vedi renderCuriosita) per un solo linguaggio di podio in tutta l'app.
+// causato un bug qui). Usata sia dalla Classifica sia dal Report di Gruppo
+// (vedi renderGroupReport) per un solo linguaggio di podio in tutta l'app.
 function podiumOrder(items) {
   return [
     items[1] ? { item: items[1], medal: "🥈", first: false } : null,
@@ -287,7 +308,8 @@ function rankRowHtml(item, pos, typeLabel) {
 
 // Righe mostrate SUBITO dopo il podio, prima del tasto "Mostra tutti" — con
 // centinaia di titoli votati (la Classifica non ha un minimo di voti, a
-// differenza di Curiosità: vedi mostDivisive in cine-core.js) mostrarli
+// differenza degli estremi del Report di Gruppo: vedi mostDivisive in
+// cine-core.js) mostrarli
 // tutti fin da subito significa caricare centinaia di locandine in un
 // colpo solo, ben prima che l'utente scorra fin laggiù.
 const RANKING_LIST_INITIAL = 2;
@@ -370,7 +392,7 @@ export function toggleRankingList() {
   }
 }
 
-// ─── STATS: Curiosità (solo vista Gruppo — vedi renderStats in app.js) ───────
+// ─── REPORT: tab Gruppo (calcolato lato client, nessuna chiamata a Claude) ───
 // Podio a 3 card, stessa forma di .podium-card già usata sopra per la
 // Classifica e stesso riordino 2°-1°-3° di podiumOrder() (coerenza
 // visiva: un solo linguaggio per "ecco un podio" in tutta l'app) — solo
@@ -378,7 +400,7 @@ export function toggleRankingList() {
 // naturale, e tre card sempre della stessa altezza restano più ordinate
 // di locandine finte.
 
-function curiositaCardHtml({ medal, title, meta, value, first, openDetailId }) {
+function groupPodiumCardHtml({ medal, title, meta, value, first, openDetailId }) {
   const cls = `podium-card${openDetailId != null ? " open-detail" : ""}${first ? " podium-card--first" : ""}`;
   const idAttr = openDetailId != null ? ` data-id="${openDetailId}"` : "";
   return `
@@ -405,25 +427,189 @@ function affinityCalloutHtml(label, pair, { soli = false } = {}) {
 
 function extremesPodiumHtml(items) {
   return podiumOrder(items).map(({ item, medal, first }) =>
-    curiositaCardHtml({
+    groupPodiumCardHtml({
       medal, title: item.title, meta: `${item.year} · ${item.count} voti`,
       value: `±${item.sd.toFixed(1).replace(".", ",")}`, first, openDetailId: item.id,
     })
   ).join("");
 }
 
-export function renderCuriosita({ leaderboard, pair, divergentPair, divisive, unanimous }) {
-  const wrap = document.getElementById("curiositaSection");
+// Colore identità per persona, deterministico dal nome (stessa persona =
+// sempre lo stesso colore, indipendentemente dall'ordine di rendering) —
+// usato sia nel grafico a barre "Il profilo del gruppo" sia nel bordo/
+// pallino delle user-card di "Chi siete, uno per uno".
+const IDENTITY_PALETTE = ["#38bdf8", "#ff9d4d", "#3ec97a", "#e0a640", "#d5719f", "#8b7cf6", "#4dd0e1"];
+function identityColor(name) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  return IDENTITY_PALETTE[hash % IDENTITY_PALETTE.length];
+}
+
+function memberBarRowHtml(m) {
+  const color = identityColor(m.user);
+  const width = Math.max(4, Math.min(100, Math.round(m.avg * 10)));
+  return `
+    <div class="bar-row">
+      <div class="bar-row__label">
+        <span class="bar-row__name"><span class="bar-row__dot" style="background:${color}"></span>${escapeHtml(m.user)}</span>
+        <span class="bar-row__meta"><span class="bar-row__vote">${m.avg.toFixed(2).replace(".", ",")}</span></span>
+      </div>
+      <div class="bar-track"><div class="bar__fill" style="width:${width}%; background:${color}"></div></div>
+    </div>
+  `;
+}
+
+// blurb: paragrafo editoriale opzionale scritto da Claude (Edge Function
+// generate-group-report, tramite groupReportBlurbFor sotto) — quando c'è,
+// sostituisce interamente i fatti templati qui sotto (stesso testo che
+// piaceva nell'artefatto originale, non un'approssimazione algoritmica).
+// Senza un report Claude mai generato resta il fallback templato, sempre
+// disponibile e gratuito.
+function userCardHtml(m, blurb) {
+  const color = identityColor(m.user);
+
+  // Utente nuovo, appena entrato nel gruppo, ancora senza voti: nessun dato
+  // su cui costruire una riga statistiche o un paragrafo di fatti — non ha
+  // senso mostrare "0 voti · media 0,00" né inventare gusti.
+  if (m.n === 0) {
+    return `
+      <div class="user-card" style="--u-c:${color}">
+        <div class="user-card__name"><span class="dot"></span>${escapeHtml(m.user)}</div>
+        <div class="user-card__stats">Ancora nessun voto</div>
+      </div>
+    `;
+  }
+
+  const statsParts = [`${m.n} voti`, `media ${m.avg.toFixed(2).replace(".", ",")}`];
+  if (m.label === "costante") statsParts.push(`il più costante (dev.st. ${m.sd.toFixed(2).replace(".", ",")})`);
+  else if (m.label === "polarizzato") statsParts.push(`il più polarizzato (dev.st. ${m.sd.toFixed(2).replace(".", ",")})`);
+
+  let factHtml, plainLength;
+  if (blurb) {
+    factHtml = mdBold(escapeHtml(blurb));
+    plainLength = blurb.length;
+  } else {
+    const factParts = [];
+    if (m.topDirector) factParts.push(`Regista top: <b>${escapeHtml(m.topDirector.name)}</b> (${m.topDirector.avg.toFixed(2).replace(".", ",")}).`);
+    if (m.topFilms.length) {
+      const top = m.topFilms[0];
+      const ties = m.topFilms.filter(f => f.vote === top.vote).slice(0, 2).map(f => `<b>${escapeHtml(f.title)}</b>`);
+      const list = ties.length > 1 ? ties.join(" e ") : ties[0];
+      factParts.push(`Voto più alto: ${list} (${top.vote.toFixed(1).replace(".", ",")}).`);
+    }
+    if (m.label === "polarizzato" && m.bottomFilms.length) {
+      const low = m.bottomFilms[0];
+      factParts.push(`Ma stronca senza pietà: <b>${escapeHtml(low.title)}</b> (${low.vote.toFixed(1).replace(".", ",")}).`);
+    }
+    // Riga di chiusura sui gusti personali, presente su ogni card indipendentemente
+    // dagli altri fatti sopra (regista/voto più alto): il genere che premia di
+    // più, quando ne ha votati abbastanza da non essere un dato isolato.
+    if (m.topGenre) factParts.push(`Il genere che ama di più è <b>${escapeHtml(m.topGenre.name)}</b> (media ${m.topGenre.avg.toFixed(2).replace(".", ",")}).`);
+    factHtml = factParts.join(" ");
+    plainLength = factParts.join(" ").length;
+  }
+
+  // Un paragrafo scritto da Claude gira sulle 3-5 frasi ed è alto quanto (o
+  // più di) l'intero schermo su mobile: da chiuso a 4 righe con "Leggi
+  // tutto", stesso linguaggio già usato in Classifica per "Mostra tutti/
+  // Mostra meno" (vedi toggleRankingList). Il fallback templato è quasi
+  // sempre più corto e ci sta comunque in 4 righe, quindi il bottone
+  // comparirebbe senza far vedere nulla di nuovo: lo mostriamo solo oltre
+  // una soglia di lunghezza, non sempre.
+  const needsClamp = plainLength > 200;
+  const factBlock = !factHtml ? "" : needsClamp
+    ? `
+      <div class="user-card__fact-wrap is-clamped">
+        <p class="user-card__fact">${factHtml}</p>
+        <button class="user-card__expand" data-expand-fact>
+          <span class="user-card__expand-label">Leggi tutto</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+      </div>
+    `
+    : `<p class="user-card__fact">${factHtml}</p>`;
+
+  return `
+    <div class="user-card" style="--u-c:${color}">
+      <div class="user-card__name"><span class="dot"></span>${escapeHtml(m.user)}</div>
+      <div class="user-card__stats">${statsParts.join(" · ")}</div>
+      ${factBlock}
+      ${genreChartHtml(m.topGenres)}
+    </div>
+  `;
+}
+
+// Mini-grafico "Generi preferiti" nella card di ogni utente — stesso
+// linguaggio visivo di .bar-row/.bar-track/.bar__fill già usato per i
+// generi nel report personale (vedi renderTasteReport), solo in versione
+// compatta. Puramente aggiuntivo: non tocca né sostituisce il testo sopra
+// (templato o scritto da Claude), che resta invariato.
+function genreChartHtml(topGenres) {
+  if (!topGenres || !topGenres.length) return "";
+  const rows = topGenres.map(g => {
+    const width = Math.max(4, Math.min(100, Math.round(g.avg * 10)));
+    return `
+      <div class="mini-row">
+        <div class="mini-row__label">
+          <span class="mini-row__name">${escapeHtml(g.name)}</span>
+          <span class="mini-row__vote">${g.avg.toFixed(2).replace(".", ",")}</span>
+        </div>
+        <div class="mini-track"><div class="mini-fill" style="width:${width}%"></div></div>
+      </div>
+    `;
+  }).join("");
+  return `
+    <div class="genre-block">
+      <div class="genre-block__label">Generi preferiti</div>
+      ${rows}
+    </div>
+  `;
+}
+
+// Chiamata dal click su ".user-card__expand" (delegato in app.js, vedi
+// bindGlobalEvents) — stesso schema toggle di toggleRankingList sopra.
+export function toggleUserCardFact(btn) {
+  const wrap = btn.closest(".user-card__fact-wrap");
+  if (!wrap) return;
+  const open = wrap.classList.toggle("is-open");
+  wrap.classList.toggle("is-clamped", !open);
+  btn.querySelector(".user-card__expand-label").textContent = open ? "Mostra meno" : "Leggi tutto";
+}
+
+const CLAUDE_BADGE = `<span class="by">scritto da Claude</span>`;
+
+export function renderGroupReport({ groupStats, memberProfiles, leaderboard, pair, divergentPair, divisive, unanimous, claudeReport }) {
+  const wrap = document.getElementById("groupReportBody");
   if (!wrap) return;
 
-  const votingEl = document.getElementById("curiositaVoting");
+  const claudeProfile = claudeReport?.payload?.group_profile;
+  const claudeMembers = new Map((claudeReport?.payload?.members || []).map(m => [m.user, m.blurb]));
+
+  const profileTitleEl = document.getElementById("groupReportProfileTitle");
+  if (profileTitleEl) profileTitleEl.innerHTML = `Il profilo del gruppo${claudeProfile?.length ? CLAUDE_BADGE : ""}`;
+  const membersTitleEl = document.getElementById("groupReportMembersTitle");
+  if (membersTitleEl) membersTitleEl.innerHTML = `Chi siete, uno per uno${claudeMembers.size ? CLAUDE_BADGE : ""}`;
+
+  const profileEl = document.getElementById("groupReportProfile");
+  const barsHtml = [...memberProfiles].sort((a, b) => a.avg - b.avg).map(memberBarRowHtml).join("");
+  const profileTextHtml = claudeProfile?.length
+    ? claudeProfile.map(p => `<p>${mdBold(escapeHtml(p))}</p>`).join("")
+    : `${groupStats.curatorNote ? `<p>${groupStats.curatorNote}</p>` : ""}${groupStats.contributionNote ? `<p>${groupStats.contributionNote}</p>` : ""}`;
+  profileEl.innerHTML = `${profileTextHtml}${barsHtml}`;
+
+  const membersEl = document.getElementById("groupReportMembers");
+  membersEl.innerHTML = memberProfiles.length
+    ? `<div class="user-grid">${memberProfiles.map(m => userCardHtml(m, claudeMembers.get(m.user))).join("")}</div>`
+    : `<p class="empty-hint">Nessuno ha ancora votato abbastanza titoli per un profilo personale.</p>`;
+
+  const votingEl = document.getElementById("groupReportVoting");
   votingEl.innerHTML = leaderboard.length
     ? podiumOrder(leaderboard).map(({ item, medal, first }) =>
-        curiositaCardHtml({ medal, title: item.user, value: `${item.count} voti`, first })
+        groupPodiumCardHtml({ medal, title: item.user, value: `${item.count} voti`, first })
       ).join("")
     : `<p class="empty-hint">Ancora nessun voto nel gruppo.</p>`;
 
-  const pairEl = document.getElementById("curiositaPair");
+  const pairEl = document.getElementById("groupReportPair");
   pairEl.innerHTML = (pair || divergentPair)
     ? `<div class="curiosita-stack">
         ${pair ? affinityCalloutHtml("Più affini", pair, { soli: true }) : ""}
@@ -433,9 +619,9 @@ export function renderCuriosita({ leaderboard, pair, divergentPair, divisive, un
 
   // "Gli estremi del gruppo": divisivi e unanimi sempre entrambi visibili,
   // impilati — stesso schema delle coppie di gusto sopra, niente toggle.
-  document.getElementById("curiositaDivisive").innerHTML = divisive.length ? extremesPodiumHtml(divisive)
+  document.getElementById("groupReportDivisive").innerHTML = divisive.length ? extremesPodiumHtml(divisive)
     : `<p class="empty-hint">Ancora nessun titolo con abbastanza voti per dirlo.</p>`;
-  document.getElementById("curiositaUnanimous").innerHTML = unanimous.length ? extremesPodiumHtml(unanimous)
+  document.getElementById("groupReportUnanimous").innerHTML = unanimous.length ? extremesPodiumHtml(unanimous)
     : `<p class="empty-hint">Ancora nessun titolo con abbastanza voti per dirlo.</p>`;
 }
 
@@ -529,15 +715,14 @@ export function formatReportDate(iso) {
   return d.toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" });
 }
 
-// Il ciclo è ogni 4 mesi (profilo di gruppo): la data del prossimo
-// aggiornamento automatico è solo indicativa (mostrata in UI) — il
-// controllo vero avviene lato client ad ogni apertura della tab (vedi
-// app.js::maybeAutoRefreshReport).
+// Il ciclo è una volta all'anno: la data del prossimo aggiornamento
+// automatico è solo indicativa (mostrata in UI) — il controllo vero avviene
+// lato client ad ogni apertura della tab (vedi app.js::maybeAutoRefreshReport).
 export function nextReportDate(iso) {
   if (!iso) return "";
   const d = new Date(iso);
   if (isNaN(d.getTime())) return "";
-  d.setMonth(d.getMonth() + 4);
+  d.setFullYear(d.getFullYear() + 1);
   return d.toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" });
 }
 
@@ -549,6 +734,27 @@ export function renderReportMeta(report) {
     return;
   }
   el.textContent = `Aggiornato il ${formatReportDate(report.generated_at)} · prossimo aggiornamento automatico l'${nextReportDate(report.generated_at)}`;
+}
+
+// Il Report di Gruppo si aggiorna con un cron reale lato Supabase (ogni
+// lunedì alle 8, ora italiana — vedi la migrazione weekly_group_report_cron),
+// non con il ciclo "un anno dopo l'ultimo generato" del report personale:
+// quindi il prossimo aggiornamento è sempre "il prossimo lunedì da oggi",
+// indipendente da quando è stato generato l'ultimo.
+function nextMondayDate() {
+  const d = new Date();
+  const daysUntilMonday = (8 - d.getDay()) % 7 || 7; // 0=dom..6=sab; se oggi è lunedì, il prossimo è tra 7 giorni
+  d.setDate(d.getDate() + daysUntilMonday);
+  return d.toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" });
+}
+
+export function renderGroupReportMeta(report) {
+  const el = document.getElementById("groupReportMetaLine");
+  if (!el) return;
+  const base = report
+    ? `Aggiornato il ${formatReportDate(report.generated_at)}`
+    : "Nessun report ancora generato";
+  el.textContent = `${base} · prossimo aggiornamento automatico lunedì ${nextMondayDate()} alle 8:00`;
 }
 
 // Converte i **grassetti** in stile markdown scritti da Claude in <b>, DOPO
@@ -664,3 +870,4 @@ export function renderVotesList(votesObj, currentUser) {
     </div>
   `).join("");
 }
+

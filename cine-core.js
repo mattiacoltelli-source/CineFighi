@@ -135,12 +135,21 @@ export function firstVoter(votesObj) {
   return { name: names[0], others: names.length - 1 };
 }
 
-// ─── CURIOSITÀ (Statistiche → Gruppo) ────────────────────────────────────────
-// Tre metriche in più sugli stessi dati già caricati per la Home/Statistiche
-// (nessuna nuova query): chi ha votato di più, la coppia coi gusti più
-// simili, i titoli più divisivi. Pure, sola lettura, nessuna chiamata a
-// Supabase qui dentro — prendono `db` (l'array già restituito da
-// fetchLibrary(), ogni item con `.votes`) e basta.
+// Stessa logica di firstVoter, ma per una lista di nomi già pronta (es.
+// watchlist_by) invece che per le chiavi di un oggetto voti — usata per il
+// badge "chi l'ha aggiunta alla propria watchlist" nella shelf di gruppo.
+export function firstOfNames(names) {
+  const sorted = [...(names || [])].sort((a, b) => a.localeCompare(b, "it"));
+  if (!sorted.length) return null;
+  return { name: sorted[0], others: sorted.length - 1 };
+}
+
+// ─── REPORT DI GRUPPO: metriche "di curiosità" ───────────────────────────────
+// Metriche sugli stessi dati già caricati per la Home/Statistiche (nessuna
+// nuova query): chi ha votato di più, la coppia coi gusti più simili, i
+// titoli più divisivi. Pure, sola lettura, nessuna chiamata a Supabase qui
+// dentro — prendono `db` (l'array già restituito da fetchLibrary(), ogni
+// item con `.votes`) e basta.
 
 export function votingLeaderboard(db) {
   const counts = new Map();
@@ -220,4 +229,155 @@ export function mostDivisive(db, { minVotes = 3, limit = 3 } = {}) {
 
 export function mostUnanimous(db, { minVotes = 3, limit = 3 } = {}) {
   return titlesBySd(db, minVotes).sort((a, b) => a.sd - b.sd).slice(0, limit);
+}
+
+// Un profilo per persona per il Report di Gruppo: quanto vota, quanto sono
+// costanti o polarizzati i suoi voti (deviazione standard dei SUOI voti,
+// stessa formula di titlesBySd ma applicata a una persona invece che a un
+// titolo), il genere/regista che premia di più (solo se ne ha votati
+// abbastanza, altrimenti è rumore) e i suoi voti più alti/più bassi.
+// Pure funzione su db/users, nessuna dipendenza DOM — stesso stile delle
+// altre funzioni di questo file.
+export function groupMemberProfiles(db, users, { minVotes = 0 } = {}) {
+  const profiles = users.map(user => {
+    const voted = db
+      .map(item => {
+        const v = item.votes?.[user];
+        const vote = Number(v?.vote);
+        return Number.isFinite(vote) ? { item, vote } : null;
+      })
+      .filter(Boolean);
+
+    const n = voted.length;
+    const avg = n ? voted.reduce((a, b) => a + b.vote, 0) / n : 0;
+    const variance = n ? voted.reduce((a, b) => a + (b.vote - avg) ** 2, 0) / n : 0;
+    const sd = Math.sqrt(variance);
+
+    const genreVotes = {};
+    const directorVotes = {};
+    voted.forEach(({ item, vote }) => {
+      (item.genre_names || []).forEach(g => (genreVotes[g] ||= []).push(vote));
+      if (item.director) (directorVotes[item.director] ||= []).push(vote);
+    });
+
+    const rankByAvg = (acc, minCount) => {
+      const entries = Object.entries(acc)
+        .filter(([, votes]) => votes.length >= minCount)
+        .map(([name, votes]) => ({ name, avg: votes.reduce((a, b) => a + b, 0) / votes.length, count: votes.length }));
+      entries.sort((a, b) => b.avg - a.avg);
+      return entries;
+    };
+    const genreRanking = rankByAvg(genreVotes, 3);
+
+    const sorted = [...voted].sort((a, b) => b.vote - a.vote);
+    const topFilms = sorted.slice(0, 3).map(({ item, vote }) => ({ title: item.title, vote }));
+    const bottomFilms = sorted.slice(-3).reverse().map(({ item, vote }) => ({ title: item.title, vote }));
+
+    return {
+      user, n, avg, sd,
+      topGenre: genreRanking[0] || null,
+      // Fino a 3 generi per il mini-grafico "Generi preferiti" della card
+      // (renderGroupReport in ui.js) — stessa soglia minima di 3 voti sul
+      // genere di topGenre, solo non troncata a un solo risultato.
+      topGenres: genreRanking.slice(0, 3),
+      topDirector: rankByAvg(directorVotes, 2)[0] || null,
+      topFilms, bottomFilms,
+      label: null,
+    };
+  }).sort((a, b) => b.n - a.n);
+
+  // "il più costante"/"il più polarizzato" vanno assegnati una sola volta
+  // ciascuno, solo a chi ha davvero il minimo/massimo di deviazione standard
+  // — mai a più persone insieme, altrimenti si contraddicono a vicenda.
+  // Richiede almeno 3 voti per essere un dato significativo (1-2 voti
+  // identici farebbero sembrare "costantissimo" chi ha semplicemente
+  // votato poco).
+  const eligible = profiles.filter(m => m.n >= 3);
+  if (eligible.length >= 2) {
+    const steadiest = eligible.reduce((a, b) => (b.sd < a.sd ? b : a));
+    const mostPolarized = eligible.reduce((a, b) => (b.sd > a.sd ? b : a));
+    if (steadiest !== mostPolarized) {
+      steadiest.label = "costante";
+      mostPolarized.label = "polarizzato";
+    }
+  }
+
+  // Applicato DOPO l'assegnazione delle etichette sopra (che devono girare
+  // sulla lista completa, non su quella già tagliata) — chi non raggiunge
+  // minVotes non ha abbastanza dati per un profilo vero, sparisce dal
+  // risultato invece di mostrare una card striminzita o vuota.
+  return profiles.filter(m => m.n >= minVotes);
+}
+
+// Prosa di apertura del Report di Gruppo: quali titoli ha visto tutto il
+// gruppo insieme (con quello più amato segnalato a parte), chi è il
+// curatore della collezione (chi ha aggiunto più titoli) e chi vota poco
+// ma premia parecchio. Pure funzione su db/users — nessuna chiamata a
+// Claude: sono frasi templata con numeri reali, non testo generato a
+// runtime (per questo il Report di Gruppo non ha il badge "scritto da
+// Claude" a differenza del report personale).
+export function groupProfileStats(db, users) {
+  const allVotes = [];
+  db.forEach(item => Object.values(item.votes || {}).forEach(v => {
+    const n = Number(v.vote);
+    if (Number.isFinite(n)) allVotes.push(n);
+  }));
+  const avg = allVotes.length ? allVotes.reduce((a, b) => a + b, 0) / allVotes.length : 0;
+
+  const allVotedTitles = users.length
+    ? db
+        .filter(item => users.every(u => item.votes && item.votes[u]))
+        .map(item => ({ title: item.title, avg: average(item.votes) }))
+    : [];
+
+  let curatorNote = "";
+  if (allVotedTitles.length) {
+    const bestIdx = allVotedTitles.reduce(
+      (best, t, i) => (t.avg > allVotedTitles[best].avg ? i : best), 0
+    );
+    const parts = allVotedTitles.map((t, i) => {
+      const highlight = i === bestIdx && allVotedTitles.length > 1
+        ? ", il più amato tra quelli visti davvero insieme" : "";
+      return `<b>${escapeHtml(t.title)}</b> (media ${t.avg.toFixed(1).replace(".", ",")}${highlight})`;
+    });
+    const list = parts.length > 1
+      ? `${parts.slice(0, -1).join(", ")} e ${parts[parts.length - 1]}`
+      : parts[0];
+    const verb = allVotedTitles.length === 1 ? "è stato votato" : "sono stati votati";
+    curatorNote = `Su ${db.length} titoli catalogati, solo <b>${allVotedTitles.length}</b> ${verb} da tutti e ${users.length}: ${list}. Il gruppo guarda insieme meno spesso di quanto sembri — ognuno porta avanti anche visioni proprie.`;
+  }
+
+  const addedCount = {};
+  db.forEach(item => { if (item.added_by) addedCount[item.added_by] = (addedCount[item.added_by] || 0) + 1; });
+  const topAdder = Object.entries(addedCount).sort((a, b) => b[1] - a[1])[0];
+
+  const votesByUser = {};
+  db.forEach(item => Object.entries(item.votes || {}).forEach(([u, v]) => {
+    const n = Number(v.vote);
+    if (Number.isFinite(n)) (votesByUser[u] ||= []).push(n);
+  }));
+  const memberAvgs = Object.entries(votesByUser)
+    .map(([user, votes]) => ({ user, n: votes.length, avg: votes.reduce((a, b) => a + b, 0) / votes.length }))
+    .sort((a, b) => b.avg - a.avg);
+  const mostGenerous = memberAvgs[0] || null;
+
+  let contributionNote = "";
+  if (topAdder) {
+    const [topAdderUser, topAdderCount] = topAdder;
+    const pct = Math.round((topAdderCount / db.length) * 100);
+    const topAdderVotes = (votesByUser[topAdderUser] || []).length;
+    contributionNote = `<b>${escapeHtml(topAdderUser)}</b> è il motore assoluto: ha aggiunto ${topAdderCount} dei ${db.length} titoli (${pct}%) ed espresso ${topAdderVotes} dei ${allVotes.length} voti — è il curatore della collezione.`;
+    if (mostGenerous && mostGenerous.user !== topAdderUser) {
+      contributionNote += ` <b>${escapeHtml(mostGenerous.user)}</b> è all'opposto: vota poco (${mostGenerous.n} volte) ma quando lo fa premia quasi sempre, con la media più alta e generosa del gruppo (${mostGenerous.avg.toFixed(2).replace(".", ",")}).`;
+    }
+  }
+
+  return {
+    userCount: users.length,
+    voteCount: allVotes.length,
+    avg,
+    allVotedCount: allVotedTitles.length,
+    curatorNote,
+    contributionNote,
+  };
 }

@@ -6,8 +6,17 @@
   <title>CineFighi</title>
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#080c12">
+  <!-- iOS non segue sempre il manifest per lo stile della status bar in PWA
+       installata: "black-translucent" lascia il contenuto estendersi sotto
+       la barra (coerente con lo sfondo scuro dell'app) invece della barra
+       chiara di default. apple-mobile-web-app-capable="yes" è richiesto
+       perché status-bar-style abbia effetto. -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=d039684">
+  <link rel="stylesheet" href="styles.css?v=106c2af">
+  <!-- Sentry: solo monitoraggio errori, nessun impatto sull'avvio se il CDN non risponde -->
+  <script src="https://js.sentry-cdn.com/4ef84fcbc8dfc06cb854ce648c817467.min.js" crossorigin="anonymous"></script>
 </head>
 <body>
 
@@ -72,7 +81,10 @@
     <section id="screen-home">
       <div class="search-box">
         <div class="search-row">
-          <input id="searchInput" type="text" placeholder="Cerca film o serie…" />
+          <div class="search-input-wrap">
+            <input id="searchInput" type="text" placeholder="Cerca film o serie…" />
+            <button class="search-clear-btn hidden" id="searchClearBtn" type="button" aria-label="Cancella ricerca">✕</button>
+          </div>
           <button class="btn" id="searchBtn">Cerca</button>
         </div>
         <div class="tabs">
@@ -138,8 +150,8 @@
     <!-- STATISTICHE -->
     <section id="screen-stats" class="hidden">
       <div class="stats-toggle" id="statsIoGruppoToggle">
-        <button class="stats-toggle-btn active" data-mode="group">Gruppo</button>
-        <button class="stats-toggle-btn" data-mode="me">Io</button>
+        <button class="stats-toggle-btn active" data-mode="me">Io</button>
+        <button class="stats-toggle-btn" data-mode="group">Gruppo</button>
       </div>
 
       <div class="section">
@@ -175,42 +187,6 @@
             <div class="taste-block__legend">★ media voto</div>
           </div>
           <div id="genreBars"></div>
-        </div>
-      </div>
-
-      <!-- CURIOSITÀ: solo dati "di gruppo" (vedi renderStats in app.js), mai
-           in vista "Io" — nascosto/mostrato con .hidden, non re-inserito nel
-           DOM ad ogni render. -->
-      <div id="curiositaSection">
-        <div class="curiosita-divider">
-          <div class="curiosita-divider__line"></div>
-          <span class="curiosita-divider__label">🍿 Curiosità</span>
-          <div class="curiosita-divider__line"></div>
-        </div>
-
-        <div class="section">
-          <h3 class="section__title" style="margin-bottom:14px;">Chi ha votato di più</h3>
-          <div id="curiositaVoting" class="podium-grid podium-grid--compact"></div>
-        </div>
-
-        <div class="section">
-          <h3 class="section__title" style="margin-bottom:14px;">Le coppie di gusto</h3>
-          <div id="curiositaPair"></div>
-        </div>
-
-        <div class="section">
-          <h3 class="section__title" style="margin-bottom:14px;">Gli estremi del gruppo</h3>
-          <div class="curiosita-stack">
-            <div>
-              <div class="curiosita-stack__label">😤 Più divisivi</div>
-              <div id="curiositaDivisive" class="podium-grid podium-grid--compact"></div>
-            </div>
-            <div>
-              <div class="curiosita-stack__label">🤝 Più unanimi</div>
-              <div id="curiositaUnanimous" class="podium-grid podium-grid--compact"></div>
-            </div>
-          </div>
-          <p class="curiosita-fine-print">± = quanto in media un voto si allontana dalla media del titolo (non un voto alto — qui è "quanto il gruppo litiga", o quanto va d'accordo). Solo titoli con almeno 3 voti.</p>
         </div>
       </div>
     </section>
@@ -257,18 +233,71 @@
     <section id="screen-report" class="hidden">
       <div class="section">
         <div class="report-head">
-          <h2 class="section__title" style="margin-bottom:0;">Report</h2>
+          <h2 class="section__title" id="reportTitleTap">Report</h2>
           <button class="refresh-btn hidden" id="reportRefreshBtn">
             <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.36"/><path d="M21 3v6h-6"/></svg>
             Aggiorna
           </button>
         </div>
+
+        <div class="stats-toggle" id="reportIoGruppoToggle" style="margin-bottom:16px;">
+          <button class="stats-toggle-btn active" data-mode="io">Io</button>
+          <button class="stats-toggle-btn" data-mode="gruppo">Gruppo</button>
+        </div>
+
         <div id="reportMetaLine" class="report-meta-line">Nessun report ancora generato.</div>
 
         <div id="reportGate" class="empty-state hidden"></div>
 
         <div id="reportBody">
           <p class="empty-hint">Tocca "Aggiorna" per generare il tuo primo report.</p>
+        </div>
+
+        <!-- REPORT DI GRUPPO: le statistiche/podi sotto restano SEMPRE calcolate
+             lato client da db (gratis, istantaneo, mai rotto). Il profilo di
+             gruppo e le descrizioni per persona possono invece venire da
+             Claude (tasto "Aggiorna", Edge Function generate-group-report,
+             tabella group_report) — quando c'è un report salvato prendono il
+             badge "scritto da Claude" (vedi renderGroupReport in ui.js);
+             finché non è mai stato generato restano il testo templato
+             calcolato qui, sempre disponibile come fallback. -->
+        <div id="groupReportMetaLine" class="report-meta-line hidden">Nessun report ancora generato.</div>
+
+        <div id="groupReportBody">
+          <div class="taste-block">
+            <div class="taste-block__title" id="groupReportProfileTitle">Il profilo del gruppo</div>
+            <div id="groupReportProfile"></div>
+          </div>
+
+          <div class="taste-block">
+            <div class="taste-block__title" id="groupReportMembersTitle">Chi siete, uno per uno</div>
+            <div id="groupReportMembers"></div>
+          </div>
+
+          <div class="section">
+            <h3 class="section__title" style="margin-bottom:14px;">Chi ha votato di più</h3>
+            <div id="groupReportVoting" class="podium-grid podium-grid--compact"></div>
+          </div>
+
+          <div class="section">
+            <h3 class="section__title" style="margin-bottom:14px;">Le coppie di gusto</h3>
+            <div id="groupReportPair"></div>
+          </div>
+
+          <div class="section">
+            <h3 class="section__title" style="margin-bottom:14px;">Gli estremi del gruppo</h3>
+            <div class="curiosita-stack">
+              <div>
+                <div class="curiosita-stack__label">😤 Più divisivi</div>
+                <div id="groupReportDivisive" class="podium-grid podium-grid--compact"></div>
+              </div>
+              <div>
+                <div class="curiosita-stack__label">🤝 Più unanimi</div>
+                <div id="groupReportUnanimous" class="podium-grid podium-grid--compact"></div>
+              </div>
+            </div>
+            <p class="curiosita-fine-print">± = quanto in media un voto si allontana dalla media del titolo (non un voto alto — qui è "quanto il gruppo litiga", o quanto va d'accordo). Solo titoli con almeno 3 voti.</p>
+          </div>
         </div>
       </div>
     </section>
@@ -317,9 +346,9 @@
           <div id="detailVotesList" class="votes-list"></div>
         </div>
 
-        <div class="detail-actions-row">
-          <button id="detailStatusBtn" class="btn btn--secondary">✓ Segna come visto</button>
-          <button id="detailRemoveBtn" class="btn btn--danger">Rimuovi</button>
+        <div class="detail-primary-actions" id="detailPrimaryActions">
+          <button id="detailStatusBtn" class="btn">✓ Segna come visto</button>
+          <button id="detailRemoveBtn" class="btn-link-danger">Rimuovi</button>
         </div>
       </div>
     </section>
@@ -337,6 +366,6 @@
 
   <div id="toastWrap"></div>
 
-  <script type="module" src="app.js?v=d039684"></script>
+  <script type="module" src="app.js?v=106c2af"></script>
 </body>
 </html>

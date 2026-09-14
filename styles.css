@@ -43,7 +43,10 @@
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { scroll-behavior: smooth; }
+/* overscroll-behavior: none — su iOS, installata come PWA (standalone),
+   Safari applica di default il rimbalzo elastico su tocco/scroll vicino ai
+   bordi: senza questo la pagina intera "scivola" invece di restare ferma. */
+html { scroll-behavior: smooth; overscroll-behavior: none; }
 
 body {
   background: var(--bg);
@@ -54,6 +57,7 @@ body {
   padding: 0 0 100px;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
 }
 
 h1, h2, h3 { font-family: var(--font-display); font-weight: 800; line-height: 1.1; }
@@ -65,7 +69,10 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 800; line-height: 1.
 .app { max-width: 720px; margin: 0 auto; padding: 0 16px; }
 
 /* TOPBAR */
-.topbar { display:flex; align-items:center; justify-content:space-between; padding: 22px 0 16px; }
+/* padding-top con safe-area: in PWA installata (standalone + viewport-fit=
+   cover) il contenuto può estendersi sotto la status bar/notch/Dynamic
+   Island — senza questo il titolo "CineFighi" rischia di finirci sotto. */
+.topbar { display:flex; align-items:center; justify-content:space-between; padding: calc(22px + env(safe-area-inset-top)) 0 16px; }
 .topbar__title {
   font-family: var(--font-display); font-size: 28px; font-weight: 900; letter-spacing:-.5px;
   background: linear-gradient(135deg, var(--cyan2), var(--cyan));
@@ -119,7 +126,11 @@ button:active { transform: scale(.96); }
 .btn--secondary { background: var(--surface2); color: var(--text); border:1px solid var(--border); }
 
 input, textarea {
-  font: inherit; width:100%; background: var(--surface); color: var(--text);
+  /* font-size 16px, non "inherit": sotto i 16px Safari iOS zooma l'intera
+     pagina al focus di un campo di testo (comportamento nativo, non un bug
+     browser) — 16px è la soglia minima per evitarlo, indipendentemente dal
+     font-size di 15px usato nel resto dell'app. */
+  font-family: inherit; font-size: 16px; width:100%; background: var(--surface); color: var(--text);
   border:1px solid var(--border); border-radius: var(--radius-md); padding: 13px 16px; outline:none;
   transition: border-color var(--t-mid), background var(--t-mid);
 }
@@ -129,7 +140,20 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 /* SEARCH */
 .search-box { background: var(--surface); border:1px solid var(--border); border-radius: var(--radius-lg); padding:16px; margin-bottom:6px; }
 .search-row { display:flex; gap:10px; }
-.search-row input { flex:1; border-radius: var(--radius-md); }
+.search-input-wrap { position:relative; flex:1; }
+.search-input-wrap input { border-radius: var(--radius-md); transition: padding-right var(--t-fast); }
+/* Il posto per la X si apre solo quando c'è davvero testo (quindi il
+   bottone è visibile) — riservarlo sempre tronca inutilmente il
+   placeholder anche quando non serve. */
+.search-input-wrap.has-value input { padding-right: 40px; }
+.search-clear-btn {
+  position:absolute; right:6px; top:50%; transform:translateY(-50%);
+  width:26px; height:26px; border-radius:50%; border:none;
+  background: var(--surface3); color: var(--text3);
+  display:flex; align-items:center; justify-content:center;
+  font-size:13px; line-height:1; padding:0; cursor:pointer;
+}
+.search-clear-btn:active { transform: translateY(-50%) scale(.92); }
 .search-row .btn { flex-shrink:0; width:auto; padding:13px 20px; }
 .tabs { display:flex; gap:8px; margin-top:12px; overflow-x:auto; }
 .tab {
@@ -337,22 +361,17 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .rank-expand-btn.is-up svg { transform: rotate(180deg); }
 .rank-expand-btn__count { color: var(--text3); font-weight:600; }
 
-/* CURIOSITÀ (Statistiche → Gruppo): un solo linguaggio di podio riusato in
-   tutta la pagina — vedi podium-card--first qui sotto, condiviso con la
-   Classifica sopra (ui.js::podiumOrder). Nessun colore nuovo per posizione
-   ("oro/argento/bronzo"): solo il centro (1° posto) leggermente sollevato
-   con lo stesso --cyan-glow già usato altrove per l'enfasi. */
-.curiosita-divider { display:flex; align-items:center; gap:10px; margin: 22px 0 18px; }
-.curiosita-divider__line { flex:1; height:1px; background: linear-gradient(90deg, transparent, var(--border2), transparent); }
-.curiosita-divider__label { font-family: var(--font-display); font-size: 11px; font-weight:800; letter-spacing:.6px;
-  text-transform:uppercase; color: var(--text3); white-space:nowrap; }
-
+/* REPORT DI GRUPPO (podio "chi ha votato di più"/estremi): un solo
+   linguaggio di podio riusato in tutta la pagina — vedi podium-card--first
+   qui sotto, condiviso con la Classifica (ui.js::podiumOrder). Nessun
+   colore nuovo per posizione ("oro/argento/bronzo"): solo il centro (1°
+   posto) leggermente sollevato con lo stesso --cyan-glow usato altrove. */
 .podium-card--first { transform: translateY(-8px); border-color: rgba(56,189,248,.28); box-shadow: var(--cyan-glow); }
 .podium-card--first .podium-card__medal { font-size: 26px; }
 
-/* Card di Curiosità senza locandina (leaderboard/divisivi non ne hanno
-   una naturale): meno padding in alto, dato che manca il riquadro poster
-   che normalmente lo occupa. */
+/* Card del Report di Gruppo senza locandina (leaderboard/divisivi non ne
+   hanno una naturale): meno padding in alto, dato che manca il riquadro
+   poster che normalmente lo occupa. */
 .podium-grid--compact .podium-card { padding-top: 16px; }
 
 .affinity-callout { background: linear-gradient(160deg, rgba(56,189,248,.1), rgba(56,189,248,.02));
@@ -370,6 +389,56 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 
 .curiosita-fine-print { font-size: 11px; color: var(--text3); margin-top: 10px; line-height: 1.5; }
 
+/* REPORT DI GRUPPO: pallino colore identità sul bar-row (riusa .bar-row/
+   .bar-track/.bar__fill già definiti sopra per i Generi, solo con un
+   colore per persona invece del gradiente arancio fisso) e le user-card
+   di "Chi siete, uno per uno" (bordo sinistro + pallino nello stesso
+   colore, deterministico per nome — vedi ui.js::identityColor). */
+.bar-row__dot { width:7px; height:7px; border-radius:50%; display:inline-block; margin-right:6px; vertical-align:1px; }
+
+.user-grid { display:flex; flex-direction:column; gap:10px; width:100%; }
+.user-card { background: var(--surface2); border:1px solid var(--border); border-left:3px solid var(--u-c);
+  border-radius: var(--radius-md); padding:13px 15px; width:100%; min-width:0; }
+.user-card__name { font-family: var(--font-display); font-weight:800; font-size:16px; color: var(--text);
+  display:flex; align-items:center; gap:8px; }
+.user-card__name .dot { width:9px; height:9px; border-radius:50%; background: var(--u-c); display:inline-block; flex-shrink:0; }
+.user-card__stats { font-size:11px; color: var(--text3); margin:4px 0 8px; font-variant-numeric:tabular-nums; }
+.user-card__fact { font-size:12.5px; color: var(--text2); line-height:1.55; margin:0; }
+.user-card__fact b { color: var(--text); font-weight:700; }
+
+/* Un paragrafo scritto da Claude (3-5 frasi) da solo può superare l'altezza
+   dello schermo su mobile — chiuso a 4 righe con sfumatura + "Leggi tutto",
+   stesso linguaggio di "Mostra tutti/Mostra meno" della Classifica. */
+.user-card__fact-wrap { position: relative; }
+.user-card__fact-wrap.is-clamped .user-card__fact {
+  display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
+}
+.user-card__fact-wrap.is-clamped::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 22px; height: 24px;
+  background: linear-gradient(rgba(20, 29, 42, 0), var(--surface2)); pointer-events: none;
+}
+.user-card__expand {
+  display: inline-flex; align-items: center; gap: 3px; margin-top: 8px; background: none; border: none; padding: 0;
+  font-family: var(--font-display); font-size: 11px; font-weight: 700; color: var(--cyan2);
+}
+.user-card__expand svg { width: 10px; height: 10px; stroke: currentColor; transition: transform var(--t-mid) var(--ease); }
+.user-card__fact-wrap.is-open .user-card__expand svg { transform: rotate(180deg); }
+
+/* Mini-grafico "Generi preferiti" dentro la user-card del Report di
+   Gruppo (vedi genreChartHtml in ui.js) — stessa palette di .bar-row/
+   .bar-track/.bar__fill dei Generi nel report personale, in scala ridotta. */
+.genre-block { margin-top: 11px; }
+.genre-block__label { font-family: var(--font-display); font-weight:700; font-size:10px;
+  text-transform:uppercase; letter-spacing:.5px; color: var(--text3); margin-bottom:8px; }
+.mini-row { margin-bottom:7px; }
+.mini-row:last-child { margin-bottom:0; }
+.mini-row__label { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px; font-size:11.5px; }
+.mini-row__name { color: var(--text2); font-weight:500; }
+.mini-row__vote { font-family: var(--font-display); font-size:11.5px; font-weight:800; color: var(--cyan2);
+  font-variant-numeric:tabular-nums; }
+.mini-track { width:100%; height:4px; background: var(--surface3); border-radius: var(--radius-pill); overflow:hidden; }
+.mini-fill { height:100%; border-radius: var(--radius-pill); background: linear-gradient(90deg, var(--orange), var(--orange2)); }
+
 /* TONIGHT */
 .tonight__intro { font-size:13px; color: var(--text3); margin-bottom:16px; }
 
@@ -386,7 +455,7 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .tonight-select-wrap select {
   appearance:none; -webkit-appearance:none; -moz-appearance:none; width:100%;
   background: var(--surface2); color: var(--text); border:1px solid var(--border); border-radius: var(--radius-md);
-  min-height:56px; padding:0 44px 0 16px; font-family: var(--font-display); font-size:15px; font-weight:700;
+  min-height:56px; padding:0 44px 0 16px; font-family: var(--font-display); font-size:16px; font-weight:700;
 }
 .tonight-select-wrap select:focus { border-color: rgba(56,189,248,.45); outline:none; }
 .tonight-discover-btn { width:100%; }
@@ -434,6 +503,32 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .vote-slider-value { font-family: var(--font-display); font-weight:900; font-size:22px; color: var(--cyan2); min-width:40px; text-align:right; }
 
 .detail-actions-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:14px; }
+/* Quando "Rimuovi voto" è nascosto (nessun voto ancora salvato), "Salva
+   voto" resterebbe comunque fissato a metà colonna della grid a 2 — questa
+   classe gli fa occupare tutta la riga (vedi app.js, stesso punto dove si
+   nasconde/mostra detailClearVoteBtn). */
+.detail-actions-row .btn--full-row { grid-column: 1 / -1; }
+/* "Segna come visto" è l'azione che si usa di continuo, "Rimuovi" è
+   distruttiva e rara (il titolo può avere voti di altre persone del
+   gruppo) — niente più stesso peso in griglia 2x2: pulsante pieno +
+   link testuale, così "Rimuovi" resta a un tap ma non compete visivamente. */
+.detail-primary-actions { display:flex; flex-direction:column; gap:10px; margin-top:14px; }
+.btn-link-danger {
+  background:none; border:none; width:100%; padding:6px; text-align:center;
+  font-family: var(--font-display); font-weight:600; font-size:13px; color: var(--red);
+  text-decoration: underline; text-decoration-color: rgba(255,95,95,.35); text-underline-offset:3px;
+}
+/* Titolo già visto: niente più azione "principale" qui (il voto sopra lo è
+   già) — "Segna come non visto" è solo la correzione di un errore, non una
+   scelta di pianificazione come "Sposta in watchlist" lasciava intendere.
+   Stessa logica di .btn-link-danger, tono neutro invece che rosso. */
+.detail-primary-actions--seen { flex-direction: row; justify-content: center; gap: 20px; }
+.detail-primary-actions--seen .btn-link-danger { width: auto; }
+.btn-link-quiet {
+  background:none; border:none; width:auto; padding:6px; text-align:center;
+  font-family: var(--font-display); font-weight:600; font-size:13px; color: var(--text3);
+  text-decoration: underline; text-decoration-color: rgba(98,120,142,.35); text-underline-offset:3px;
+}
 
 .votes-list { display:flex; flex-direction:column; gap:8px; }
 .vote-row { display:flex; align-items:center; gap:10px; background: var(--surface2); border:1px solid var(--border); border-radius: var(--radius-md); padding:10px 12px; }
@@ -508,6 +603,7 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 
 .report-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px; }
 .report-head .section__title { font-size:26px; font-weight:800; }
+#reportTitleTap { padding: 10px 8px; margin: -10px -8px; }
 
 .refresh-btn {
   flex:none; display:inline-flex; align-items:center; gap:6px; padding:8px 13px;

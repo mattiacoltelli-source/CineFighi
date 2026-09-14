@@ -4,27 +4,29 @@
 
 import {
   uniqueKey, average, escapeHtml, decadeOf, GENRE_NAME_TO_ID,
-  votingLeaderboard, mostAffinePair, mostDivergentPair, mostDivisive, mostUnanimous
-} from "./cine-core.js?v=d039684";
+  votingLeaderboard, mostAffinePair, mostDivergentPair, mostDivisive, mostUnanimous,
+  groupMemberProfiles, groupProfileStats
+} from "./cine-core.js?v=106c2af";
 import {
   getCurrentUser, setCurrentUser, clearCurrentUser, MAX_USERS,
   getLastSeenAt, setLastSeenAt,
   fetchUsers, addUser, deleteUser,
-  fetchLibrary, addTitle, updateTitleStatus, removeTitle,
+  fetchLibrary, addTitle, addToWatchlist, removeFromWatchlist, ensureWatchlistMembership, updateTitleStatus, removeTitle,
   upsertVote, removeVote,
-  loadLatestReport, regenerateReport
-} from "./storage.js?v=d039684";
+  loadLatestReport, regenerateReport,
+  loadLatestGroupReport, regenerateGroupReport
+} from "./storage.js?v=106c2af";
 import {
   tmdbFetchDetail, tmdbSearch, tmdbFetchDiscoverLevel, tmdbFetchDecadeCandidates,
   tmdbFetchOutOfComfortZoneCandidates, buildFallbackQueries
-} from "./tmdb.js?v=d039684";
+} from "./tmdb.js?v=106c2af";
 import {
   showToast, avatarHtml, initScreens, switchScreen,
   renderShelf, renderSearchResults, renderLibraryList, renderGenreFilters,
-  renderGenreBars, renderRanking, toggleRankingList, renderCuriosita, renderTonightList, renderDiscoverResult, renderClassicResult,
-  renderDetailFacts, renderVotesList, renderReportMeta, renderReportContent, renderReportGate,
+  renderGenreBars, renderRanking, toggleRankingList, renderGroupReport, toggleUserCardFact, renderTonightList, renderDiscoverResult, renderClassicResult,
+  renderDetailFacts, renderVotesList, renderReportMeta, renderGroupReportMeta, renderReportContent, renderReportGate,
   haptic, animateValue
-} from "./ui.js?v=d039684";
+} from "./ui.js?v=106c2af";
 
 const MIN_VOTED_FOR_REPORT = 50;
 
@@ -35,13 +37,16 @@ let libraryStatus = "all"; // all | watchlist | seen  (impostato dai "Vedi tutto
 let libraryFilter = "all"; // all | movie | tv
 let libraryGenre = "all";
 let watchlistMode = "me";  // me | group (Home)
-let statsMode = "group";   // group | me
+let statsMode = "me";   // group | me
+let reportMode = "io"; // gruppo | io
 let rankingMedia = "movie"; // movie | tv
 let currentDetailId = null;
 let previewItem = null;    // titolo TMDB non ancora salvato, aperto solo per consultazione
 let detailReturnScreen = "home";
 let currentType = "multi"; // per la ricerca
 let confirmYesAction = null;
+let reportTapCount = 0;   // gesto nascosto "7 tap sul titolo Report" per forzare una rigenerazione
+let reportTapTimer = null;
 // "Visto l'ultima volta" letto la prima volta all'avvio (vedi init()) e poi
 // riaggiornato ogni volta che si lascia la Home per un'altra scheda (vedi
 // goToScreen/markHomeSeen): così i puntini restano visibili per tutta la
@@ -82,6 +87,18 @@ function initUpdateCheck() {
         }
       });
     });
+
+    // Installata da home screen, "chiudere e riaprire" spesso NON ricarica
+    // davvero la pagina: iOS/Android la riprendono da dove era rimasta
+    // (bfcache) invece di rieseguire questo script, quindi reg.update() qui
+    // sopra non gira mai più — un aggiornamento reale può restare invisibile
+    // a tempo indeterminato anche dopo un vero riavvio dell'app. pageshow
+    // (con persisted=true proprio per il ripristino da bfcache) copre
+    // questo caso; visibilitychange copre anche il semplice "torno dal
+    // background" senza passare da bfcache.
+    const recheckForUpdate = () => { if (document.visibilityState === "visible") reg.update(); };
+    window.addEventListener("pageshow", recheckForUpdate);
+    document.addEventListener("visibilitychange", recheckForUpdate);
   }).catch(() => {});
 
   let alreadyReloading = false;
@@ -248,8 +265,16 @@ async function renderUserPickerList() {
 
 // ─── CONFERMA AZIONI PERICOLOSE (es. eliminare un utente) ────────────────────
 
-function askConfirm(text, onYes) {
+// yesLabel/danger: le due chiamate storiche (elimina utente, rimuovi
+// titolo) sono azioni distruttive col bottone rosso "Elimina
+// definitivamente" — il gesto segreto dei 7 tap sotto (rigenera report)
+// non distrugge nulla, quindi usa un'etichetta e uno stile neutri invece
+// di riusare quelli allarmanti pensati per le cancellazioni.
+function askConfirm(text, onYes, { yesLabel = "Elimina definitivamente", danger = true } = {}) {
   document.getElementById("confirmText").textContent = text;
+  const yesBtn = document.getElementById("confirmYesBtn");
+  yesBtn.textContent = yesLabel;
+  yesBtn.classList.toggle("btn--danger", danger);
   confirmYesAction = onYes;
   document.getElementById("confirmOverlay").classList.remove("hidden");
 }
@@ -333,10 +358,17 @@ function renderHome() {
   });
 
   const watch = db
-    .filter(x => x.status === "watchlist" && (watchlistMode === "group" || x.added_by === currentUser))
+    .filter(x => x.status === "watchlist" && (watchlistMode === "group" || x.watchlist_by?.includes(currentUser)))
     .slice(0, 10);
-  const seenMovies = db.filter(x => x.status === "seen" && x.media_type === "movie").slice(0, 10);
-  const seenSeries = db.filter(x => x.status === "seen" && x.media_type === "tv").slice(0, 10);
+  // db è ordinato per created_at (quando il titolo è stato CATALOGATO): va
+  // bene per la watchlist ("cosa ho aggiunto di recente"), ma "Ultimi film/
+  // serie visti" deve riflettere quando sono stati davvero VISTI — un
+  // titolo in watchlist da tempo, appena votato, altrimenti resterebbe
+  // sepolto nella sua vecchia posizione invece di comparire qui. Ordiniamo
+  // esplicitamente per seen_at (vedi storage.js::updateTitleStatus/addTitle).
+  const byRecentlySeen = (a, b) => new Date(b.seen_at || 0) - new Date(a.seen_at || 0);
+  const seenMovies = db.filter(x => x.status === "seen" && x.media_type === "movie").sort(byRecentlySeen).slice(0, 10);
+  const seenSeries = db.filter(x => x.status === "seen" && x.media_type === "tv").sort(byRecentlySeen).slice(0, 10);
 
   document.getElementById("watchShelfEmpty").textContent = watchlistMode === "group"
     ? "La watchlist del gruppo è vuota."
@@ -346,7 +378,7 @@ function renderHome() {
   toggleEmpty("seenMovieShelf", "seenMovieShelfEmpty", seenMovies);
   toggleEmpty("seenSeriesShelf", "seenSeriesShelfEmpty", seenSeries);
 
-  renderShelf("watchShelf", watch, sessionLastSeenAt);
+  renderShelf("watchShelf", watch, sessionLastSeenAt, watchlistMode === "group");
   renderShelf("seenMovieShelf", seenMovies, sessionLastSeenAt);
   renderShelf("seenSeriesShelf", seenSeries, sessionLastSeenAt);
 }
@@ -357,6 +389,22 @@ function toggleEmpty(shelfId, emptyId, items) {
 }
 
 // ─── RICERCA ────────────────────────────────────────────────────────────────
+
+// Mostra/nasconde la "X" per svuotare la ricerca in base al contenuto reale
+// del campo — funzione condivisa invece che chiusura locale a bindGlobalEvents,
+// perché va richiamata anche da handleAddFromSearch qui sotto: quel percorso
+// svuota #searchInput scrivendo .value direttamente, che NON genera un evento
+// "input" (a differenza di quando l'utente cancella a mano), quindi senza
+// questa chiamata esplicita la X restava visibile e non funzionante dopo aver
+// aggiunto un titolo dai risultati.
+function syncSearchClearBtn() {
+  const searchInput = document.getElementById("searchInput");
+  const searchClearBtn = document.getElementById("searchClearBtn");
+  if (!searchInput || !searchClearBtn) return;
+  const hasValue = !!searchInput.value;
+  searchClearBtn.classList.toggle("hidden", !hasValue);
+  document.querySelector(".search-input-wrap")?.classList.toggle("has-value", hasValue);
+}
 
 async function doSearch(q) {
   const sec = document.getElementById("resultsSection");
@@ -396,8 +444,8 @@ async function doSearch(q) {
     }
 
     empty.classList.add("hidden");
-    const libraryMap = new Map(db.map(x => [`${x.media_type}_${x.tmdb_id}`, x.id]));
-    res.innerHTML = renderSearchResults(normalized, libraryMap);
+    const libraryMap = new Map(db.map(x => [`${x.media_type}_${x.tmdb_id}`, x]));
+    res.innerHTML = renderSearchResults(normalized, libraryMap, currentUser);
     res.dataset.cache = JSON.stringify(normalized);
   } catch (e) {
     console.error(e);
@@ -416,15 +464,34 @@ async function addItemFromCache(containerId, tmdbId, type, status) {
   if (!item) return null;
 
   const fullItem = await tmdbFetchDetail(type, tmdbId).catch(() => item);
-  const res = await addTitle(fullItem, status, currentUser);
+  const res = status === "watchlist"
+    ? await addToWatchlist(fullItem, currentUser)
+    : await addTitle(fullItem, status, currentUser);
 
   if (!res.ok) {
-    showToast(res.reason === "duplicate" ? "Già in libreria" : "Errore, riprova", "error");
+    const msg = res.reason === "already_seen" ? "Il gruppo l'ha già segnato come visto"
+      : res.reason === "duplicate" ? "Già in libreria" : "Errore, riprova";
+    showToast(msg, "error");
     return null;
   }
-  showToast(`${fullItem.title} aggiunto`, "success");
+
   haptic(12);
-  db.unshift({ ...res.title, votes: {} });
+  if (res.joined) {
+    // Titolo già esistente in watchlist (di qualcun altro): ci siamo solo
+    // uniti, non è un nuovo titolo — aggiorna l'item già presente in db
+    // invece di duplicarlo.
+    const existing = byId(res.title.id);
+    if (existing) {
+      existing.watchlist_by = existing.watchlist_by || [];
+      if (!existing.watchlist_by.includes(currentUser)) existing.watchlist_by.push(currentUser);
+    } else {
+      db.unshift({ ...res.title, votes: {}, watchlist_by: [currentUser] });
+    }
+    showToast(`${fullItem.title} aggiunto alla tua watchlist`, "success");
+  } else {
+    showToast(`${fullItem.title} aggiunto`, "success");
+    db.unshift({ ...res.title, votes: {}, watchlist_by: res.title.watchlist_by || [] });
+  }
   return res.title.id;
 }
 
@@ -433,6 +500,7 @@ async function handleAddFromSearch(tmdbId, type, status) {
   if (!savedId) return;
   renderAfterLocalChange();
   document.getElementById("searchInput").value = "";
+  syncSearchClearBtn();
   document.getElementById("resultsSection").classList.add("hidden");
   openDetail(savedId);
 }
@@ -495,9 +563,14 @@ async function openPreview(tmdbId, type) {
   document.getElementById("detailCommentInput").value = "";
 
   document.getElementById("detailSaveVoteBtn").textContent = "✓ Salva voto (segna come visto)";
+  document.getElementById("detailSaveVoteBtn").classList.add("btn--full-row");
   document.getElementById("detailClearVoteBtn").classList.add("hidden");
-  document.getElementById("detailStatusBtn").textContent = "♡ Aggiungi a watchlist";
+  const previewStatusBtn = document.getElementById("detailStatusBtn");
+  previewStatusBtn.textContent = "Aggiungi a watchlist";
+  previewStatusBtn.classList.add("btn");
+  previewStatusBtn.classList.remove("btn-link-quiet");
   document.getElementById("detailRemoveBtn").classList.add("hidden");
+  document.getElementById("detailPrimaryActions").classList.remove("detail-primary-actions--seen");
 
   goToScreen("detail");
   pushHistoryState("detail");
@@ -640,27 +713,6 @@ function renderStats() {
     .sort((a, b) => b.__score - a.__score);
 
   renderRanking(ranked, rankingMedia === "movie" ? "Film" : "Serie TV");
-
-  // Curiosità: solo in vista Gruppo, non ha un senso "personale" (chi vota
-  // di più, le coppie affini, i titoli divisivi sono per forza cose del
-  // gruppo intero, non del singolo utente). Il contenitore resta nel DOM,
-  // si nasconde/mostra con .hidden — stesso pattern già in uso altrove
-  // (es. userPickerAddRow, reportGate).
-  const curiositaEl = document.getElementById("curiositaSection");
-  if (curiositaEl) {
-    if (statsMode === "me") {
-      curiositaEl.classList.add("hidden");
-    } else {
-      curiositaEl.classList.remove("hidden");
-      renderCuriosita({
-        leaderboard: votingLeaderboard(db),
-        pair: mostAffinePair(db),
-        divergentPair: mostDivergentPair(db),
-        divisive: mostDivisive(db),
-        unanimous: mostUnanimous(db),
-      });
-    }
-  }
 }
 
 // ─── REPORT ───────────────────────────────────────────────────────────────
@@ -669,10 +721,12 @@ function renderStats() {
 // personale per ogni utente (basato SOLO sui titoli che ha votato lui).
 // Il tasto "Aggiorna" è attivo solo finché non esiste ancora un report: una
 // volta generato per la prima volta, gli aggiornamenti successivi avvengono
-// da soli ogni 4 mesi (controllato qui, ad ogni apertura della tab).
+// da soli una volta all'anno (controllato qui, ad ogni apertura della tab).
 
 let reportCache = null;
 let reportRefreshing = false;
+let groupReportCache = null;
+let groupReportRefreshing = false;
 
 function myVotedSeenCount() {
   return db.filter(x => x.status === "seen" && x.votes && x.votes[currentUser]).length;
@@ -685,25 +739,69 @@ async function renderReport() {
   });
   if (report) reportCache = report;
 
+  const groupReport = await loadLatestGroupReport(updated => {
+    groupReportCache = updated;
+    renderGroupReportScreen();
+  });
+  if (groupReport) groupReportCache = groupReport;
+
   renderReportScreen();
+  renderGroupReportScreen();
   maybeAutoRefreshReport();
+  maybeAutoRefreshGroupReport();
 }
 
 function renderReportScreen() {
+  document.querySelectorAll("#reportIoGruppoToggle .stats-toggle-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.mode === reportMode);
+  });
+
   const votedCount = myVotedSeenCount();
   const hasReport = !!reportCache;
+  const isIo = reportMode === "io";
 
   renderReportMeta(reportCache);
   renderReportContent(reportCache);
   renderReportGate(votedCount, MIN_VOTED_FOR_REPORT);
 
-  document.getElementById("reportGate").classList.toggle("hidden", hasReport || votedCount >= MIN_VOTED_FOR_REPORT);
-  document.getElementById("reportBody").classList.toggle("hidden", !hasReport && votedCount < MIN_VOTED_FOR_REPORT);
+  document.getElementById("reportMetaLine").classList.toggle("hidden", !isIo);
+  document.getElementById("reportGate").classList.toggle("hidden", !isIo || hasReport || votedCount >= MIN_VOTED_FOR_REPORT);
+  document.getElementById("reportBody").classList.toggle("hidden", !isIo || (!hasReport && votedCount < MIN_VOTED_FOR_REPORT));
+  document.getElementById("groupReportMetaLine").classList.toggle("hidden", isIo);
+  document.getElementById("groupReportBody").classList.toggle("hidden", isIo);
 
   const btn = document.getElementById("reportRefreshBtn");
   // Il bottone compare solo per generare il PRIMO report (e solo quando si
   // hanno abbastanza titoli votati): dopo, gli aggiornamenti sono automatici.
-  btn.classList.toggle("hidden", hasReport || votedCount < MIN_VOTED_FOR_REPORT);
+  // Ha senso solo in vista "Io". Il Gruppo non ha un tasto equivalente:
+  // si aggiorna da solo ogni lunedì alle 8 (cron reale lato Supabase, vedi
+  // la migrazione weekly_group_report_cron — maybeAutoRefreshGroupReport
+  // qui resta solo come rete di sicurezza), o subito col gesto nascosto
+  // dei 7 tap sul titolo "Report".
+  btn.classList.toggle("hidden", !isIo || hasReport || votedCount < MIN_VOTED_FOR_REPORT);
+}
+
+// Report di Gruppo: le statistiche/podi restano SEMPRE ricalcolate al volo
+// da `db` (già in memoria, nessuna chiamata di rete) — stesso identico
+// modello di affidabilità delle Statistiche. Il profilo di gruppo e le
+// descrizioni per persona usano invece groupReportCache quando presente
+// (scritto da Claude, vedi handleGroupReportRefresh) — renderGroupReport
+// in ui.js sa già ripiegare sul testo templato se è null. Richiamata ad
+// ogni apertura della tab Report, indipendentemente da quale sotto-vista
+// (Io/Gruppo) sia attiva al momento, così il toggle è sempre pronto senza
+// dover ricalcolare al click.
+function renderGroupReportScreen() {
+  renderGroupReportMeta(groupReportCache);
+  renderGroupReport({
+    groupStats: groupProfileStats(db, users),
+    memberProfiles: groupMemberProfiles(db, users, { minVotes: MIN_VOTED_FOR_REPORT }),
+    leaderboard: votingLeaderboard(db),
+    pair: mostAffinePair(db),
+    divergentPair: mostDivergentPair(db),
+    divisive: mostDivisive(db),
+    unanimous: mostUnanimous(db),
+    claudeReport: groupReportCache,
+  });
 }
 
 async function handleReportRefresh() {
@@ -734,17 +832,61 @@ async function handleReportRefresh() {
   }
 }
 
-// Nessun cron lato Supabase (a differenza di Cos90): il controllo "sono
-// passati più di 4 mesi dall'ultimo report?" avviene qui, ad ogni apertura
-// della tab Report — se sì, si rigenera da sola in background, senza
-// bisogno che l'utente tocchi alcun bottone.
+// Nessun tasto visibile per questo (rimosso: si aggiornava da solo ogni
+// anno comunque, vedi maybeAutoRefreshGroupReport sotto) — chiamata solo
+// dal gesto nascosto dei 7 tap (vedi bindGlobalEvents), che mostra già
+// la sua conferma prima e un toast di esito dopo: niente stato "spinning"
+// da gestire qui, solo il flag groupReportRefreshing per evitare doppie
+// chiamate in corsa.
+async function handleGroupReportRefresh() {
+  if (groupReportRefreshing) return;
+
+  if (!navigator.onLine) {
+    showToast("Sei offline. Connettiti per generare il report.", "error", "Report");
+    return;
+  }
+
+  groupReportRefreshing = true;
+
+  try {
+    const report = await regenerateGroupReport();
+    groupReportCache = report;
+    renderGroupReportScreen();
+    showToast("Report di gruppo generato.", "success", "Report");
+  } catch (e) {
+    console.error(e);
+    showToast(e.message || "Generazione non riuscita. Riprova.", "error", "Report");
+  } finally {
+    groupReportRefreshing = false;
+  }
+}
+
+// Nessun cron lato Supabase (a differenza di Cos90): il controllo "è passato
+// più di un anno dall'ultimo report?" avviene qui, ad ogni apertura della
+// tab Report — se sì, si rigenera da sola in background, senza bisogno che
+// l'utente tocchi alcun bottone.
 function maybeAutoRefreshReport() {
   if (!reportCache || reportRefreshing) return;
   const last = new Date(reportCache.generated_at);
   if (isNaN(last.getTime())) return;
   const nextDue = new Date(last);
-  nextDue.setMonth(nextDue.getMonth() + 4);
+  nextDue.setFullYear(nextDue.getFullYear() + 1);
   if (new Date() >= nextDue) handleReportRefresh();
+}
+
+// Stesso schema del report personale sopra: se è passato più di un anno
+// dall'ultima generazione, si rigenera da sola in background — così un
+// utente nuovo che nel frattempo ha iniziato a votare finisce comunque nel
+// report di gruppo entro un anno, senza che nessuno debba ricordarsi di
+// toccare "Aggiorna" (che resta comunque disponibile per un aggiornamento
+// immediato, es. appena arriva qualcuno di nuovo).
+function maybeAutoRefreshGroupReport() {
+  if (!groupReportCache || groupReportRefreshing) return;
+  const last = new Date(groupReportCache.generated_at);
+  if (isNaN(last.getTime())) return;
+  const nextDue = new Date(last);
+  nextDue.setFullYear(nextDue.getFullYear() + 1);
+  if (new Date() >= nextDue) handleGroupReportRefresh();
 }
 
 // ─── STASERA COSA GUARDO — algoritmo completo (come CineTracker) ─────────────
@@ -1167,9 +1309,7 @@ function pushHistoryState(screen) {
 }
 
 // Tornando a Statistiche dal dettaglio di un film aperto dalla Classifica
-// (podio, righe sotto, o il podio "Film più divisivi" di Curiosità — stesso
-// meccanismo open-detail/data-id ovunque, nessun caso speciale per l'uno o
-// l'altro), riporta la vista esattamente sulla sua card invece di lasciare
+// (podio o righe sotto), riporta la vista esattamente sulla sua card invece di lasciare
 // la Statistiche scrollata in cima. renderStats() appena chiamato ha già
 // ridisegnato tutto da capo (Classifica sempre collassata a podio + 2 righe,
 // vedi RANKING_LIST_INITIAL in ui.js): se il film non è tra le prime 5, va
@@ -1209,22 +1349,44 @@ function openDetail(id, options = {}) {
 
   const hasMyVote = !!item.votes?.[currentUser];
   document.getElementById("detailSaveVoteBtn").textContent = hasMyVote ? "Aggiorna voto" : "Salva voto";
+  document.getElementById("detailSaveVoteBtn").classList.toggle("btn--full-row", !hasMyVote);
   document.getElementById("detailClearVoteBtn").classList.toggle("hidden", !hasMyVote);
 
-  document.getElementById("detailStatusBtn").textContent =
-    item.status === "watchlist" ? "✓ Segna come visto" : "♡ Sposta in watchlist";
+  const isSeen = item.status !== "watchlist";
+  const statusBtn = document.getElementById("detailStatusBtn");
+  statusBtn.textContent = isSeen ? "Segna come non visto" : "✓ Segna come visto";
+  statusBtn.classList.toggle("btn", !isSeen);
+  statusBtn.classList.toggle("btn-link-quiet", isSeen);
+  document.getElementById("detailRemoveBtn").textContent =
+    isSeen ? "Rimuovi" : "Rimuovi dalla mia watchlist";
   document.getElementById("detailRemoveBtn").classList.remove("hidden");
+  document.getElementById("detailPrimaryActions").classList.toggle("detail-primary-actions--seen", isSeen);
 
   goToScreen("detail");
   if (push) pushHistoryState("detail");
 }
 
 // Salva in libreria il titolo attualmente in "consultazione" (previewItem,
-// non ancora in libreria), con lo status indicato. Se qualcun altro l'ha
-// già aggiunto nel frattempo (duplicate), recupera comunque l'id esistente.
-// Usata sia da handleSaveVote (status "seen") che da handleToggleStatus
-// (status "watchlist"). Ritorna l'id salvato, o null in caso di errore vero.
+// non ancora in libreria), con lo status indicato. Usata sia da
+// handleSaveVote (status "seen") che da handleToggleStatus (status
+// "watchlist"). Ritorna l'id salvato, o null in caso di errore vero.
 async function promotePreviewItem(status) {
+  if (status === "watchlist") {
+    // Se qualcun altro l'ha già messo in watchlist nel frattempo, ci
+    // uniamo alla stessa riga condivisa invece di fallire come duplicato
+    // (vedi addToWatchlist in storage.js).
+    const res = await addToWatchlist(previewItem, currentUser);
+    if (!res.ok) return null;
+    const existing = res.joined ? byId(res.title.id) : null;
+    if (existing) {
+      existing.watchlist_by = existing.watchlist_by || [];
+      if (!existing.watchlist_by.includes(currentUser)) existing.watchlist_by.push(currentUser);
+    } else {
+      db.unshift({ ...res.title, votes: {}, watchlist_by: res.title.watchlist_by || [currentUser] });
+    }
+    return res.title.id;
+  }
+
   const res = await addTitle(previewItem, status, currentUser);
   if (!res.ok && res.reason !== "duplicate") return null;
   if (res.ok) db.unshift({ ...res.title, votes: {} });
@@ -1258,6 +1420,12 @@ async function handleSaveVote() {
   if (!item) return;
   const res = await upsertVote(item.id, currentUser, vote, comment);
   if (!res.ok) { showToast("Errore nel salvare il voto, riprova", "error"); return; }
+  // Stesso principio di promotePreviewItem sopra: un voto significa sempre
+  // "l'ho visto", anche se il titolo era già in libreria come watchlist.
+  if (item.status === "watchlist") {
+    const statusRes = await updateTitleStatus(item.id, "seen");
+    if (statusRes.ok) { item.status = "seen"; item.seen_at = new Date().toISOString(); }
+  }
   haptic(12);
   showToast("Voto salvato", "success");
   item.votes = item.votes || {};
@@ -1272,6 +1440,7 @@ async function handleClearVote() {
   const res = await removeVote(item.id, currentUser);
   if (!res.ok) { showToast("Errore, riprova", "error"); return; }
   haptic(10);
+  showToast("Voto rimosso", "success");
   if (item.votes) delete item.votes[currentUser];
   renderAfterLocalChange();
   openDetail(item.id, { push: false });
@@ -1296,8 +1465,18 @@ async function handleToggleStatus() {
   const nextStatus = item.status === "watchlist" ? "seen" : "watchlist";
   const res = await updateTitleStatus(item.id, nextStatus);
   if (!res.ok) { showToast("Errore, riprova", "error"); return; }
+  // Tornando in watchlist da "visto", assicuriamoci che chi ha appena
+  // premuto il tasto sia registrato come uno di chi la vuole vedere —
+  // altrimenti sparirebbe subito dalla SUA watchlist (vedi
+  // ensureWatchlistMembership in storage.js).
+  if (nextStatus === "watchlist") {
+    await ensureWatchlistMembership(item.id, currentUser);
+    item.watchlist_by = item.watchlist_by || [];
+    if (!item.watchlist_by.includes(currentUser)) item.watchlist_by.push(currentUser);
+  }
   haptic(12);
   item.status = nextStatus;
+  item.seen_at = nextStatus === "seen" ? new Date().toISOString() : null;
   renderAfterLocalChange();
   openDetail(item.id, { push: false });
 }
@@ -1305,6 +1484,28 @@ async function handleToggleStatus() {
 async function handleRemove() {
   const item = byId(currentDetailId);
   if (!item) return;
+
+  // Un titolo ancora in watchlist non ha voti da perdere: rimuovere significa
+  // solo "non lo voglio più nella MIA lista" — se qualcun altro ce l'ha
+  // ancora, il titolo condiviso resta (vedi removeFromWatchlist), quindi non
+  // serve la conferma pesante usata per un titolo già visto e votato.
+  if (item.status === "watchlist") {
+    const res = await removeFromWatchlist(item.id, currentUser);
+    if (!res.ok) { showToast("Errore, riprova", "error"); return; }
+    haptic(12);
+    showToast("Rimosso dalla tua watchlist", "success");
+    currentDetailId = null;
+    if (res.deleted) {
+      db = db.filter(x => x.id !== item.id);
+    } else {
+      item.watchlist_by = (item.watchlist_by || []).filter(u => u !== currentUser);
+    }
+    renderAfterLocalChange();
+    goToScreen("home");
+    try { history.replaceState({ screen: "home" }, "", location.href); } catch {}
+    return;
+  }
+
   // La libreria è condivisa da tutto il gruppo: un tocco per sbaglio non deve
   // cancellare un titolo (e i voti di tutti collegati) senza possibilità di
   // annullare. Stessa conferma già usata per eliminare un utente dal gruppo.
@@ -1347,6 +1548,32 @@ function bindGlobalEvents() {
   });
   document.getElementById("confirmNoBtn").addEventListener("click", closeConfirm);
 
+  // Gesto nascosto: 7 tap rapidi sul titolo "Report" forzano, previa
+  // conferma, una rigenerazione immediata del report attualmente aperto
+  // (Io o Gruppo) — utile per non aspettare l'aggiornamento automatico
+  // annuale quando arriva un utente nuovo o sono cambiati un bel po' di
+  // voti. Il conteggio si azzera da solo se passano più di 4s tra un tap
+  // e il successivo, per non scattare per sbaglio con tap normali sparsi.
+  // Ogni tap dà un feedback tattile leggero così l'utente sente che viene
+  // contato, senza doverlo verificare a schermo.
+  document.getElementById("reportTitleTap").addEventListener("click", () => {
+    reportTapCount++;
+    clearTimeout(reportTapTimer);
+    reportTapTimer = setTimeout(() => { reportTapCount = 0; }, 4000);
+    if (reportTapCount < 7) { haptic(6); return; }
+    reportTapCount = 0;
+    clearTimeout(reportTapTimer);
+    haptic(20);
+    const isIo = reportMode === "io";
+    askConfirm(
+      isIo
+        ? "Rigenerare ora il tuo report personale? Userà una chiamata a Claude, anche se non è ancora passato un anno dall'ultimo aggiornamento."
+        : "Rigenerare ora il report di gruppo? Userà una chiamata a Claude, anche se non è ancora passato un anno dall'ultimo aggiornamento.",
+      async () => { if (isIo) await handleReportRefresh(); else await handleGroupReportRefresh(); },
+      { yesLabel: "Rigenera", danger: false }
+    );
+  });
+
   document.querySelectorAll(".nav__btn[data-screen]").forEach(btn => {
     btn.addEventListener("click", () => {
       const already = getVisibleScreen() === btn.dataset.screen;
@@ -1371,6 +1598,24 @@ function bindGlobalEvents() {
     haptic(8);
     doSearch(document.getElementById("searchInput").value.trim());
   });
+
+  // "X" per svuotare la ricerca in un tap, invece di cancellare a mano e
+  // ripremere Cerca: appare solo quando c'è testo, e riusa la stessa logica
+  // di reset già usata da doSearch() per una query vuota.
+  {
+    const searchInput = document.getElementById("searchInput");
+    const searchClearBtn = document.getElementById("searchClearBtn");
+    searchInput.addEventListener("input", syncSearchClearBtn);
+    searchClearBtn.addEventListener("click", () => {
+      haptic(8);
+      searchInput.value = "";
+      syncSearchClearBtn();
+      doSearch("");
+      searchInput.focus();
+    });
+    syncSearchClearBtn();
+  }
+
   document.querySelectorAll(".tab[data-type]").forEach(tab => {
     tab.addEventListener("click", () => {
       currentType = tab.dataset.type;
@@ -1389,6 +1634,8 @@ function bindGlobalEvents() {
     if (card) { openDetail(card.dataset.id); return; }
     const previewBtn = e.target.closest(".open-preview");
     if (previewBtn) { openPreview(previewBtn.dataset.id, previewBtn.dataset.type); return; }
+    const expandBtn = e.target.closest("[data-expand-fact]");
+    if (expandBtn) { haptic(6); toggleUserCardFact(expandBtn); return; }
   });
 
   document.querySelectorAll(".filter-pill[data-filter]").forEach(btn => {
@@ -1404,6 +1651,9 @@ function bindGlobalEvents() {
   });
   document.querySelectorAll("#statsIoGruppoToggle .stats-toggle-btn").forEach(btn => {
     btn.addEventListener("click", () => { statsMode = btn.dataset.mode; renderStats(); });
+  });
+  document.querySelectorAll("#reportIoGruppoToggle .stats-toggle-btn").forEach(btn => {
+    btn.addEventListener("click", () => { haptic(8); reportMode = btn.dataset.mode; renderReportScreen(); });
   });
   document.querySelectorAll("#rankingMediaToggle .stats-toggle-btn").forEach(btn => {
     btn.addEventListener("click", () => { rankingMedia = btn.dataset.media; renderStats(); });

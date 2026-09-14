@@ -2,7 +2,7 @@
 // Ogni funzione che legge o scrive dati "veri" (utenti, titoli, voti) passa
 // da qui. Il resto dell'app non parla mai direttamente con Supabase.
 
-import { supabase } from "./supabase.js?v=d039684";
+import { supabase } from "./supabase.js?v=106c2af";
 
 const CURRENT_USER_KEY = "cinefighiCurrentUser";
 export const MAX_USERS = 15;
@@ -84,10 +84,12 @@ export async function deleteUser(name) {
 export async function fetchLibrary() {
   const [
     { data: titles, error: e1 },
-    { data: votes, error: e2 }
+    { data: votes, error: e2 },
+    { data: watchlistAdds, error: e3 }
   ] = await Promise.all([
     supabase.from("titles").select("*").order("created_at", { ascending: false }),
-    supabase.from("votes").select("*")
+    supabase.from("votes").select("*"),
+    supabase.from("watchlist_adds").select("title_id, user_name")
   ]);
 
   // FIX: come fetchUsers, non ritorniamo piu' [] su errore (svuotava
@@ -95,11 +97,20 @@ export async function fetchLibrary() {
   // se mantenere i dati precedenti mostrando un avviso.
   if (e1) { console.error("fetchLibrary/titles:", e1); throw e1; }
   if (e2) { console.error("fetchLibrary/votes:", e2); throw e2; }
+  if (e3) { console.error("fetchLibrary/watchlist_adds:", e3); throw e3; }
 
   const votesByTitle = {};
   (votes || []).forEach(v => {
     if (!votesByTitle[v.title_id]) votesByTitle[v.title_id] = {};
     votesByTitle[v.title_id][v.user_name] = { vote: Number(v.vote), comment: v.comment || "" };
+  });
+
+  // Chi ha aggiunto il titolo alla PROPRIA watchlist (una riga per persona,
+  // vedi watchlist_adds) — added_by resta solo "chi lo ha catalogato per
+  // primo", non più "di chi è la watchlist".
+  const watchlistByTitle = {};
+  (watchlistAdds || []).forEach(w => {
+    (watchlistByTitle[w.title_id] ||= []).push(w.user_name);
   });
 
   return (titles || []).map(t => ({
@@ -116,6 +127,8 @@ export async function fetchLibrary() {
     status: t.status,          // 'watchlist' | 'seen'
     added_by: t.added_by,
     created_at: t.created_at,
+    seen_at: t.seen_at,
+    watchlist_by: watchlistByTitle[t.id] || [],
     votes: votesByTitle[t.id] || {}
   }));
 }
@@ -134,7 +147,8 @@ export async function addTitle(item, status, addedBy) {
       genre_names: item.genre_names || [],
       director: item.director || "",
       status,
-      added_by: addedBy
+      added_by: addedBy,
+      seen_at: status === "seen" ? new Date().toISOString() : null
     })
     .select()
     .single();
@@ -148,8 +162,113 @@ export async function addTitle(item, status, addedBy) {
   return { ok: true, title: data };
 }
 
+// Aggiunge un titolo alla PROPRIA watchlist. Se il titolo non esiste ancora
+// nella libreria condivisa lo crea (status 'watchlist', added_by = chi lo
+// cataloga per primo — solo un dato di provenienza, non più "di chi è la
+// watchlist"); se esiste già ed è ancora in watchlist, si limita a
+// registrare che anche userName lo vuole vedere (join, non un errore di
+// duplicato). Se invece è già stato segnato "visto" dal gruppo, non ha
+// senso rimetterlo in watchlist: segnaliamo l'errore.
+export async function addToWatchlist(item, userName) {
+  const { data: inserted, error: insertErr } = await supabase
+    .from("titles")
+    .insert({
+      tmdb_id: item.id,
+      media_type: item.media_type,
+      title: item.title,
+      year: item.year,
+      poster_path: item.poster_path,
+      backdrop_path: item.backdrop_path || "",
+      overview: item.overview || "",
+      genre_names: item.genre_names || [],
+      director: item.director || "",
+      status: "watchlist",
+      added_by: userName
+    })
+    .select()
+    .single();
+
+  if (!insertErr) {
+    const { error: waErr } = await supabase.from("watchlist_adds").insert({ title_id: inserted.id, user_name: userName });
+    if (waErr) console.error("addToWatchlist/watchlist_adds:", waErr);
+    return { ok: true, title: { ...inserted, watchlist_by: [userName] } };
+  }
+
+  if (insertErr.code !== "23505") {
+    console.error("addToWatchlist:", insertErr);
+    return { ok: false, reason: "error" };
+  }
+
+  const { data: existing, error: fetchErr } = await supabase
+    .from("titles")
+    .select("*")
+    .eq("tmdb_id", item.id)
+    .eq("media_type", item.media_type)
+    .single();
+  if (fetchErr || !existing) {
+    console.error("addToWatchlist/fetch:", fetchErr);
+    return { ok: false, reason: "error" };
+  }
+  if (existing.status !== "watchlist") {
+    return { ok: false, reason: "already_seen" };
+  }
+
+  const { error: joinErr } = await supabase
+    .from("watchlist_adds")
+    .insert({ title_id: existing.id, user_name: userName });
+  // 23505 qui vuol dire "ce l'hai già nella tua watchlist" — non un errore vero.
+  if (joinErr && joinErr.code !== "23505") {
+    console.error("addToWatchlist/join:", joinErr);
+    return { ok: false, reason: "error" };
+  }
+  return { ok: true, title: existing, joined: true };
+}
+
+// Rimuove il titolo dalla PROPRIA watchlist. Se dopo la rimozione nessun
+// altro lo ha più in watchlist, il titolo condiviso viene eliminato del
+// tutto (nessun titolo "orfano" invisibile a tutti).
+export async function removeFromWatchlist(titleId, userName) {
+  const { error: delErr } = await supabase
+    .from("watchlist_adds")
+    .delete()
+    .eq("title_id", titleId)
+    .eq("user_name", userName);
+  if (delErr) { console.error("removeFromWatchlist:", delErr); return { ok: false }; }
+
+  const { count, error: countErr } = await supabase
+    .from("watchlist_adds")
+    .select("id", { count: "exact", head: true })
+    .eq("title_id", titleId);
+  if (countErr) { console.error("removeFromWatchlist/count:", countErr); return { ok: true, deleted: false }; }
+
+  if ((count || 0) === 0) {
+    const { error: rmErr } = await supabase.from("titles").delete().eq("id", titleId);
+    if (rmErr) { console.error("removeFromWatchlist/title:", rmErr); return { ok: true, deleted: false }; }
+    return { ok: true, deleted: true };
+  }
+  return { ok: true, deleted: false };
+}
+
+// Usata quando un titolo torna in watchlist da "visto" (detailStatusBtn):
+// se chi tocca il pulsante non ha già una riga in watchlist_adds (es. il
+// titolo era stato aggiunto direttamente come "visto", mai passato dalla
+// watchlist), gliela creiamo — altrimenti sparirebbe subito dalla SUA
+// watchlist pur avendo appena chiesto di rimettercelo.
+export async function ensureWatchlistMembership(titleId, userName) {
+  const { error } = await supabase.from("watchlist_adds").insert({ title_id: titleId, user_name: userName });
+  if (error && error.code !== "23505") { console.error("ensureWatchlistMembership:", error); return { ok: false }; }
+  return { ok: true };
+}
+
+// seen_at: quando il titolo passa a "seen" registra il momento vero (usato
+// per ordinare "Ultimi film visti"/"Ultime serie viste" in Home — prima si
+// ordinava per created_at, cioè per quando era stato CATALOGATO, non per
+// quando è stato davvero visto: un titolo in watchlist da tempo, appena
+// votato, restava sepolto nella sua vecchia posizione). Tornando indietro a
+// "watchlist" lo azzeriamo, per coerenza (non è più "visto").
 export async function updateTitleStatus(titleId, status) {
-  const { error } = await supabase.from("titles").update({ status }).eq("id", titleId);
+  const seen_at = status === "seen" ? new Date().toISOString() : null;
+  const { error } = await supabase.from("titles").update({ status, seen_at }).eq("id", titleId);
   if (error) { console.error("updateTitleStatus:", error); return { ok: false }; }
   return { ok: true };
 }
@@ -185,7 +304,7 @@ export async function removeVote(titleId, userName) {
 
 
 
-// ─── REPORT (profilo + consigli generati da Claude, ogni 4 mesi per utente) ──
+// ─── REPORT (profilo + consigli generati da Claude, una volta all'anno per utente) ──
 // Sola lettura dal client: la riga viene scritta solo dalla Edge Function
 // "generate-report" (chiave service_role, mai esposta qui). Il client legge
 // l'ultimo report di QUESTO utente e può richiederne la generazione tramite
@@ -254,6 +373,75 @@ export async function regenerateReport(userName) {
   if (data?.error) throw new Error(data.error);
   if (data) {
     saveLocalReportCache(userName, data);
+  }
+  return data;
+}
+
+// ─── REPORT DI GRUPPO (profilo + descrizioni per persona, scritte da Claude
+// on-demand — vedi Edge Function "generate-group-report") ────────────────
+// Stesso pattern del report personale sopra, ma un solo record condiviso
+// (nessun user_name): tutti leggono lo stesso ultimo report generato.
+// Se non è mai stato generato, resta null e il Report di Gruppo mostra il
+// fallback calcolato lato client (sempre disponibile, vedi app.js).
+
+const GROUP_REPORT_CACHE_KEY = "cinefighiGroupReportCache";
+
+function saveLocalGroupReportCache(report) {
+  try {
+    if (report) localStorage.setItem(GROUP_REPORT_CACHE_KEY, JSON.stringify(report));
+  } catch (e) {
+    console.warn("Cache locale report di gruppo non salvata:", e);
+  }
+}
+
+function loadLocalGroupReportCache() {
+  try {
+    const raw = localStorage.getItem(GROUP_REPORT_CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+export async function loadLatestGroupReport(onUpdate) {
+  const localCache = loadLocalGroupReportCache();
+
+  const fetchTask = (async () => {
+    try {
+      const res = await supabase
+        .from("group_report")
+        .select("generated_at, payload")
+        .order("generated_at", { ascending: false })
+        .limit(1);
+
+      if (!res || res.error || !res.data?.length) return null;
+      const remoteReport = res.data[0];
+
+      saveLocalGroupReportCache(remoteReport);
+
+      if (onUpdate && JSON.stringify(remoteReport) !== JSON.stringify(localCache)) {
+        onUpdate(remoteReport);
+      }
+      return remoteReport;
+    } catch (e) {
+      console.warn("Lettura report di gruppo remota fallita:", e);
+      return null;
+    }
+  })();
+
+  if (localCache) {
+    return localCache;
+  }
+
+  return await fetchTask;
+}
+
+export async function regenerateGroupReport() {
+  const { data, error } = await supabase.functions.invoke("generate-group-report", { body: {} });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+  if (data) {
+    saveLocalGroupReportCache(data);
   }
   return data;
 }
