@@ -4,11 +4,12 @@
 // singolo utente: un solo report condiviso, nessun user_name.
 //
 // Chiamata: on-demand dal gesto nascosto (7 tap sul titolo "Report"), o
-// automaticamente ogni lunedì alle 8 (ora italiana) tramite un cron reale
-// lato Supabase — vedi la migrazione weekly_group_report_cron. A differenza
-// del report personale (auto-rigenerato una volta all'anno, per utente,
-// controllato lato client), qui il trigger periodico è server-side: nessuno
-// deve aprire l'app perché il report si aggiorni in tempo.
+// automaticamente ogni 4 mesi (1° gennaio/maggio/settembre, ore 6 UTC)
+// tramite un cron reale lato Supabase — vedi la migrazione
+// group_report_cron_4_months. A differenza del report personale
+// (auto-rigenerato una volta all'anno, per utente, controllato lato
+// client), qui il trigger periodico è server-side: nessuno deve aprire
+// l'app perché il report si aggiorni in tempo.
 //
 // Le statistiche (medie, deviazioni standard, chi ha votato di più, coppie
 // di gusto, titoli divisivi/unanimi) restano calcolate lato client in

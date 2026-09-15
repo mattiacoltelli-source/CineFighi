@@ -774,8 +774,8 @@ function renderReportScreen() {
   // Il bottone compare solo per generare il PRIMO report (e solo quando si
   // hanno abbastanza titoli votati): dopo, gli aggiornamenti sono automatici.
   // Ha senso solo in vista "Io". Il Gruppo non ha un tasto equivalente:
-  // si aggiorna da solo ogni lunedì alle 8 (cron reale lato Supabase, vedi
-  // la migrazione weekly_group_report_cron — maybeAutoRefreshGroupReport
+  // si aggiorna da solo ogni 4 mesi (cron reale lato Supabase, vedi la
+  // migrazione group_report_cron_4_months — maybeAutoRefreshGroupReport
   // qui resta solo come rete di sicurezza), o subito col gesto nascosto
   // dei 7 tap sul titolo "Report".
   btn.classList.toggle("hidden", !isIo || hasReport || votedCount < MIN_VOTED_FOR_REPORT);
