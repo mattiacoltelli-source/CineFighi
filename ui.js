@@ -736,16 +736,19 @@ export function renderReportMeta(report) {
   el.textContent = `Aggiornato il ${formatReportDate(report.generated_at)} · prossimo aggiornamento automatico l'${nextReportDate(report.generated_at)}`;
 }
 
-// Il Report di Gruppo si aggiorna con un cron reale lato Supabase (ogni
-// lunedì alle 8, ora italiana — vedi la migrazione weekly_group_report_cron),
-// non con il ciclo "un anno dopo l'ultimo generato" del report personale:
-// quindi il prossimo aggiornamento è sempre "il prossimo lunedì da oggi",
-// indipendente da quando è stato generato l'ultimo.
-function nextMondayDate() {
-  const d = new Date();
-  const daysUntilMonday = (8 - d.getDay()) % 7 || 7; // 0=dom..6=sab; se oggi è lunedì, il prossimo è tra 7 giorni
-  d.setDate(d.getDate() + daysUntilMonday);
-  return d.toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" });
+// Il Report di Gruppo si aggiorna con un cron reale lato Supabase (ogni 4
+// mesi, il 1° gennaio/maggio/settembre alle 6 UTC — vedi la migrazione
+// group_report_cron_4_months), non con il ciclo "un anno dopo l'ultimo
+// generato" del report personale: quindi il prossimo aggiornamento è
+// sempre "il prossimo 1° gennaio/maggio/settembre da oggi", indipendente
+// da quando è stato generato l'ultimo.
+function nextGroupReportDate() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const candidates = [0, 4, 8].map(m => new Date(year, m, 1, 6, 0, 0));
+  candidates.push(new Date(year + 1, 0, 1, 6, 0, 0));
+  const next = candidates.find(c => c > now);
+  return next.toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" });
 }
 
 export function renderGroupReportMeta(report) {
@@ -754,7 +757,7 @@ export function renderGroupReportMeta(report) {
   const base = report
     ? `Aggiornato il ${formatReportDate(report.generated_at)}`
     : "Nessun report ancora generato";
-  el.textContent = `${base} · prossimo aggiornamento automatico lunedì ${nextMondayDate()} alle 8:00`;
+  el.textContent = `${base} · prossimo aggiornamento automatico l'${nextGroupReportDate()} alle 8:00`;
 }
 
 // Converte i **grassetti** in stile markdown scritti da Claude in <b>, DOPO
