@@ -284,11 +284,18 @@ export function renderGenreBars(entries) {
 // in quel genere, il COLORE del liquido dice quanto ti piace. Qui però la
 // scala segue il teal & orange dell'app: azzurro in basso per i voti bassi,
 // arancione in alto per i voti alti.
-// Posizioni in % del riquadro quadrato, con la bolla larga il 36%: nessuna
-// supera il 100% in larghezza, quindi niente bolle tagliate sul bordo destro.
+// Posizioni in % del riquadro, con la bolla larga il 36%: nessuna supera il
+// 100% in larghezza, quindi niente bolle tagliate sul bordo destro.
+//
+// Le distanze non sono casuali. Le quattro coppie vicine (1ª-3ª, 3ª-4ª,
+// 3ª-5ª, 2ª-4ª) si sovrappongono tutte di circa il 9% del diametro: abbastanza
+// da leggersi come un grappolo voluto, non tanto da nascondere un numero. Le
+// altre stanno staccate di almeno il 17%. Quello che va evitato è la via di
+// mezzo — due bolle che si sfiorano per pochi pixel sembrano un errore di
+// allineamento, non una scelta.
 const GENRE_BUBBLE_LAYOUT = [
-  { left: 4, top: 4 }, { left: 58, top: 2 }, { left: 28, top: 31 },
-  { left: 62, top: 36 }, { left: 6, top: 60 },
+  { left: 7, top: 5 }, { left: 58, top: 3 }, { left: 27, top: 30 },
+  { left: 59, top: 34 }, { left: 9, top: 56 },
 ];
 
 export function renderGenreBubbles(entries) {
