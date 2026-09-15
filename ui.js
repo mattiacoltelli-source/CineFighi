@@ -287,15 +287,22 @@ export function renderGenreBars(entries) {
 // Posizioni in % del riquadro, con la bolla larga il 36%: nessuna supera il
 // 100% in larghezza, quindi niente bolle tagliate sul bordo destro.
 //
-// Le distanze non sono casuali. Le quattro coppie vicine (1ª-3ª, 3ª-4ª,
-// 3ª-5ª, 2ª-4ª) si sovrappongono tutte di circa il 9% del diametro: abbastanza
-// da leggersi come un grappolo voluto, non tanto da nascondere un numero. Le
-// altre stanno staccate di almeno il 17%. Quello che va evitato è la via di
-// mezzo — due bolle che si sfiorano per pochi pixel sembrano un errore di
-// allineamento, non una scelta.
+// Due regole tengono insieme la disposizione:
+//
+// 1. Le bolle che si sfiorano si sovrappongono di circa il 10% del diametro.
+//    La via di mezzo è il caso peggiore: due cerchi distanti pochi pixel
+//    sembrano un errore di allineamento, non una scelta.
+// 2. Si sovrappongono solo in DIAGONALE, mai affiancate alla stessa altezza.
+//    Due bolle una di fianco all'altra si intersecano in una lente verticale
+//    alta, in mezzo alla composizione e proprio fra le due etichette; in
+//    diagonale la lente è piccola e defilata in un angolo. Per questo Dramma e
+//    Fantascienza, che stanno alla stessa altezza, restano staccate.
+//
+// Mistero chiude in basso al centro invece che a sinistra: senza, le altre
+// quattro si leggono come due colonne separate con un vuoto in mezzo.
 const GENRE_BUBBLE_LAYOUT = [
-  { left: 7, top: 5 }, { left: 58, top: 3 }, { left: 27, top: 30 },
-  { left: 59, top: 34 }, { left: 9, top: 56 },
+  { left: 4, top: 8 }, { left: 58, top: 8 }, { left: 20, top: 35 },
+  { left: 62, top: 39 }, { left: 30, top: 64 },
 ];
 
 export function renderGenreBubbles(entries) {
