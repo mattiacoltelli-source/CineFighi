@@ -524,9 +524,9 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 /* Titolo già in libreria (watchlist o già visto): "Salva voto" nella card
    sopra è sempre l'azione primaria — un voto implica "l'ho visto" (vedi
    handleSaveVote in app.js), quindi non serve un secondo pulsante pieno
-   qui sotto. "Segna come visto senza votare"/"Segna come non visto" e
-   "Rimuovi" restano entrambi a un tap ma quieti e affiancati, stesso
-   trattamento, niente più falsa scelta fra due azioni "principali". */
+   qui sotto. In watchlist resta solo "Rimuovi", quieto; da visto si
+   affianca "Segna come non visto" (per correggere un errore) — mai due
+   azioni "principali" in competizione. */
 .detail-primary-actions--secondary { flex-direction: row; justify-content: center; gap: 20px; }
 .detail-primary-actions--secondary .btn-link-danger { width: auto; }
 .btn-link-quiet {

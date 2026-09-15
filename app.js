@@ -568,7 +568,7 @@ async function openPreview(tmdbId, type) {
   const previewStatusBtn = document.getElementById("detailStatusBtn");
   previewStatusBtn.textContent = "Aggiungi a watchlist";
   previewStatusBtn.classList.add("btn");
-  previewStatusBtn.classList.remove("btn-link-quiet");
+  previewStatusBtn.classList.remove("btn-link-quiet", "hidden");
   document.getElementById("detailRemoveBtn").classList.add("hidden");
   document.getElementById("detailPrimaryActions").classList.remove("detail-primary-actions--secondary");
 
@@ -1354,9 +1354,14 @@ function openDetail(id, options = {}) {
 
   const isSeen = item.status !== "watchlist";
   const statusBtn = document.getElementById("detailStatusBtn");
-  statusBtn.textContent = isSeen ? "Segna come non visto" : "Segna come visto senza votare";
+  // In watchlist, "Salva voto" è l'unico modo per segnare un titolo come
+  // visto (un voto implica "l'ho visto", vedi handleSaveVote): niente
+  // bottone per segnarlo visto senza votare, non serve. Una volta visto,
+  // "Segna come non visto" resta per correggere un errore.
+  statusBtn.classList.toggle("hidden", !isSeen);
   statusBtn.classList.remove("btn");
   statusBtn.classList.add("btn-link-quiet");
+  statusBtn.textContent = "Segna come non visto";
   document.getElementById("detailRemoveBtn").textContent =
     isSeen ? "Rimuovi" : "Rimuovi dalla mia watchlist";
   document.getElementById("detailRemoveBtn").classList.remove("hidden");
