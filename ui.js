@@ -233,8 +233,9 @@ export function renderLibraryList(items) {
           <div class="list-item__meta">${item.year} · ${mediaLabel(item)}</div>
           <div class="chip-row">
             ${item.status === "watchlist" ? `<span class="chip chip--watchlist">♡ In watchlist</span>` : ""}
-            ${item.genre_names?.[0] ? `<span class="chip">${escapeHtml(item.genre_names[0])}</span>` : ""}
+            ${(item.genre_names || []).map(g => `<span class="chip">${escapeHtml(g)}</span>`).join("")}
             ${avg !== null ? `<span class="chip chip--vote">★ ${avg.toFixed(1)} (${count})</span>` : ""}
+            ${item.director ? `<span class="chip">🎬 ${escapeHtml(item.director)}</span>` : ""}
           </div>
         </div>
       </div>
