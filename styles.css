@@ -211,6 +211,10 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 }
 .badge-film { background: rgba(56,189,248,.18); color: var(--cyan); border-color: rgba(56,189,248,.35); }
 .badge-series { background: rgba(255,157,77,.18); color: var(--orange2); border-color: rgba(255,157,77,.35); }
+/* Variante compatta per badge su thumbnail piccole (es. list-item, 72px di
+   larghezza): stesso linguaggio (colore/pill) del badge normale, solo più
+   piccolo perché "Serie TV" non ci starebbe altrimenti. */
+.badge--sm { top:4px; left:4px; padding:2px 6px; font-size:8.5px; letter-spacing:.2px; }
 
 .empty-state { padding:20px; text-align:center; color: var(--text3); font-size:14px; background: var(--surface);
   border:1px dashed var(--border); border-radius: var(--radius-lg); }
@@ -252,13 +256,16 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 #libraryLoadMoreSentinel { height:1px; }
 .list-item { display:grid; grid-template-columns:72px 1fr; gap:14px; background: var(--surface); border:1px solid var(--border);
   border-radius: var(--radius-lg); padding:12px; cursor:pointer; }
-.list-item__thumb { width:72px; height:108px; border-radius: var(--radius-sm); background: var(--surface2) center/cover no-repeat; border:1px solid var(--border); }
+.list-item:active { transform: scale(.98); }
+.list-item__thumb { position:relative; width:72px; height:108px; border-radius: var(--radius-sm);
+  background: var(--surface2) center/cover no-repeat; border:1px solid var(--border); overflow:hidden; }
 .list-item__title { font-family: var(--font-display); font-size:15px; font-weight:700; }
 .list-item__meta { font-size:12px; color: var(--text3); margin-top:3px; }
 .chip-row { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
 .chip { display:inline-block; padding:4px 10px; background: var(--surface2); border:1px solid var(--border);
   border-radius: var(--radius-pill); font-size:12px; color: var(--text2); }
 .chip--vote { color: var(--cyan2); border-color: rgba(56,189,248,.25); background: var(--cyan-dim); }
+.chip--watchlist { color: var(--orange2); border-color: rgba(255,157,77,.3); background: rgba(255,157,77,.12); }
 
 .filter-bar { display:flex; gap:8px; overflow-x:auto; padding-bottom:4px; margin-bottom:14px; }
 .filter-pill { white-space:nowrap; padding:8px 14px; border-radius: var(--radius-pill); background: var(--surface);

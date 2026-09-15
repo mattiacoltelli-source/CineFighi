@@ -225,11 +225,14 @@ export function renderLibraryList(items) {
     const count = voteCount(item.votes);
     return `
       <div class="list-item open-detail" data-id="${item.id}">
-        <div class="list-item__thumb" style="background-image:url('${posterUrl(item.poster_path)}')"></div>
+        <div class="list-item__thumb" style="background-image:url('${posterUrl(item.poster_path)}')">
+          <span class="badge badge--sm ${mediaBadgeClass(item)}">${mediaLabel(item)}</span>
+        </div>
         <div class="list-item__body">
           <div class="list-item__title">${escapeHtml(item.title)}</div>
-          <div class="list-item__meta">${item.year} · ${mediaLabel(item)}${item.status === "watchlist" ? " · In watchlist" : ""}</div>
+          <div class="list-item__meta">${item.year} · ${mediaLabel(item)}</div>
           <div class="chip-row">
+            ${item.status === "watchlist" ? `<span class="chip chip--watchlist">♡ In watchlist</span>` : ""}
             ${item.genre_names?.[0] ? `<span class="chip">${escapeHtml(item.genre_names[0])}</span>` : ""}
             ${avg !== null ? `<span class="chip chip--vote">★ ${avg.toFixed(1)} (${count})</span>` : ""}
           </div>
