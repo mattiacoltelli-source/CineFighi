@@ -279,6 +279,104 @@ export function renderGenreBars(entries) {
   animateBarGroups();
 }
 
+// Vista alternativa degli stessi dati di renderGenreBars: una bolla per
+// genere, stesso criterio di Cos90 — il RIEMPIMENTO dice quanti titoli hai
+// in quel genere, il COLORE del liquido dice quanto ti piace. Qui però la
+// scala segue il teal & orange dell'app: azzurro in basso per i voti bassi,
+// arancione in alto per i voti alti.
+// Posizioni in % del riquadro quadrato, con la bolla larga il 36%: nessuna
+// supera il 100% in larghezza, quindi niente bolle tagliate sul bordo destro.
+const GENRE_BUBBLE_LAYOUT = [
+  { left: 4, top: 4 }, { left: 58, top: 2 }, { left: 28, top: 31 },
+  { left: 62, top: 36 }, { left: 6, top: 60 },
+];
+
+export function renderGenreBubbles(entries) {
+  const container = document.getElementById("genreBars");
+  if (!entries.length) {
+    container.innerHTML = `<p class="empty-hint">Ancora nessun titolo votato.</p>`;
+    return;
+  }
+
+  const CYAN = "#38bdf8", ORANGE = "#ff9d4d", NEUTRAL = "hsl(38,30%,86%)";
+
+  // Il riempimento è relativo al genere più visto, la tinta è relativa allo
+  // scarto fra il voto medio più basso e quello più alto: con pochi generi
+  // votati quasi uguali la differenza resta comunque leggibile.
+  const maxCount = Math.max(...entries.map(d => d.value)) || 1;
+  const ratedAvgs = entries.map(d => d.avgVote).filter(v => Number.isFinite(v));
+  const minAvg = ratedAvgs.length ? Math.min(...ratedAvgs) : 0;
+  const maxAvg = ratedAvgs.length ? Math.max(...ratedAvgs) : 1;
+  const avgRange = (maxAvg - minAvg) || 1;
+
+  container.innerHTML = "";
+  const wrap = document.createElement("div");
+  wrap.className = "genre-bubbles-wrap";
+
+  entries.forEach((g, i) => {
+    const hasAvg = Number.isFinite(g.avgVote);
+    const t = hasAvg ? (g.avgVote - minAvg) / avgRange : 0.5;
+    const fillPct = Math.round((g.value / maxCount) * 85) + 10;
+    // `boundary` è l'altezza in cui l'azzurro passa all'arancione: più alto è
+    // il voto, più in basso scende il confine e più arancione si vede.
+    const boundary = 92 - t * 80;
+    const low = Math.max(0, boundary - 27), high = Math.min(100, boundary + 27);
+    const fillGradient = `linear-gradient(to top, ${CYAN} 0%, ${CYAN} ${low.toFixed(1)}%, ${NEUTRAL} ${boundary.toFixed(1)}%, ${ORANGE} ${high.toFixed(1)}%, ${ORANGE} 100%)`;
+    const pos = GENRE_BUBBLE_LAYOUT[i] || { left: (i * 20) % 60, top: (i * 25) % 60 };
+    const voteText = hasAvg ? `★ ${g.avgVote.toFixed(1).replace(".", ",")}` : "";
+
+    const el = document.createElement("div");
+    el.className = "genre-bubble";
+    el.style.left = pos.left + "%";
+    el.style.top = pos.top + "%";
+    if (voteText) {
+      el.tabIndex = 0;
+      el.setAttribute("role", "button");
+      el.setAttribute("aria-label", `${g.label}: ${g.value} titoli, media ${voteText.replace("★ ", "")}`);
+    }
+
+    el.innerHTML = `
+      <div class="genre-bubble-inner">
+        <div class="genre-bubble-fill" style="height:${fillPct}%;animation-delay:${i * 90}ms;">
+          <div class="genre-bubble-fill-inner" style="background:${fillGradient};"></div>
+        </div>
+        <div class="genre-bubble-sheen"></div>
+        <div class="genre-bubble-text">
+          <div class="name">${escapeHtml(g.label.toUpperCase())}</div>
+          <div class="count">${g.value}</div>
+          <div class="label">titol${g.value === 1 ? "o" : "i"}</div>
+          ${voteText ? `<div class="vote" hidden>${voteText}</div>` : ""}
+        </div>
+      </div>`;
+
+    // Il voto medio compare solo al tocco: a bolla chiusa conta il colpo
+    // d'occhio (dimensione del liquido + tinta), il numero esatto è un
+    // dettaglio che si va a cercare.
+    if (voteText) {
+      const toggle = () => {
+        const wasActive = el.classList.contains("active");
+        wrap.querySelectorAll(".genre-bubble.active").forEach(b => {
+          b.classList.remove("active");
+          const v = b.querySelector(".vote");
+          if (v) v.hidden = true;
+        });
+        if (!wasActive) {
+          el.classList.add("active");
+          el.querySelector(".vote").hidden = false;
+        }
+      };
+      el.addEventListener("click", toggle);
+      el.addEventListener("keydown", e => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); }
+      });
+    }
+
+    wrap.appendChild(el);
+  });
+
+  container.appendChild(wrap);
+}
+
 // ─── STATS: classifica ───────────────────────────────────────────────────────
 
 // Riordina un array già ordinato per rank (items[0] = 1°) nell'ordine di

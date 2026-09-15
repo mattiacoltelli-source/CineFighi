@@ -32,6 +32,20 @@ export function setLastSeenAt(iso) {
   try { localStorage.setItem(LAST_SEEN_KEY, iso); } catch {}
 }
 
+// ─── VISTA DEI GENERI NELLE STATISTICHE (solo sul dispositivo) ───────────────
+// Barre (default, com'era prima) oppure bolle. È una preferenza puramente
+// visuale, quindi resta sul dispositivo come currentUser: non ha senso
+// imporre a tutto il gruppo la vista scelta da una persona sola.
+const GENRE_VIEW_KEY = "cinefighiGenreView";
+export function getGenreView() {
+  try {
+    return localStorage.getItem(GENRE_VIEW_KEY) === "bubbles" ? "bubbles" : "bars";
+  } catch { return "bars"; }
+}
+export function setGenreView(view) {
+  try { localStorage.setItem(GENRE_VIEW_KEY, view === "bubbles" ? "bubbles" : "bars"); } catch {}
+}
+
 // ─── UTENTI DEL GRUPPO (su Supabase, condivisi da tutti) ─────────────────────
 
 export async function fetchUsers() {

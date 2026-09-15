@@ -9,7 +9,7 @@ import {
 } from "./cine-core.js?v=921ca6f";
 import {
   getCurrentUser, setCurrentUser, clearCurrentUser, MAX_USERS,
-  getLastSeenAt, setLastSeenAt,
+  getLastSeenAt, setLastSeenAt, getGenreView, setGenreView,
   fetchUsers, addUser, deleteUser,
   fetchLibrary, addTitle, addToWatchlist, removeFromWatchlist, ensureWatchlistMembership, updateTitleStatus, removeTitle,
   upsertVote, removeVote,
@@ -23,7 +23,7 @@ import {
 import {
   showToast, avatarHtml, initScreens, switchScreen,
   renderShelf, renderSearchResults, renderLibraryList, renderGenreFilters,
-  renderGenreBars, renderRanking, toggleRankingList, renderGroupReport, toggleUserCardFact, renderTonightList, renderDiscoverResult, renderClassicResult,
+  renderGenreBars, renderGenreBubbles, renderRanking, toggleRankingList, renderGroupReport, toggleUserCardFact, renderTonightList, renderDiscoverResult, renderClassicResult,
   renderDetailFacts, renderVotesList, renderReportMeta, renderGroupReportMeta, renderReportContent, renderReportGate,
   haptic, animateValue
 } from "./ui.js?v=921ca6f";
@@ -40,6 +40,7 @@ let watchlistMode = "me";  // me | group (Home)
 let statsMode = "me";   // group | me
 let reportMode = "io"; // gruppo | io
 let rankingMedia = "movie"; // movie | tv
+let genreView = getGenreView(); // bars | bubbles — preferenza di vista dei Generi, per dispositivo
 let currentDetailId = null;
 let previewItem = null;    // titolo TMDB non ancora salvato, aperto solo per consultazione
 let detailReturnScreen = "home";
@@ -657,6 +658,14 @@ function renderStats() {
   document.querySelectorAll("#rankingMediaToggle .stats-toggle-btn").forEach(btn => {
     btn.classList.toggle("active", btn.dataset.media === rankingMedia);
   });
+  document.querySelectorAll("#genreViewToggle .genre-view-btn").forEach(btn => {
+    const on = btn.dataset.genreView === genreView;
+    btn.classList.toggle("active", on);
+    btn.setAttribute("aria-pressed", String(on));
+  });
+  document.getElementById("genreLegend").textContent = genreView === "bubbles"
+    ? "Riempimento = quanti titoli · Colore = quanto piace (azzurro basso → arancione alto)"
+    : "★ media voto";
 
   // Le 4 card numeriche: di gruppo in modalità "Gruppo", personali in "Io".
   // "In watchlist" personale conta solo i titoli che HAI aggiunto tu e che
@@ -701,7 +710,7 @@ function renderStats() {
       const avgVote = votes.length ? votes.reduce((a, b) => a + b, 0) / votes.length : null;
       return { label, value, avgVote };
     });
-  renderGenreBars(topGenres);
+  (genreView === "bubbles" ? renderGenreBubbles : renderGenreBars)(topGenres);
 
   const ranked = relevant
     .filter(item => item.media_type === rankingMedia)
@@ -1662,6 +1671,14 @@ function bindGlobalEvents() {
   });
   document.querySelectorAll("#rankingMediaToggle .stats-toggle-btn").forEach(btn => {
     btn.addEventListener("click", () => { rankingMedia = btn.dataset.media; renderStats(); });
+  });
+  document.querySelectorAll("#genreViewToggle .genre-view-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      haptic(8);
+      genreView = btn.dataset.genreView;
+      setGenreView(genreView);
+      renderStats();
+    });
   });
   document.getElementById("rankingExpandBtn").addEventListener("click", () => { haptic(8); toggleRankingList(); });
 
