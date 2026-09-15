@@ -6,7 +6,7 @@ import {
   uniqueKey, average, escapeHtml, decadeOf, GENRE_NAME_TO_ID,
   votingLeaderboard, mostAffinePair, mostDivergentPair, mostDivisive, mostUnanimous,
   groupMemberProfiles, groupProfileStats
-} from "./cine-core.js?v=921ca6f";
+} from "./cine-core.js?v=84fd6e0";
 import {
   getCurrentUser, setCurrentUser, clearCurrentUser, MAX_USERS,
   getLastSeenAt, setLastSeenAt, getGenreView, setGenreView,
@@ -15,18 +15,18 @@ import {
   upsertVote, removeVote,
   loadLatestReport, regenerateReport,
   loadLatestGroupReport, regenerateGroupReport
-} from "./storage.js?v=921ca6f";
+} from "./storage.js?v=84fd6e0";
 import {
   tmdbFetchDetail, tmdbSearch, tmdbFetchDiscoverLevel, tmdbFetchDecadeCandidates,
   tmdbFetchOutOfComfortZoneCandidates, buildFallbackQueries
-} from "./tmdb.js?v=921ca6f";
+} from "./tmdb.js?v=84fd6e0";
 import {
   showToast, avatarHtml, initScreens, switchScreen,
   renderShelf, renderSearchResults, renderLibraryList, renderGenreFilters,
   renderGenreBars, renderGenreBubbles, renderRanking, toggleRankingList, renderGroupReport, toggleUserCardFact, renderTonightList, renderDiscoverResult, renderClassicResult,
   renderDetailFacts, renderVotesList, renderReportMeta, renderGroupReportMeta, renderReportContent, renderReportGate,
   haptic, animateValue
-} from "./ui.js?v=921ca6f";
+} from "./ui.js?v=84fd6e0";
 
 const MIN_VOTED_FOR_REPORT = 50;
 
