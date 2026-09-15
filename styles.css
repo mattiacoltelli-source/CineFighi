@@ -398,7 +398,16 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
   background: var(--cyan-dim); border:1px solid rgba(56,189,248,.22); color: var(--cyan2); font-family: var(--font-display); font-size:12px; font-weight:800; }
 
 .ranking-list { display:flex; flex-direction:column; gap:8px; }
-.rank-row { display:grid; grid-template-columns:36px 50px 1fr auto; gap:10px; align-items:center; padding:10px 12px;
+/* "Mostra tutti" apre la classifica intera in un colpo: senza questo, con
+   qualche centinaio di titoli votati il browser fa il layout di ogni riga e
+   scarica ogni poster, comprese le centinaia fuori schermo. Con
+   content-visibility quel lavoro parte quando la riga si avvicina al viewport.
+   contain-intrinsic-size è l'altezza del CONTENUTO, quindi i 10+10 di padding
+   e i 2 di bordo non vanno inclusi: 72px qui = riga da 94px, alta quanto il
+   poster. `auto` fa memorizzare l'altezza vera dopo il primo render, così la
+   scrollbar non salta. */
+.rank-row { content-visibility:auto; contain-intrinsic-size:auto 72px;
+  display:grid; grid-template-columns:36px 50px 1fr auto; gap:10px; align-items:center; padding:10px 12px;
   background: var(--surface); border:1px solid var(--border); border-radius: var(--radius-md); cursor:pointer; }
 .rank-row__pos { font-family: var(--font-display); font-weight:900; color: var(--text3); text-align:center; }
 .rank-row__poster { width:50px; height:72px; border-radius: var(--radius-sm); background: var(--surface2) center/cover no-repeat; border:1px solid var(--border); }
@@ -726,7 +735,8 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
   .podium-grid { grid-template-columns:1fr; }
   .detail-top { grid-template-columns:84px 1fr; }
   .detail-poster { width:84px; height:126px; }
-  .rank-row { grid-template-columns:30px 44px 1fr; }
+  /* Qui il voto va a capo sotto il poster: riga più alta, 116px di contenuto = 138px. */
+  .rank-row { grid-template-columns:30px 44px 1fr; contain-intrinsic-size:auto 116px; }
   .rank-row__vote { grid-column:2/4; justify-self:start; margin-top:4px; }
 }
 @media (max-width:560px) { .podium-grid { grid-template-columns:repeat(3,1fr); } }
