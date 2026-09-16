@@ -367,7 +367,7 @@ function goToScreen(screen) {
 }
 
 function renderHome() {
-  document.querySelectorAll("#watchlistModeToggle .stats-toggle-btn").forEach(btn => {
+  document.querySelectorAll("#watchlistModeToggle .genre-view-btn").forEach(btn => {
     btn.classList.toggle("active", btn.dataset.mode === watchlistMode);
   });
 
@@ -665,7 +665,7 @@ function observeLibrarySentinel() {
 // ─── STATISTICHE (generi + classifica, con toggle Io/Gruppo) ─────────────────
 
 function renderStats() {
-  document.querySelectorAll("#statsIoGruppoToggle .stats-toggle-btn").forEach(btn => {
+  document.querySelectorAll("#statsIoGruppoToggle .genre-view-btn").forEach(btn => {
     btn.classList.toggle("active", btn.dataset.mode === statsMode);
   });
   document.querySelectorAll("#rankingMediaToggle .stats-toggle-btn").forEach(btn => {
@@ -1673,10 +1673,10 @@ function bindGlobalEvents() {
     if (btn) { libraryGenre = btn.dataset.genreFilter; renderLibraryScreen(); }
   });
 
-  document.querySelectorAll("#watchlistModeToggle .stats-toggle-btn").forEach(btn => {
+  document.querySelectorAll("#watchlistModeToggle .genre-view-btn").forEach(btn => {
     btn.addEventListener("click", () => { haptic(8); watchlistMode = btn.dataset.mode; renderHome(); });
   });
-  document.querySelectorAll("#statsIoGruppoToggle .stats-toggle-btn").forEach(btn => {
+  document.querySelectorAll("#statsIoGruppoToggle .genre-view-btn").forEach(btn => {
     btn.addEventListener("click", () => { statsMode = btn.dataset.mode; renderStats(); });
   });
   document.querySelectorAll("#reportIoGruppoToggle .stats-toggle-btn").forEach(btn => {
