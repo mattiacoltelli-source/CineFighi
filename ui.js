@@ -320,17 +320,17 @@ const GENRE_PULSE_PERIODS_S = [4.0, 4.1, 4.2, 4.3, 4.4, 4.5];
 // Deriva: percorso (A/B/C, vedi CSS) assegnato a rotazione per indice, non
 // per bolla fissa — così due bolle vicine nel layout non seguono mai lo
 // stesso percorso. Periodi tutti diversi e "disordinati" apposta (non
-// crescenti in fila) perché sono lenti (9,4s-12,3s): se andassero in ordine
-// l'occhio nota comunque una progressione, anche a quella lentezza.
+// crescenti in fila) perché sono lenti (11,3s-14,8s): se andassero in
+// ordine l'occhio nota comunque una progressione, anche a quella lentezza.
 const GENRE_FLOAT_VARIANTS = ["a", "b", "c"];
 const GENRE_FLOAT_STAGGER_MS = 700;
-const GENRE_FLOAT_PERIODS_S = [9.4, 11.1, 10.3, 12.3, 9.9, 11.4];
+const GENRE_FLOAT_PERIODS_S = [11.3, 13.3, 12.4, 14.8, 11.9, 13.7];
 
 // Sciabordio del liquido: stesso principio dello stagger del respiro, ma
-// più veloce (3,3s-4,1s) perché è un dettaglio piccolo che deve leggersi
+// più veloce (4,0s-4,9s) perché è un dettaglio piccolo che deve leggersi
 // come "vivo", non come un secondo respiro visibile a distanza.
 const GENRE_WOBBLE_STAGGER_MS = 340;
-const GENRE_WOBBLE_PERIODS_S = [3.3, 3.5, 3.6, 3.9, 4.0, 4.1];
+const GENRE_WOBBLE_PERIODS_S = [4.0, 4.2, 4.3, 4.7, 4.8, 4.9];
 
 export function renderGenreBubbles(entries) {
   const container = document.getElementById("genreBars");
@@ -380,9 +380,9 @@ export function renderGenreBubbles(entries) {
     const pulsePeriod = GENRE_PULSE_PERIODS_S[i] || 4.2;
     const floatVariant = GENRE_FLOAT_VARIANTS[i % 3];
     const floatDelay = i * GENRE_FLOAT_STAGGER_MS;
-    const floatPeriod = GENRE_FLOAT_PERIODS_S[i] || 10.6;
+    const floatPeriod = GENRE_FLOAT_PERIODS_S[i] || 12.7;
     const wobbleDelay = i * GENRE_WOBBLE_STAGGER_MS;
-    const wobblePeriod = GENRE_WOBBLE_PERIODS_S[i] || 3.6;
+    const wobblePeriod = GENRE_WOBBLE_PERIODS_S[i] || 4.3;
     el.innerHTML = `
       <div class="genre-bubble-float genre-bubble-float--${floatVariant}" style="animation-delay:-${floatDelay}ms;animation-duration:${floatPeriod}s;">
         <div class="genre-bubble-breathe" style="animation-delay:-${pulseDelay}ms;animation-duration:${pulsePeriod}s;">
