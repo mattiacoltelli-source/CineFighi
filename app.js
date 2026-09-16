@@ -774,7 +774,7 @@ async function renderReport() {
 }
 
 function renderReportScreen() {
-  document.querySelectorAll("#reportIoGruppoToggle .stats-toggle-btn").forEach(btn => {
+  document.querySelectorAll("#reportIoGruppoToggle .genre-view-btn").forEach(btn => {
     btn.classList.toggle("active", btn.dataset.mode === reportMode);
   });
 
@@ -1679,7 +1679,7 @@ function bindGlobalEvents() {
   document.querySelectorAll("#statsIoGruppoToggle .genre-view-btn").forEach(btn => {
     btn.addEventListener("click", () => { statsMode = btn.dataset.mode; renderStats(); });
   });
-  document.querySelectorAll("#reportIoGruppoToggle .stats-toggle-btn").forEach(btn => {
+  document.querySelectorAll("#reportIoGruppoToggle .genre-view-btn").forEach(btn => {
     btn.addEventListener("click", () => { haptic(8); reportMode = btn.dataset.mode; renderReportScreen(); });
   });
   document.querySelectorAll("#rankingMediaToggle .stats-toggle-btn").forEach(btn => {
