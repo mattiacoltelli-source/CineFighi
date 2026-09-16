@@ -315,15 +315,15 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
    cambio di schermata. Fuori dalle Statistiche la schermata è display:none,
    quindi non anima affatto. */
 @keyframes genreBubbleDrift {
-  0%     { transform: translate(0, -4px); }
-  12.5%  { transform: translate(2.8px, -2.8px); }
-  25%    { transform: translate(4px, 0); }
-  37.5%  { transform: translate(2.8px, 2.8px); }
-  50%    { transform: translate(0, 4px); }
-  62.5%  { transform: translate(-2.8px, 2.8px); }
-  75%    { transform: translate(-4px, 0); }
-  87.5%  { transform: translate(-2.8px, -2.8px); }
-  100%   { transform: translate(0, -4px); }
+  0%     { transform: translate(0, -10px); }
+  12.5%  { transform: translate(7.1px, -7.1px); }
+  25%    { transform: translate(10px, 0); }
+  37.5%  { transform: translate(7.1px, 7.1px); }
+  50%    { transform: translate(0, 10px); }
+  62.5%  { transform: translate(-7.1px, 7.1px); }
+  75%    { transform: translate(-10px, 0); }
+  87.5%  { transform: translate(-7.1px, -7.1px); }
+  100%   { transform: translate(0, -10px); }
 }
 /* Diametro in % della larghezza del wrap (non in px): le posizioni di
    GENRE_BUBBLE_LAYOUT sono in %, quindi solo così le bolle restano dentro il
