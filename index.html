@@ -15,8 +15,18 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="stylesheet" href="styles.css?v=e8648ea">
-  <!-- Sentry: solo monitoraggio errori, nessun impatto sull'avvio se il CDN non risponde -->
-  <script src="https://js.sentry-cdn.com/4ef84fcbc8dfc06cb854ce648c817467.min.js" crossorigin="anonymous"></script>
+  <!-- Sentry: solo monitoraggio errori, nessun impatto sull'avvio se il CDN non risponde.
+       Bundle SDK + init esplicito invece del Loader Script: il Loader
+       (js.sentry-cdn.com/<chiave>.min.js) non serve mai il codice vero per le
+       organizzazioni con residenza dati in Europa come questa (de.sentry.io) —
+       restituisce sempre uno stub "not working anymore", verificato con curl
+       diretto. Il bundle qui sotto non dipende da quel meccanismo. -->
+  <script src="https://browser.sentry-cdn.com/10.75.0/bundle.min.js" crossorigin="anonymous"></script>
+  <script>
+    if (window.Sentry) {
+      Sentry.init({ dsn: "https://4ef84fcbc8dfc06cb854ce648c817467@o4511991055450112.ingest.de.sentry.io/4511991085334608" });
+    }
+  </script>
 </head>
 <body>
 
