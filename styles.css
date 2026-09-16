@@ -335,6 +335,27 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .genre-view-btn.active { background: var(--surface3); color: var(--text); }
 .taste-block__legend--row { display:block; margin-bottom:14px; }
 
+/* Toggle Io/Gruppo (watchlist Home, Statistiche, Report): stessa pillola
+   compatta del genre-view-toggle, ma con un thumb che scorre dietro la
+   voce attiva — cyan su "Io", arancio su "Gruppo/Io-Gruppo". Larghezza dei
+   bottoni fissa (invece che a misura di testo) così il thumb scorre di una
+   distanza nota, senza dover misurare il DOM in JS. */
+.io-gruppo-toggle { position:relative; display:flex; width:max-content; padding:3px;
+  background: var(--surface2); border:1px solid var(--border); border-radius: var(--radius-pill); }
+.io-gruppo-toggle__thumb { position:absolute; top:3px; left:3px; width:70px; height:28px;
+  border-radius: var(--radius-pill); background: linear-gradient(160deg, var(--cyan2), var(--cyan));
+  box-shadow: var(--cyan-glow);
+  transition: left var(--t-mid) var(--ease), background var(--t-mid) var(--ease), box-shadow var(--t-mid) var(--ease); }
+.io-gruppo-toggle:has(.io-gruppo-btn[data-mode="group"].active) .io-gruppo-toggle__thumb,
+.io-gruppo-toggle:has(.io-gruppo-btn[data-mode="gruppo"].active) .io-gruppo-toggle__thumb {
+  left:73px; background: linear-gradient(160deg, var(--orange2), var(--orange)); box-shadow: var(--orange-glow); }
+.io-gruppo-btn { position:relative; z-index:1; width:70px; border:0; background:transparent; padding:5px 0;
+  border-radius: var(--radius-pill); font-family: var(--font-display); font-weight:700; font-size:12px;
+  letter-spacing:.3px; cursor:pointer; color: var(--text2); transition: color var(--t-mid);
+  -webkit-tap-highlight-color: transparent; }
+.io-gruppo-btn[data-mode="me"].active, .io-gruppo-btn[data-mode="io"].active { color:#062a3a; }
+.io-gruppo-btn[data-mode="group"].active, .io-gruppo-btn[data-mode="gruppo"].active { color:#3a2008; }
+
 /* Bolle dei generi: il riempimento è "quanti titoli", la tinta del liquido
    è "quanto ti piace" — azzurro voti bassi, arancione voti alti. */
 .genre-bubbles-wrap { position:relative; width:100%; aspect-ratio:1/0.92; margin-top:2px; }
