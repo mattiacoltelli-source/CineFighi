@@ -284,26 +284,38 @@ export function renderGenreBars(entries) {
 // in quel genere, il COLORE del liquido dice quanto ti piace. Qui però la
 // scala segue il teal & orange dell'app: azzurro in basso per i voti bassi,
 // arancione in alto per i voti alti.
-// Posizioni in % del riquadro, con la bolla larga il 36%: nessuna supera il
-// 100% in larghezza, quindi niente bolle tagliate sul bordo destro.
 //
-// Due regole tengono insieme la disposizione:
+// Posizioni in % del riquadro, con la bolla larga il 32% (vedi
+// .genre-bubble). Non una griglia regolare: posizioni scelte a mano,
+// irregolari e asimmetriche apposta — ogni coppia vicina si sovrappone (o si
+// stacca) di un valore diverso, mai oltre il 19% circa: abbastanza da
+// leggersi come un gruppo compatto e organico, mai una bolla che ne nasconde
+// un'altra.
 //
-// 1. Le bolle che si sfiorano si sovrappongono di circa il 10% del diametro.
-//    La via di mezzo è il caso peggiore: due cerchi distanti pochi pixel
-//    sembrano un errore di allineamento, non una scelta.
-// 2. Si sovrappongono solo in DIAGONALE, mai affiancate alla stessa altezza.
-//    Due bolle una di fianco all'altra si intersecano in una lente verticale
-//    alta, in mezzo alla composizione e proprio fra le due etichette; in
-//    diagonale la lente è piccola e defilata in un angolo. Per questo Dramma e
-//    Fantascienza, che stanno alla stessa altezza, restano staccate.
-//
-// Mistero chiude in basso al centro invece che a sinistra: senza, le altre
-// quattro si leggono come due colonne separate con un vuoto in mezzo.
+// La coppia di destra di ogni riga arriva alla stessa distanza dal bordo
+// destro: due bolle "di destra" non allineate fra loro fanno sembrare il
+// gruppo spostato a sinistra anche quando il centro geometrico è giusto —
+// contano i bordi esterni che l'occhio segue riga per riga, non il centroide.
 const GENRE_BUBBLE_LAYOUT = [
-  { left: 4, top: 8 }, { left: 58, top: 8 }, { left: 20, top: 35 },
-  { left: 62, top: 39 }, { left: 30, top: 64 },
+  { left: 3, top: 6 }, { left: 52, top: 3 },
+  { left: 23, top: 27 }, { left: 60, top: 30 },
+  { left: 6, top: 56 }, { left: 52, top: 54 },
 ];
+
+// Respiro: un unico impulso morbido (solo scale + un filo di brightness),
+// stesso per tutte, sfasato abbastanza (550ms) da una bolla alla successiva
+// che non si leggano mai come un blocco unico che pulsa insieme. Periodo
+// leggermente diverso per ognuna (4,0s → 4,5s) invece che identico: le fasi
+// non tornano mai a coincidere allo stesso modo, quindi il respiro non si
+// ripete mai in un pattern perfettamente meccanico — costo zero, stessa
+// @keyframes, solo animation-duration diversa.
+//
+// Un po' di sovrapposizione qui è l'aspetto voluto (vedi GENRE_BUBBLE_LAYOUT
+// sopra): se la pulsazione fa toccare per un attimo una coppia che a riposo
+// ha un piccolo distacco non è un problema, fa parte dell'effetto "bolle
+// vive", non un errore da evitare con un margine di sicurezza calcolato.
+const GENRE_PULSE_STAGGER_MS = 550;
+const GENRE_PULSE_PERIODS_S = [4.0, 4.1, 4.2, 4.3, 4.4, 4.5];
 
 export function renderGenreBubbles(entries) {
   const container = document.getElementById("genreBars");
@@ -349,17 +361,21 @@ export function renderGenreBubbles(entries) {
       el.setAttribute("aria-label", `${g.label}: ${g.value} titoli, media ${voteText.replace("★ ", "")}`);
     }
 
+    const pulseDelay = i * GENRE_PULSE_STAGGER_MS;
+    const pulsePeriod = GENRE_PULSE_PERIODS_S[i] || 4.2;
     el.innerHTML = `
-      <div class="genre-bubble-inner">
-        <div class="genre-bubble-fill" style="height:${fillPct}%;animation-delay:${i * 90}ms;">
-          <div class="genre-bubble-fill-inner" style="background:${fillGradient};"></div>
-        </div>
-        <div class="genre-bubble-sheen"></div>
-        <div class="genre-bubble-text">
-          <div class="name">${escapeHtml(g.label.toUpperCase())}</div>
-          <div class="count">${g.value}</div>
-          <div class="label">titol${g.value === 1 ? "o" : "i"}</div>
-          ${voteText ? `<div class="vote" hidden>${voteText}</div>` : ""}
+      <div class="genre-bubble-breathe" style="animation-delay:-${pulseDelay}ms;animation-duration:${pulsePeriod}s;">
+        <div class="genre-bubble-inner">
+          <div class="genre-bubble-fill" style="height:${fillPct}%;animation-delay:${i * 90}ms;">
+            <div class="genre-bubble-fill-inner" style="background:${fillGradient};"></div>
+          </div>
+          <div class="genre-bubble-sheen"></div>
+          <div class="genre-bubble-text">
+            <div class="name">${escapeHtml(g.label.toUpperCase())}</div>
+            <div class="count">${g.value}</div>
+            <div class="label">titol${g.value === 1 ? "o" : "i"}</div>
+            ${voteText ? `<div class="vote" hidden>${voteText}</div>` : ""}
+          </div>
         </div>
       </div>`;
 

@@ -717,7 +717,7 @@ function renderStats() {
     });
   });
   const topGenres = Object.entries(genreCount)
-    .sort((a, b) => b[1] - a[1]).slice(0, 5)
+    .sort((a, b) => b[1] - a[1]).slice(0, 6)
     .map(([label, value]) => {
       const votes = genreVotesAcc[label] || [];
       const avgVote = votes.length ? votes.reduce((a, b) => a + b, 0) / votes.length : null;
