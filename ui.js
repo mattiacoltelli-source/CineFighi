@@ -5,7 +5,7 @@
 import {
   escapeHtml, mediaLabel, mediaBadgeClass, posterUrl, uniqueKey,
   average, voteCount, rawNumberToFixed, firstVoter, firstOfNames
-} from "./cine-core.js?v=9119ab3";
+} from "./cine-core.js?v=25e57bd";
 
 // ─── ANIMAZIONI (numeri che contano, barre che si riempiono, tattile) ───────
 
