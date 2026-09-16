@@ -317,6 +317,21 @@ const GENRE_BUBBLE_LAYOUT = [
 const GENRE_PULSE_STAGGER_MS = 550;
 const GENRE_PULSE_PERIODS_S = [4.0, 4.1, 4.2, 4.3, 4.4, 4.5];
 
+// Deriva: percorso (A/B/C, vedi CSS) assegnato a rotazione per indice, non
+// per bolla fissa — così due bolle vicine nel layout non seguono mai lo
+// stesso percorso. Periodi tutti diversi e "disordinati" apposta (non
+// crescenti in fila) perché sono lenti (7,5s-9,8s): se andassero in ordine
+// l'occhio nota comunque una progressione, anche a quella lentezza.
+const GENRE_FLOAT_VARIANTS = ["a", "b", "c"];
+const GENRE_FLOAT_STAGGER_MS = 700;
+const GENRE_FLOAT_PERIODS_S = [7.5, 8.9, 8.2, 9.8, 7.9, 9.1];
+
+// Sciabordio del liquido: stesso principio dello stagger del respiro, ma
+// più veloce (2,6s-3,3s) perché è un dettaglio piccolo che deve leggersi
+// come "vivo", non come un secondo respiro visibile a distanza.
+const GENRE_WOBBLE_STAGGER_MS = 340;
+const GENRE_WOBBLE_PERIODS_S = [2.6, 2.8, 2.9, 3.1, 3.2, 3.3];
+
 export function renderGenreBubbles(entries) {
   const container = document.getElementById("genreBars");
   if (!entries.length) {
@@ -363,18 +378,25 @@ export function renderGenreBubbles(entries) {
 
     const pulseDelay = i * GENRE_PULSE_STAGGER_MS;
     const pulsePeriod = GENRE_PULSE_PERIODS_S[i] || 4.2;
+    const floatVariant = GENRE_FLOAT_VARIANTS[i % 3];
+    const floatDelay = i * GENRE_FLOAT_STAGGER_MS;
+    const floatPeriod = GENRE_FLOAT_PERIODS_S[i] || 8.5;
+    const wobbleDelay = i * GENRE_WOBBLE_STAGGER_MS;
+    const wobblePeriod = GENRE_WOBBLE_PERIODS_S[i] || 2.9;
     el.innerHTML = `
-      <div class="genre-bubble-breathe" style="animation-delay:-${pulseDelay}ms;animation-duration:${pulsePeriod}s;">
-        <div class="genre-bubble-inner">
-          <div class="genre-bubble-fill" style="height:${fillPct}%;animation-delay:${i * 90}ms;">
-            <div class="genre-bubble-fill-inner" style="background:${fillGradient};"></div>
-          </div>
-          <div class="genre-bubble-sheen"></div>
-          <div class="genre-bubble-text">
-            <div class="name">${escapeHtml(g.label.toUpperCase())}</div>
-            <div class="count">${g.value}</div>
-            <div class="label">titol${g.value === 1 ? "o" : "i"}</div>
-            ${voteText ? `<div class="vote" hidden>${voteText}</div>` : ""}
+      <div class="genre-bubble-float genre-bubble-float--${floatVariant}" style="animation-delay:-${floatDelay}ms;animation-duration:${floatPeriod}s;">
+        <div class="genre-bubble-breathe" style="animation-delay:-${pulseDelay}ms;animation-duration:${pulsePeriod}s;">
+          <div class="genre-bubble-inner">
+            <div class="genre-bubble-fill" style="height:${fillPct}%;animation-delay:${i * 90}ms;">
+              <div class="genre-bubble-fill-inner" style="background:${fillGradient};animation-delay:-${wobbleDelay}ms;animation-duration:${wobblePeriod}s;"></div>
+            </div>
+            <div class="genre-bubble-sheen"></div>
+            <div class="genre-bubble-text">
+              <div class="name">${escapeHtml(g.label.toUpperCase())}</div>
+              <div class="count">${g.value}</div>
+              <div class="label">titol${g.value === 1 ? "o" : "i"}</div>
+              ${voteText ? `<div class="vote" hidden>${voteText}</div>` : ""}
+            </div>
           </div>
         </div>
       </div>`;
