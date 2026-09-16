@@ -668,7 +668,7 @@ function renderStats() {
   document.querySelectorAll("#statsIoGruppoToggle .io-gruppo-btn").forEach(btn => {
     btn.classList.toggle("active", btn.dataset.mode === statsMode);
   });
-  document.querySelectorAll("#rankingMediaToggle .stats-toggle-btn").forEach(btn => {
+  document.querySelectorAll("#rankingMediaToggle .genre-view-btn").forEach(btn => {
     btn.classList.toggle("active", btn.dataset.media === rankingMedia);
   });
   document.querySelectorAll("#genreViewToggle .genre-view-btn").forEach(btn => {
@@ -1682,7 +1682,7 @@ function bindGlobalEvents() {
   document.querySelectorAll("#reportIoGruppoToggle .io-gruppo-btn").forEach(btn => {
     btn.addEventListener("click", () => { haptic(8); reportMode = btn.dataset.mode; renderReportScreen(); });
   });
-  document.querySelectorAll("#rankingMediaToggle .stats-toggle-btn").forEach(btn => {
+  document.querySelectorAll("#rankingMediaToggle .genre-view-btn").forEach(btn => {
     btn.addEventListener("click", () => { rankingMedia = btn.dataset.media; renderStats(); });
   });
   document.querySelectorAll("#genreViewToggle .genre-view-btn").forEach(btn => {
