@@ -106,7 +106,20 @@ function initUpdateCheck() {
   navigator.serviceWorker.addEventListener("controllerchange", () => {
     if (alreadyReloading) return;
     alreadyReloading = true;
-    window.location.reload();
+    // NON location.reload(): su un'app installata sulla home (standalone/PWA),
+    // reload() spesso si comporta come una navigazione normale invece che come
+    // una ricarica forzata, quindi GitHub Pages può servire l'HTML dalla cache
+    // del telefono (max-age=600) — quello VECCHIO, con ancora dentro i link a
+    // styles.css/app.js/ecc. con l'hash di versione di PRIMA. Risultato: il
+    // banner "Aggiorna" appare (il file sw.js è sempre rivalidato dal
+    // browser), l'utente lo preme, ma i file serviti restano quelli di prima.
+    // Navigando invece a un URL mai visto (con un parametro in più), quell'URL
+    // è per forza un cache-miss: il browser DEVE andare in rete, prende
+    // l'HTML fresco con i nuovi hash, e i file dietro quegli hash sono a loro
+    // volta URL mai richiesti prima, quindi cache-miss anche loro.
+    const url = new URL(window.location.href);
+    url.searchParams.set("_v", Date.now().toString(36));
+    window.location.replace(url.toString());
   });
 }
 
