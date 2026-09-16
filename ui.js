@@ -326,6 +326,17 @@ export function renderGenreBubbles(entries) {
   container.innerHTML = "";
   const wrap = document.createElement("div");
   wrap.className = "genre-bubbles-wrap";
+  // Il riquadro viene ricreato da zero a ogni render (vedi sopra): senza
+  // questo, l'animazione CSS della deriva ripartirebbe da 0% ogni volta che
+  // renderStats() viene richiamato mentre si è già su Statistiche (toggle
+  // Io/Gruppo, Film/Serie, tasto indietro...) — non un problema qui quanto
+  // in Cos90 (dove un evento realtime può farlo capitare molto spesso), ma
+  // stessa causa, stessa correzione, per coerenza fra le due app: un
+  // animation-delay NEGATIVO ancorato a performance.now() (tempo dal
+  // caricamento della pagina) fa ripartire ogni nuova istanza esattamente
+  // dal punto in cui sarebbe arrivata quella vecchia.
+  const DRIFT_PERIOD_S = 28; // deve combaciare con la durata di genreBubbleDrift in styles.css
+  wrap.style.animationDelay = `-${((performance.now() / 1000) % DRIFT_PERIOD_S).toFixed(2)}s`;
 
   entries.forEach((g, i) => {
     const hasAvg = Number.isFinite(g.avgVote);
