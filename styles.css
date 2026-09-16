@@ -63,13 +63,47 @@ body {
   overscroll-behavior: none;
 }
 
+/* Sfondo atmosferico: 4 aloni morbidi invece di una superficie piatta, per
+   dare profondità senza animare nulla — statico, costa un solo paint al
+   caricamento. Solo azzurro/ciano (il colore dell'app, non l'arancione):
+   intensità diverse fra loro per non farli leggere come copie identiche.
+   Stesso trattamento già applicato su Cos90/CineTracker, qui con la tinta
+   ciano di CineFighi al posto del blu di Cos90. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 70% 40% at 50% -5%, rgba(56,189,248,.09), transparent 60%),
+    radial-gradient(ellipse 55% 42% at 105% 12%, rgba(56,189,248,.075), transparent 65%),
+    radial-gradient(ellipse 60% 50% at 100% 82%, rgba(56,189,248,.09), transparent 65%),
+    radial-gradient(ellipse 62% 45% at -8% 96%, rgba(56,189,248,.06), transparent 65%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Grana leggerissima sopra gli aloni: rompe l'effetto "gradiente CSS
+   piatto" tipico delle interfacce generate, senza muovere nulla — un
+   filtro SVG calcolato una volta sola, mai ricalcolato. mix-blend-mode
+   overlay la fonde con lo sfondo sotto invece di sovrapporla a vista. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: .045;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+}
+
 h1, h2, h3 { font-family: var(--font-display); font-weight: 800; line-height: 1.1; }
 .hidden { display: none !important; }
 
 .screen-enter { animation: screenEnter .22s var(--ease) both; }
 @keyframes screenEnter { from { opacity:0; transform:translateY(6px);} to { opacity:1; transform:translateY(0);} }
 
-.app { max-width: 720px; margin: 0 auto; padding: 0 16px; }
+.app { max-width: 720px; margin: 0 auto; padding: 0 16px; position: relative; z-index: 1; }
 
 /* TOPBAR */
 /* padding-top con safe-area: in PWA installata (standalone + viewport-fit=
