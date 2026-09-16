@@ -9,7 +9,7 @@
 //
 // Ad ogni release, cambia questo numero: è quello che fa capire al browser
 // che il file è cambiato e quindi c'è una versione nuova da proporre.
-const SW_VERSION = "1b26cc9";
+const SW_VERSION = "938cf49";
 
 self.addEventListener("install", () => {
   // Non ci attiviamo subito: aspettiamo che l'utente prema "Aggiorna" in app.
