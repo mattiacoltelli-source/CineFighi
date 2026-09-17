@@ -148,6 +148,17 @@ export async function tmdbFetchByCrewMember(type, personId, excludedKeys, minVot
   return tmdbFetchDiscoverLevel([url], type, excludedKeys);
 }
 
+// Film/serie con almeno uno di questi attori nel cast — "|" tra gli ID è OR
+// in TMDB (con_genres usa la stessa convenzione: "," è AND, "|" è OR), qui
+// serve OR perché basta un attore della lista, non tutti insieme.
+export async function tmdbFetchByCastMembers(type, personIds, excludedKeys, minVoteAverage = 0) {
+  if (!personIds.length) return [];
+  const minVotes = type === "movie" ? "&vote_count.gte=50" : "&vote_count.gte=20";
+  const minAvg = minVoteAverage > 0 ? `&vote_average.gte=${minVoteAverage}` : "";
+  const url = `${BASE_URL}/discover/${type}?api_key=${API_KEY}&language=it-IT&with_cast=${personIds.join("|")}&sort_by=vote_average.desc${minVotes}${minAvg}&page=1`;
+  return tmdbFetchDiscoverLevel([url], type, excludedKeys);
+}
+
 // Costruisce i 4 livelli di ricerca (precisa → ampia → solo genere → fallback),
 // esattamente come nell'algoritmo originale di CineTracker, basandosi sul
 // profilo di gusti della persona selezionata.

@@ -18,7 +18,8 @@ import {
 } from "./storage.js?v=b546ffc";
 import {
   tmdbFetchDetail, tmdbSearch, tmdbFetchDiscoverLevel, tmdbFetchDecadeCandidates,
-  tmdbFetchOutOfComfortZoneCandidates, buildFallbackQueries, tmdbFindPersonId, tmdbFetchByCrewMember
+  tmdbFetchOutOfComfortZoneCandidates, buildFallbackQueries, tmdbFindPersonId, tmdbFetchByCrewMember,
+  tmdbFetchByCastMembers
 } from "./tmdb.js?v=b546ffc";
 import {
   showToast, avatarHtml, initScreens, switchScreen,
@@ -53,6 +54,42 @@ function passesGroupQualityBar(item) {
   if (isHorror) return true;
   return (item.vote_average || 0) >= GROUP_MIN_VOTE_AVERAGE_NON_HORROR;
 }
+
+// Attori preferiti di Mattia (stessa lista di FAVORITE_ACTORS in Cos90,
+// taste-profile.js — copiata a mano qui: CineFighi resta un'app separata,
+// non importa nulla da Cos90). Usata SOLO per lo slot "cast stellare" nel
+// consiglio di gruppo qui sotto — uno slot dichiarato come scelta personale
+// di Mattia (il testo del consiglio lo dice esplicitamente), non un segnale
+// di gruppo come il regista condiviso, che invece richiede il voto di tutti
+// i selezionati. ID TMDB già risolti a mano (sono fissi, non cambiano) per
+// evitare 23 ricerche per nome ad ogni "Dammi 6 consigli" — oltre a essere
+// lento, un fallimento di rete su una singola ricerca la escludeva per
+// sempre dalla sessione (la cache in memoria non riprova).
+const MATTIA_STAR_ACTORS = [
+  { name: "Leonardo DiCaprio", id: 6193 },
+  { name: "Jake Gyllenhaal", id: 131 },
+  { name: "Christian Bale", id: 3894 },
+  { name: "Matthew McConaughey", id: 10297 },
+  { name: "Tom Hardy", id: 2524 },
+  { name: "Brad Pitt", id: 287 },
+  { name: "Colin Farrell", id: 72466 },
+  { name: "Matt Damon", id: 1892 },
+  { name: "Cillian Murphy", id: 2037 },
+  { name: "Michael Fassbender", id: 17288 },
+  { name: "Robert Pattinson", id: 11288 },
+  { name: "Josh Hartnett", id: 2299 },
+  { name: "Alexander Skarsgård", id: 28846 },
+  { name: "Rebecca Ferguson", id: 933238 },
+  { name: "Sydney Sweeney", id: 115440 },
+  { name: "Anya Taylor-Joy", id: 1397778 },
+  { name: "Ana de Armas", id: 224513 },
+  { name: "Keanu Reeves", id: 6384 },
+  { name: "Christoph Waltz", id: 27319 },
+  { name: "Idris Elba", id: 17605 },
+  { name: "Mark Ruffalo", id: 103 },
+  { name: "Edward Norton", id: 819 },
+  { name: "Ethan Hawke", id: 569 }
+];
 
 let currentUser = null;
 let users = [];
@@ -1211,6 +1248,14 @@ async function fetchDirectorCandidates(people, type, excludedKeys) {
   }));
 }
 
+// Candidati per lo slot "cast stellare": non dipende da "picked", quindi
+// parte in parallelo col resto (stesso motivo del regista condiviso). Gli
+// ID sono già noti (MATTIA_STAR_ACTORS sopra), nessuna ricerca per nome.
+async function fetchStarCastCandidates(type, excludedKeys) {
+  const ids = MATTIA_STAR_ACTORS.map(a => a.id);
+  return tmdbFetchByCastMembers(type, ids, excludedKeys, GROUP_MIN_VOTE_AVERAGE).catch(() => []);
+}
+
 // Tra gli slot rimpiazzabili, quello col punteggio più basso — ma MAI uno
 // già protetto (a meno che siano protetti tutti): impedisce a regista e
 // diversificazione per genere di cancellarsi a vicenda, ed evita anche che
@@ -1227,10 +1272,11 @@ function worstReplaceableIndex(entries, protectedIndices) {
 // quello slot resta semplicemente quello scelto su generi+fasce (il
 // fallback "un altro criterio" richiesto è proprio il resto
 // dell'algoritmo, già calcolato prima di questa funzione). Non tocca gli
-// slot "per variare" (rankedGroupGenres) a meno che siano gli unici rimasti.
-function applyDirectorPicks(picked, directorResults, profiles, peopleNames, rawProfiles) {
+// slot già protetti (protectedIndices, in comune con lo slot "cast
+// stellare" più sotto, così le due sostituzioni non si cancellano a
+// vicenda) a meno che siano gli unici rimasti.
+function applyDirectorPicks(picked, directorResults, profiles, peopleNames, rawProfiles, protectedIndices) {
   const result = [...picked];
-  const protectedIndices = new Set(result.map((e, i) => (e.isDiversify ? i : null)).filter(i => i !== null));
 
   for (const dr of directorResults) {
     if (!dr) continue;
@@ -1248,6 +1294,30 @@ function applyDirectorPicks(picked, directorResults, profiles, peopleNames, rawP
     };
     protectedIndices.add(worstIndex);
   }
+  return result;
+}
+
+// Sostituisce 1 solo slot con un titolo del "cast stellare" di Mattia
+// (MATTIA_STAR_ACTORS) — dichiarato esplicitamente nel testo del consiglio
+// come scelta sua, non un segnale di gruppo. Stessa logica di "mai slot
+// vuoto" del regista: se non c'è un candidato utilizzabile, i 6 restano
+// quelli di prima.
+function applyStarCastPick(picked, starCastCandidates, profiles, peopleNames, rawProfiles, protectedIndices) {
+  const result = [...picked];
+  const usedKeys = new Set(result.map(entry => uniqueKey(entry.item)));
+  const candidate = starCastCandidates.find(item => !usedKeys.has(uniqueKey(item)));
+  if (!candidate) return result;
+
+  const worstIndex = worstReplaceableIndex(result, protectedIndices);
+  result[worstIndex] = {
+    item: candidate,
+    affinity: minAffinity(candidate, profiles),
+    reasons: ["scelto da Mattia: cast tra i suoi attori preferiti"],
+    rankScore: minScore(candidate, profiles, []),
+    breakdown: buildBreakdown(candidate, peopleNames, rawProfiles),
+    isStarCast: true
+  };
+  protectedIndices.add(worstIndex);
   return result;
 }
 
@@ -1492,10 +1562,11 @@ async function recommendTonightFive() {
       const primaryGenreIds = primaryGenres.map(g => GENRE_NAME_TO_ID[g]).filter(Boolean);
       const diversifyGenreIds = diversifyGenres.map(g => GENRE_NAME_TO_ID[g]).filter(Boolean);
 
-      // Le tre fasi (fasce principali, fasce diversificanti, regista) non
-      // dipendono l'una dall'altra: partono tutte insieme invece che in
-      // fila, altrimenti l'attesa si somma invece di sovrapporsi.
-      let [decadePools, diversifyPools, directorResults] = await Promise.all([
+      // Le quattro fasi (fasce principali, fasce diversificanti, regista,
+      // cast stellare) non dipendono l'una dall'altra: partono tutte
+      // insieme invece che in fila, altrimenti l'attesa si somma invece di
+      // sovrapporsi.
+      let [decadePools, diversifyPools, directorResults, starCastCandidates] = await Promise.all([
         Promise.all(
           buckets.map(b =>
             tmdbFetchDecadeCandidates(queryProfile.prefType, b.start, b.end, primaryGenreIds.length ? primaryGenreIds : genreIds, excludedKeys, GROUP_MIN_VOTE_AVERAGE)
@@ -1508,13 +1579,14 @@ async function recommendTonightFive() {
                 : Promise.resolve([]))
             )
           : Promise.resolve(buckets.map(() => [])),
-        fetchDirectorCandidates(people, queryProfile.prefType, excludedKeys)
+        fetchDirectorCandidates(people, queryProfile.prefType, excludedKeys),
+        fetchStarCastCandidates(queryProfile.prefType, excludedKeys)
       ]);
 
       // Soglia qualità più alta per tutto ciò che non è Horror (vedi
       // passesGroupQualityBar) — applicata qui, subito dopo il fetch, così
-      // tutto il resto della pipeline (scelta per fascia, backfill, regista)
-      // lavora già solo su candidati che la superano.
+      // tutto il resto della pipeline (scelta per fascia, backfill, regista,
+      // cast stellare) lavora già solo su candidati che la superano.
       decadePools = decadePools.map(pool => pool.filter(passesGroupQualityBar));
       diversifyPools = diversifyPools.map(pool => pool.filter(passesGroupQualityBar));
       directorResults = directorResults.map(dr => {
@@ -1522,6 +1594,7 @@ async function recommendTonightFive() {
         const candidates = dr.candidates.filter(passesGroupQualityBar);
         return candidates.length ? { ...dr, candidates } : null;
       });
+      starCastCandidates = starCastCandidates.filter(passesGroupQualityBar);
 
       // Niente rumore casuale qui (a differenza dell'algoritmo solitario
       // sotto): l'obiettivo è che il risultato sembri deliberato, non un
@@ -1597,14 +1670,19 @@ async function recommendTonightFive() {
       }
 
       // Fino a 2 slot sostituiti da un film di un regista condiviso dai
-      // coinvolti, se ce n'è uno; altrimenti i 6 restano quelli scelti sopra.
-      // (Le candidature per regista sono già state cercate sopra, in
-      // parallelo col resto — qui restano solo da applicare.)
+      // coinvolti, e 1 slot dal cast stellare di Mattia (dichiarato come
+      // tale) — se ce n'è uno; altrimenti i 6 restano quelli scelti sopra.
+      // Le due sostituzioni condividono lo stesso protectedIndices per non
+      // cancellarsi a vicenda (né toccare gli slot "per variare").
+      const protectedIndices = new Set(picked.map((e, i) => (e.isDiversify ? i : null)).filter(i => i !== null));
       const withDirectorPicks = picked.length >= 2
-        ? applyDirectorPicks(picked, directorResults, profiles, peopleNames, rawProfiles)
+        ? applyDirectorPicks(picked, directorResults, profiles, peopleNames, rawProfiles, protectedIndices)
         : picked;
+      const withStarCastPick = withDirectorPicks.length >= 2
+        ? applyStarCastPick(withDirectorPicks, starCastCandidates, profiles, peopleNames, rawProfiles, protectedIndices)
+        : withDirectorPicks;
 
-      const finalSix = withDirectorPicks.sort((a, b) => Number(a.item.year || 0) - Number(b.item.year || 0));
+      const finalSix = withStarCastPick.sort((a, b) => Number(a.item.year || 0) - Number(b.item.year || 0));
       area.innerHTML = renderTonightList(finalSix);
       area.dataset.cache = JSON.stringify(finalSix.map(d => d.item));
       registerSuggested(finalSix.map(d => d.item));
