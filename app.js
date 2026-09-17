@@ -1299,6 +1299,7 @@ function renderTonightPeoplePicker() {
   const panel = document.getElementById("tonightPeoplePanel");
   const note = document.getElementById("tonightPeopleNote");
   const intro = document.getElementById("tonightIntro");
+  const title = document.getElementById("tonightTitle");
   if (!stack || !currentUser) return;
 
   // Stack: tu + fino a 2 altri come avatar sovrapposti; oltre, una bolla
@@ -1329,6 +1330,8 @@ function renderTonightPeoplePicker() {
         ${avatarHtml(u, 26)}<span class="name">${escapeHtml(u)}</span>${votesText}<span class="dot"></span>
       </button>`;
   }).join("");
+
+  title.textContent = tonightSelectedPeople.length >= 2 ? "Stasera cosa guardiamo?" : "Stasera cosa guardo?";
 
   if (tonightSelectedPeople.length >= 2) {
     const parts = tonightSelectedPeople.map(u => `${escapeHtml(u)} (${votedCountFor(u)} voti)`);
