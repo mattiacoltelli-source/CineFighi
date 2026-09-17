@@ -1108,6 +1108,37 @@ function seenCapForGroupSize(n) {
   return 3;
 }
 
+// Le 3 decadi su cui si concentrano di più i voti dei coinvolti — non solo
+// la decade preferita di ciascuno (un solo numero a testa), tutta la
+// distribuzione dei voti di tutti loro insieme. Usate per "Dammi 6
+// consigli" di gruppo: 2 titoli per decade, generi e media voto a scegliere
+// quali. Un algoritmo semplice e facile da spiegare ("le vostre decadi
+// migliori") funziona meglio di un punteggio complesso che l'utente non può
+// leggere — anche se il risultato non è chissà quanto più raffinato, si
+// legge come intenzionale.
+function getGroupTopDecades(people, n = 3) {
+  const decadeCount = {};
+  people.forEach(u => {
+    db.forEach(item => {
+      if (item.votes && item.votes[u]) {
+        const d = decadeOf(item.year);
+        if (d !== "Sconosciuta") decadeCount[d] = (decadeCount[d] || 0) + 1;
+      }
+    });
+  });
+  return Object.entries(decadeCount).sort((a, b) => b[1] - a[1]).slice(0, n).map(([d]) => d);
+}
+
+// Motivo mostrato sulla card per l'algoritmo a decadi: sempre vero per
+// costruzione (il titolo VIENE da quella decade, non è un match probabile).
+function buildGroupDecadeReason(item, decadeLabel, queryProfile) {
+  const bits = [];
+  const matches = (item.genre_names || []).filter(g => queryProfile.topGenres.includes(g));
+  if (matches.length) bits.push(`generi preferiti: ${matches.slice(0, 2).join(" + ")}`);
+  bits.push(`anni ${decadeLabel}`);
+  return bits;
+}
+
 // Un solo profilo "da interrogare" per costruire la query TMDB (tipo
 // preferito, generi, decade) — diverso dal confronto affinità/punteggio più
 // sotto, che resta sempre per-persona, mai su un profilo fuso.
@@ -1268,6 +1299,74 @@ async function recommendTonightFive() {
     : new Set(db.map(x => `${x.media_type}_${x.tmdb_id}`));
 
   try {
+    // In gruppo: algoritmo diverso da quello solitario, deliberatamente più
+    // semplice — 3 decadi preferite dai coinvolti, 2 titoli per decade
+    // scelti su generi+media voto. Non diversifica generi/decadi con
+    // pickDiverse (qui la decade è già garantita per costruzione) e non ha
+    // slot "fuori zona": la trasparenza del meccanismo conta più della
+    // raffinatezza.
+    if (isGroup) {
+      const decades = getGroupTopDecades(people, 3);
+      if (!decades.length) {
+        area.innerHTML = `<p class="tonight__hint">Non ho abbastanza voti per capire le decadi preferite del gruppo.</p>`;
+        return;
+      }
+
+      const decadePools = await Promise.all(
+        decades.map(d => {
+          const dy = parseInt(d, 10);
+          return tmdbFetchDecadeCandidates(queryProfile.prefType, dy, dy + 9, genreIds, excludedKeys);
+        })
+      );
+
+      const usedKeys = new Set();
+      const picked = [];
+      decades.forEach((decadeLabel, i) => {
+        const pool = decadePools[i]
+          .filter(item => !usedKeys.has(uniqueKey(item)))
+          .map(item => ({
+            item,
+            affinity: minAffinity(item, profiles),
+            reasons: buildGroupDecadeReason(item, decadeLabel, queryProfile),
+            rankScore: minScore(item, profiles, []) + Math.random() * 2.5
+          }))
+          .sort((a, b) => b.rankScore - a.rankScore);
+        pool.slice(0, 2).forEach(entry => { picked.push(entry); usedKeys.add(uniqueKey(entry.item)); });
+      });
+
+      // Se una decade ha reso meno di 2 titoli (catalogo piccolo), ripesca
+      // dagli avanzi delle altre decadi per arrivare comunque a 6.
+      if (picked.length < 6) {
+        const leftover = decadePools.flat()
+          .filter(item => !usedKeys.has(uniqueKey(item)))
+          .map(item => ({
+            item,
+            affinity: minAffinity(item, profiles),
+            reasons: buildGroupDecadeReason(item, decadeOf(item.year), queryProfile),
+            rankScore: minScore(item, profiles, []) + Math.random() * 2.5
+          }))
+          .sort((a, b) => b.rankScore - a.rankScore);
+        for (const entry of leftover) {
+          if (picked.length >= 6) break;
+          if (usedKeys.has(uniqueKey(entry.item))) continue;
+          picked.push(entry);
+          usedKeys.add(uniqueKey(entry.item));
+        }
+      }
+
+      if (!picked.length) {
+        area.innerHTML = `<p class="tonight__hint">Non ho trovato consigli nuovi al momento. Riprova tra poco.</p>`;
+        return;
+      }
+
+      const finalSix = picked.sort((a, b) => Number(a.item.year || 0) - Number(b.item.year || 0));
+      area.innerHTML = renderTonightList(finalSix);
+      area.dataset.cache = JSON.stringify(finalSix.map(d => d.item));
+      registerSuggested(finalSix.map(d => d.item));
+      return;
+    }
+
+    // Da soli: algoritmo invariato (4 slot ad alta affinità + 2 fuori zona).
     const [decadePools, outOfZoneRaw] = await Promise.all([
       Promise.all(
         tonightDecadeRanges().map(d =>
