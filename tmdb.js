@@ -117,6 +117,37 @@ export async function tmdbFetchOutOfComfortZoneCandidates(type, excludeGenreIds,
   return tmdbFetchDiscoverLevel(urls, type, excludedKeys);
 }
 
+// Risolve un nome di regista (stringa salvata in db.director) nel suo ID
+// TMDB, necessario per interrogare /discover per regista: i risultati
+// discover non includono i credits (regista incluso), quindi non basta
+// filtrare in locale, serve una ricerca dedicata. Cache in memoria perché
+// lo stesso regista può ricorrere in più richieste "Stasera" nella stessa
+// sessione.
+export async function tmdbFindPersonId(name) {
+  const cacheKey = `person|${name.trim().toLowerCase()}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) return cached;
+  try {
+    const res = await fetch(`${BASE_URL}/search/person?api_key=${API_KEY}&language=it-IT&query=${encodeURIComponent(name)}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const id = data.results?.[0]?.id || null;
+    if (id) cacheSet(cacheKey, id);
+    return id;
+  } catch { return null; }
+}
+
+// Film/serie con quella persona tra i membri della crew — TMDB non offre un
+// filtro "solo regista", with_crew è l'approssimazione più vicina (in
+// pratica corretto per chi è noto principalmente come regista, che è il
+// caso comune qui).
+export async function tmdbFetchByCrewMember(type, personId, excludedKeys, minVoteAverage = 0) {
+  const minVotes = type === "movie" ? "&vote_count.gte=50" : "&vote_count.gte=20";
+  const minAvg = minVoteAverage > 0 ? `&vote_average.gte=${minVoteAverage}` : "";
+  const url = `${BASE_URL}/discover/${type}?api_key=${API_KEY}&language=it-IT&with_crew=${personId}&sort_by=vote_average.desc${minVotes}${minAvg}&page=1`;
+  return tmdbFetchDiscoverLevel([url], type, excludedKeys);
+}
+
 // Costruisce i 4 livelli di ricerca (precisa → ampia → solo genere → fallback),
 // esattamente come nell'algoritmo originale di CineTracker, basandosi sul
 // profilo di gusti della persona selezionata.

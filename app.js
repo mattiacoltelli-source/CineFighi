@@ -18,7 +18,7 @@ import {
 } from "./storage.js?v=dfd034a";
 import {
   tmdbFetchDetail, tmdbSearch, tmdbFetchDiscoverLevel, tmdbFetchDecadeCandidates,
-  tmdbFetchOutOfComfortZoneCandidates, buildFallbackQueries
+  tmdbFetchOutOfComfortZoneCandidates, buildFallbackQueries, tmdbFindPersonId, tmdbFetchByCrewMember
 } from "./tmdb.js?v=dfd034a";
 import {
   showToast, avatarHtml, initScreens, switchScreen,
@@ -1138,6 +1138,62 @@ function buildGroupDecadeReason(item, decadeLabel, queryProfile) {
   return bits;
 }
 
+// Registi che piacciono a TUTTE le persone coinvolte (>=2 titoli votati da
+// ciascuna per quel regista, altrimenti una singola visione fortunata
+// conterebbe come "preferenza"), ordinati per il minimo tra le persone —
+// stessa logica del resto dell'algoritmo di gruppo: meglio un regista che
+// piace abbastanza a tutti che uno che piace tantissimo a uno solo.
+function sharedDirectors(people) {
+  const perPerson = people.map(u => {
+    const votes = {};
+    db.forEach(item => {
+      const v = item.votes && item.votes[u] && Number(item.votes[u].vote);
+      if (item.director && Number.isFinite(v)) (votes[item.director] ||= []).push(v);
+    });
+    const avg = {};
+    Object.entries(votes).forEach(([d, vs]) => { if (vs.length >= 2) avg[d] = vs.reduce((a, b) => a + b, 0) / vs.length; });
+    return avg;
+  });
+
+  const shared = Object.keys(perPerson[0] || {}).filter(d => perPerson.every(pd => d in pd));
+  return shared
+    .map(director => ({ director, minAvg: Math.min(...perPerson.map(pd => pd[director])) }))
+    .sort((a, b) => b.minAvg - a.minAvg)
+    .slice(0, 2)
+    .map(x => x.director);
+}
+
+// Sostituisce fino a 2 dei 6 slot già scelti (su generi/fasce) con un film
+// dello stesso regista, per chi è condiviso dai coinvolti — MAI lasciando
+// uno slot vuoto: se il regista non ha un ID TMDB risolvibile o non rende
+// nessun candidato utilizzabile, quello slot resta semplicemente quello
+// scelto su generi+fasce (il fallback "un altro criterio" richiesto è
+// proprio il resto dell'algoritmo, già calcolato prima di questa funzione).
+async function tryDirectorPicks(picked, people, profiles, type, excludedKeys) {
+  const directors = sharedDirectors(people);
+  if (!directors.length) return picked;
+
+  const result = [...picked];
+  for (const director of directors) {
+    const personId = await tmdbFindPersonId(director).catch(() => null);
+    if (!personId) continue;
+
+    const usedKeys = new Set(result.map(entry => uniqueKey(entry.item)));
+    const candidates = await tmdbFetchByCrewMember(type, personId, excludedKeys, GROUP_MIN_VOTE_AVERAGE).catch(() => []);
+    const candidate = candidates.find(item => !usedKeys.has(uniqueKey(item)));
+    if (!candidate) continue;
+
+    const worstIndex = result.reduce((worstI, entry, i, arr) => entry.rankScore < arr[worstI].rankScore ? i : worstI, 0);
+    result[worstIndex] = {
+      item: candidate,
+      affinity: minAffinity(candidate, profiles),
+      reasons: [`stesso regista apprezzato da tutti: ${director}`],
+      rankScore: minScore(candidate, profiles, [])
+    };
+  }
+  return result;
+}
+
 // Un solo profilo "da interrogare" per costruire la query TMDB (tipo
 // preferito, generi, decade) — diverso dal confronto affinità/punteggio più
 // sotto, che resta sempre per-persona, mai su un profilo fuso.
@@ -1373,7 +1429,13 @@ async function recommendTonightFive() {
         return;
       }
 
-      const finalSix = picked.sort((a, b) => Number(a.item.year || 0) - Number(b.item.year || 0));
+      // Fino a 2 slot sostituiti da un film di un regista condiviso dai
+      // coinvolti, se ce n'è uno; altrimenti i 6 restano quelli scelti sopra.
+      const withDirectorPicks = picked.length >= 2
+        ? await tryDirectorPicks(picked, people, profiles, queryProfile.prefType, excludedKeys)
+        : picked;
+
+      const finalSix = withDirectorPicks.sort((a, b) => Number(a.item.year || 0) - Number(b.item.year || 0));
       area.innerHTML = renderTonightList(finalSix);
       area.dataset.cache = JSON.stringify(finalSix.map(d => d.item));
       registerSuggested(finalSix.map(d => d.item));
