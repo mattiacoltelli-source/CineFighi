@@ -1114,25 +1114,18 @@ function seenCapForGroupSize(n) {
   return 3;
 }
 
-// Le 3 decadi su cui si concentrano di più i voti dei coinvolti — non solo
-// la decade preferita di ciascuno (un solo numero a testa), tutta la
-// distribuzione dei voti di tutti loro insieme. Usate per "Dammi 6
-// consigli" di gruppo: 2 titoli per decade, generi e media voto a scegliere
-// quali. Un algoritmo semplice e facile da spiegare ("le vostre decadi
-// migliori") funziona meglio di un punteggio complesso che l'utente non può
-// leggere — anche se il risultato non è chissà quanto più raffinato, si
-// legge come intenzionale.
-function getGroupTopDecades(people, n = 3) {
-  const decadeCount = {};
-  people.forEach(u => {
-    db.forEach(item => {
-      if (item.votes && item.votes[u]) {
-        const d = decadeOf(item.year);
-        if (d !== "Sconosciuta") decadeCount[d] = (decadeCount[d] || 0) + 1;
-      }
-    });
-  });
-  return Object.entries(decadeCount).sort((a, b) => b[1] - a[1]).slice(0, n).map(([d]) => d);
+// Fasce temporali fisse per "Dammi 6 consigli" di gruppo (non più le decadi
+// preferite dai coinvolti: numeri fissi, sempre uguali) — più film quanto
+// più recente la fascia, genere e media voto a scegliere quali. end della
+// fascia più recente calcolato al volo (non un anno fisso) così include
+// sempre l'anno in corso.
+function groupDecadeBuckets() {
+  const currentYear = new Date().getFullYear();
+  return [
+    { start: 2000, end: 2010, count: 1, label: "2000-2010" },
+    { start: 2011, end: 2020, count: 2, label: "2011-2020" },
+    { start: 2021, end: currentYear + 1, count: 3, label: "dal 2021" }
+  ];
 }
 
 // Motivo mostrato sulla card per l'algoritmo a decadi: sempre vero per
@@ -1323,23 +1316,18 @@ async function recommendTonightFive() {
 
   try {
     // In gruppo: algoritmo diverso da quello solitario, deliberatamente più
-    // semplice — 3 decadi preferite dai coinvolti, 2 titoli per decade
-    // scelti su generi+media voto. Non diversifica generi/decadi con
-    // pickDiverse (qui la decade è già garantita per costruzione) e non ha
-    // slot "fuori zona": la trasparenza del meccanismo conta più della
-    // raffinatezza.
+    // semplice — 3 fasce temporali fisse (2000-2010, 2011-2020, dal 2021),
+    // con più titoli quanto più recente la fascia (1/2/3), scelti su
+    // generi+media voto. Non diversifica generi/epoche con pickDiverse (qui
+    // la fascia è già garantita per costruzione) e non ha slot "fuori
+    // zona": la trasparenza del meccanismo conta più della raffinatezza.
     if (isGroup) {
-      const decades = getGroupTopDecades(people, 3);
-      if (!decades.length) {
-        area.innerHTML = `<p class="tonight__hint">Non ho abbastanza voti per capire le decadi preferite del gruppo.</p>`;
-        return;
-      }
+      const buckets = groupDecadeBuckets();
 
       const decadePools = await Promise.all(
-        decades.map(d => {
-          const dy = parseInt(d, 10);
-          return tmdbFetchDecadeCandidates(queryProfile.prefType, dy, dy + 9, genreIds, excludedKeys, GROUP_MIN_VOTE_AVERAGE);
-        })
+        buckets.map(b =>
+          tmdbFetchDecadeCandidates(queryProfile.prefType, b.start, b.end, genreIds, excludedKeys, GROUP_MIN_VOTE_AVERAGE)
+        )
       );
 
       // Niente rumore casuale qui (a differenza dell'algoritmo solitario
@@ -1347,21 +1335,21 @@ async function recommendTonightFive() {
       // titolo mediocre che "vince" per fortuna in un pool ristretto.
       const usedKeys = new Set();
       const picked = [];
-      decades.forEach((decadeLabel, i) => {
+      buckets.forEach((bucket, i) => {
         const pool = decadePools[i]
           .filter(item => !usedKeys.has(uniqueKey(item)))
           .map(item => ({
             item,
             affinity: minAffinity(item, profiles),
-            reasons: buildGroupDecadeReason(item, decadeLabel, queryProfile),
+            reasons: buildGroupDecadeReason(item, bucket.label, queryProfile),
             rankScore: minScore(item, profiles, [])
           }))
           .sort((a, b) => b.rankScore - a.rankScore);
-        pool.slice(0, 2).forEach(entry => { picked.push(entry); usedKeys.add(uniqueKey(entry.item)); });
+        pool.slice(0, bucket.count).forEach(entry => { picked.push(entry); usedKeys.add(uniqueKey(entry.item)); });
       });
 
-      // Se una decade ha reso meno di 2 titoli (catalogo piccolo), ripesca
-      // dagli avanzi delle altre decadi per arrivare comunque a 6.
+      // Se una fascia ha reso meno titoli del previsto (catalogo piccolo),
+      // ripesca dagli avanzi delle altre fasce per arrivare comunque a 6.
       if (picked.length < 6) {
         const leftover = decadePools.flat()
           .filter(item => !usedKeys.has(uniqueKey(item)))
