@@ -843,7 +843,7 @@ export function renderDiscoverResult(chosen, whyBits, fallbackNote) {
 
 // ─── RIVEDI UN CLASSICO (titolo già votato ≥7, apre la scheda del gruppo) ───
 
-export function renderClassicResult(pick, myVote, comment) {
+export function renderClassicResult(pick, myVote, comment, voteLabel = "il tuo voto") {
   return `
     <div class="tonight-solo">
       <div class="poster-card open-detail" data-id="${pick.id}">
@@ -852,7 +852,7 @@ export function renderClassicResult(pick, myVote, comment) {
         </div>
         <div class="poster-card__info">
           <div class="poster-card__title">🏛️ ${escapeHtml(pick.title)}</div>
-          <div class="poster-card__meta">${pick.year} · ${mediaLabel(pick)} · il tuo voto: ${Number(myVote).toFixed(1)}</div>
+          <div class="poster-card__meta">${pick.year} · ${mediaLabel(pick)} · ${escapeHtml(voteLabel)}: ${Number(myVote).toFixed(1)}</div>
           <div class="tonight-card__reason">${escapeHtml(comment)}</div>
         </div>
       </div>

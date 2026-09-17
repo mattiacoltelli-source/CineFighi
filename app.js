@@ -29,6 +29,10 @@ import {
 } from "./ui.js?v=48a2886";
 
 const MIN_VOTED_FOR_REPORT = 50;
+// Stessa soglia del Report (sopra): sotto i 50 voti anche qui il profilo di
+// gusti individuale è troppo debole per essere affidabile in un calcolo di
+// gruppo — stesso numero non a caso, non una nuova soglia arbitraria.
+const MIN_VOTED_FOR_GROUP_TONIGHT = MIN_VOTED_FOR_REPORT;
 
 let currentUser = null;
 let users = [];
@@ -39,6 +43,7 @@ let libraryGenre = "all";
 let watchlistMode = "me";  // me | group (Home)
 let statsMode = "me";   // group | me
 let reportMode = "io"; // gruppo | io
+let tonightSelectedPeople = []; // chi c'è stasera — sempre almeno [currentUser]
 let rankingMedia = "movie"; // movie | tv
 let genreView = getGenreView(); // bars | bubbles — preferenza di vista dei Generi, per dispositivo
 let currentDetailId = null;
@@ -333,6 +338,7 @@ async function handleAddUser() {
 
 function selectUser(name) {
   currentUser = name;
+  tonightSelectedPeople = [name];
   setCurrentUser(name);
   updateUserChip();
   document.getElementById("app").classList.remove("hidden");
@@ -364,6 +370,7 @@ function goToScreen(screen) {
   if (getVisibleScreen() === "home" && screen !== "home") markHomeSeen();
   switchScreen(screen);
   if (screen === "home") renderHome();
+  if (screen === "tonight") renderTonightPeoplePicker();
 }
 
 function renderHome() {
@@ -952,9 +959,11 @@ function getHistoryPenalty(key) {
   return penalty;
 }
 
-// Costruisce il profilo di gusti della persona selezionata, dai suoi voti
-function getUserTasteProfile() {
-  const votedItems = db.filter(x => x.votes && x.votes[currentUser]);
+// Costruisce il profilo di gusti della persona indicata (currentUser se
+// omessa), dai suoi voti — parametrizzato per poterlo richiamare una volta
+// per ciascun coinvolto nella modalità di gruppo di Stasera.
+function getUserTasteProfile(forUser = currentUser) {
+  const votedItems = db.filter(x => x.votes && x.votes[forUser]);
   if (!votedItems.length) return null;
 
   const genreCount = {};
@@ -968,7 +977,7 @@ function getUserTasteProfile() {
     const decade = decadeOf(item.year);
     decadeCount[decade] = (decadeCount[decade] || 0) + 1;
 
-    const voteNum = item.votes[currentUser].vote;
+    const voteNum = item.votes[forUser].vote;
     (item.genre_names || []).forEach(g => {
       genreCount[g] = (genreCount[g] || 0) + 1;
       if (Number.isFinite(voteNum)) {
@@ -988,7 +997,7 @@ function getUserTasteProfile() {
     genreAverages[g] = votes.length ? votes.reduce((a, b) => a + b, 0) / votes.length : 6.8;
   });
 
-  const overallVotes = votedItems.map(x => x.votes[currentUser].vote).filter(Number.isFinite);
+  const overallVotes = votedItems.map(x => x.votes[forUser].vote).filter(Number.isFinite);
   const avgVote = overallVotes.length ? overallVotes.reduce((a, b) => a + b, 0) / overallVotes.length : 7;
 
   return { topGenres, topDecade, prefType, genreAverages, avgVote };
@@ -1036,21 +1045,21 @@ function scoreCandidate(item, profile, selectedBoosts) {
   return score;
 }
 
-function buildReason(item, profile, affinity) {
+function buildReason(item, profile, affinity, isGroup = false) {
   const reasons = [];
   const matches = (item.genre_names || []).filter(g => profile.topGenres.includes(g));
   if (matches.length) reasons.push(`match con ${matches.slice(0, 2).join(" + ")}`);
-  if (profile.topDecade && decadeOf(item.year) === profile.topDecade) reasons.push("decade che guardi spesso");
+  if (profile.topDecade && decadeOf(item.year) === profile.topDecade) reasons.push(isGroup ? "decade che seguite spesso" : "decade che guardi spesso");
   if (affinity >= 88) reasons.push("compatibilità molto alta");
-  else if (affinity >= 80) reasons.push("buona sintonia con i tuoi gusti");
+  else if (affinity >= 80) reasons.push(isGroup ? "buona sintonia col gruppo" : "buona sintonia con i tuoi gusti");
   return reasons.slice(0, 3);
 }
 
-function buildOutOfZoneReason(item, profile) {
-  const reasons = ["fuori dai generi che guardi di solito"];
+function buildOutOfZoneReason(item, profile, isGroup = false) {
+  const reasons = [isGroup ? "fuori dai generi che seguite di solito" : "fuori dai generi che guardi di solito"];
   const tmdbVote = Number(item.vote_average) || 0;
   if (tmdbVote >= 7.2) reasons.push("voto molto alto su TMDB");
-  if (profile.topDecade && decadeOf(item.year) === profile.topDecade) reasons.push("nella tua decade preferita");
+  if (profile.topDecade && decadeOf(item.year) === profile.topDecade) reasons.push(isGroup ? "nella decade preferita dal gruppo" : "nella tua decade preferita");
   return reasons;
 }
 
@@ -1068,15 +1077,96 @@ function pickOutOfZoneTwo(ranked) {
   return second ? [first, second] : [first];
 }
 
-// Quante persone la persona selezionata ha già votato: sotto i 3 voti il
-// profilo di gusti è troppo debole per dare consigli sensati.
+// Quanti titoli una persona ha votato: sotto i 3 (currentUser, gate solitario
+// esistente) il profilo di gusti è troppo debole per dare consigli sensati.
+function votedCountFor(user) {
+  return db.filter(x => x.votes && x.votes[user]).length;
+}
 function votedCount() {
-  return db.filter(x => x.votes && x.votes[currentUser]).length;
+  return votedCountFor(currentUser);
 }
 
 function getSelectedTonightGenre() {
   const el = document.getElementById("tonightGenreSelect");
   return el ? el.value : "all";
+}
+
+// ─── STASERA: MODALITÀ DI GRUPPO ("chi c'è") ─────────────────────────────────
+
+// Quante delle persone COINVOLTE (non l'intero gruppo) hanno già votato
+// questo titolo.
+function seenCountAmong(item, people) {
+  return people.filter(u => item.votes && item.votes[u]).length;
+}
+
+// Con un gruppo piccolo va quasi tutto scoperto insieme, con uno grande è
+// normale che qualcuno l'abbia già visto — il tetto sale con la dimensione
+// del gruppo, ma resta sempre una minoranza netta dei coinvolti.
+function seenCapForGroupSize(n) {
+  if (n <= 3) return 1;
+  if (n <= 6) return 2;
+  return 3;
+}
+
+// Un solo profilo "da interrogare" per costruire la query TMDB (tipo
+// preferito, generi, decade) — diverso dal confronto affinità/punteggio più
+// sotto, che resta sempre per-persona, mai su un profilo fuso.
+function mergeProfilesForQuery(profiles) {
+  const movieVotes = profiles.filter(p => p.prefType === "movie").length;
+  const prefType = movieVotes * 2 >= profiles.length ? "movie" : "tv";
+  const topGenres = [...new Set(profiles.flatMap(p => p.topGenres))];
+  const decadeCount = {};
+  profiles.forEach(p => { if (p.topDecade) decadeCount[p.topDecade] = (decadeCount[p.topDecade] || 0) + 1; });
+  const topDecade = Object.entries(decadeCount).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+  return { prefType, topGenres, topDecade };
+}
+
+// L'affinità/il punteggio per il gruppo è il MINIMO tra i coinvolti, non la
+// media: un titolo che piace tantissimo a uno e pochissimo a un altro non è
+// un buon consiglio da guardare insieme, anche se la media sembra decente.
+function minAffinity(item, profiles) {
+  return Math.min(...profiles.map(p => calculateAffinity(item, p)));
+}
+function minScore(item, profiles, selectedBoosts) {
+  return Math.min(...profiles.map(p => scoreCandidate(item, p, selectedBoosts)));
+}
+
+function renderTonightPeoplePicker() {
+  if (!tonightSelectedPeople.length) tonightSelectedPeople = [currentUser];
+  const wrap = document.getElementById("tonightPeoplePicker");
+  const note = document.getElementById("tonightPeopleNote");
+  const intro = document.getElementById("tonightIntro");
+  if (!wrap || !currentUser) return;
+
+  const currentEligible = votedCountFor(currentUser) >= MIN_VOTED_FOR_GROUP_TONIGHT;
+
+  wrap.innerHTML = users.map(u => {
+    const isMe = u === currentUser;
+    const active = isMe || tonightSelectedPeople.includes(u);
+    const votes = votedCountFor(u);
+    const eligible = votes >= MIN_VOTED_FOR_GROUP_TONIGHT;
+    const disabled = !isMe && (!eligible || !currentEligible);
+    const label = eligible ? escapeHtml(u) : `${escapeHtml(u)} · ${votes}/${MIN_VOTED_FOR_GROUP_TONIGHT}`;
+    return `
+      <button class="tonight-people-chip${active ? " active" : ""}${disabled ? " disabled" : ""}" data-user="${escapeHtml(u)}"${disabled ? " disabled" : ""}>
+        ${avatarHtml(u, 26)}<span>${label}</span>
+      </button>`;
+  }).join("");
+
+  if (tonightSelectedPeople.length >= 2) {
+    const parts = tonightSelectedPeople.map(u => `${escapeHtml(u)} (${votedCountFor(u)} voti)`);
+    note.textContent = `Consigli basati sui gusti di: ${parts.join(", ")}.`;
+    note.classList.remove("hidden");
+    intro.textContent = `Consigli basati sui gusti di ${tonightSelectedPeople.length} persone.`;
+  } else if (!currentEligible) {
+    note.textContent = `Ti servono almeno ${MIN_VOTED_FOR_GROUP_TONIGHT} titoli votati per invitare altri (ne hai votati ${votedCountFor(currentUser)}).`;
+    note.classList.remove("hidden");
+    intro.textContent = "Consigli basati sui tuoi voti.";
+  } else {
+    note.textContent = "";
+    note.classList.add("hidden");
+    intro.textContent = "Consigli basati sui tuoi voti.";
+  }
 }
 
 // Sceglie 5 titoli diversificando SIA per genere principale SIA per decade,
@@ -1134,10 +1224,20 @@ function tonightDecadeRanges() {
 
 async function recommendTonightFive() {
   const area = document.getElementById("tonightResult");
+  const people = tonightSelectedPeople.length ? tonightSelectedPeople : [currentUser];
+  const isGroup = people.length >= 2;
 
-  if (votedCount() < 3) {
-    area.innerHTML = `<p class="tonight__hint">Vota almeno 3 titoli per ricevere consigli personalizzati.</p>`;
-    return;
+  if (!isGroup) {
+    if (votedCount() < 3) {
+      area.innerHTML = `<p class="tonight__hint">Vota almeno 3 titoli per ricevere consigli personalizzati.</p>`;
+      return;
+    }
+  } else {
+    const notEligible = people.filter(u => votedCountFor(u) < MIN_VOTED_FOR_GROUP_TONIGHT);
+    if (notEligible.length) {
+      area.innerHTML = `<p class="tonight__hint">${escapeHtml(notEligible.join(", "))} non ha ancora votato abbastanza (minimo ${MIN_VOTED_FOR_GROUP_TONIGHT} titoli) per la modalità di gruppo.</p>`;
+      return;
+    }
   }
   if (!navigator.onLine) {
     area.innerHTML = `<p class="tonight__hint">Sei offline. Connettiti per ricevere consigli.</p>`;
@@ -1146,18 +1246,35 @@ async function recommendTonightFive() {
 
   area.innerHTML = `<p class="tonight__hint">🔍 Sto cercando 6 titoli adatti…</p>`;
 
-  const profile = getUserTasteProfile();
-  const genreIds = profile.topGenres.map(g => GENRE_NAME_TO_ID[g]).filter(Boolean);
-  const excludedKeys = new Set(db.map(x => `${x.media_type}_${x.tmdb_id}`));
+  const profiles = people.map(u => getUserTasteProfile(u)).filter(Boolean);
+  if (!profiles.length) {
+    area.innerHTML = `<p class="tonight__hint">Vota qualche titolo prima: mi serve per capire i gusti.</p>`;
+    return;
+  }
+  const queryProfile = isGroup ? mergeProfilesForQuery(profiles) : profiles[0];
+  const genreIds = queryProfile.topGenres.map(g => GENRE_NAME_TO_ID[g]).filter(Boolean);
+  // Da soli: comportamento invariato, tutta la libreria condivisa esclusa
+  // (Stasera serve a scoprire titoli nuovi, non a ripescare quelli già
+  // tracciati). In gruppo: esclude solo chi supera il tetto di "già visto"
+  // per quella dimensione di gruppo — gli altri possono ricomparire come
+  // candidati TMDB normali, con le stesse azioni rapide delle altre card
+  // (se già in libreria, aggiungerli di nuovo mostra semplicemente "Già in
+  // libreria", gestito da addItemFromCache).
+  const excludedKeys = isGroup
+    ? new Set(
+        db.filter(x => seenCountAmong(x, people) > seenCapForGroupSize(people.length))
+          .map(x => `${x.media_type}_${x.tmdb_id}`)
+      )
+    : new Set(db.map(x => `${x.media_type}_${x.tmdb_id}`));
 
   try {
     const [decadePools, outOfZoneRaw] = await Promise.all([
       Promise.all(
         tonightDecadeRanges().map(d =>
-          tmdbFetchDecadeCandidates(profile.prefType, d.start, d.end, genreIds, excludedKeys)
+          tmdbFetchDecadeCandidates(queryProfile.prefType, d.start, d.end, genreIds, excludedKeys)
         )
       ),
-      tmdbFetchOutOfComfortZoneCandidates(profile.prefType, genreIds, excludedKeys)
+      tmdbFetchOutOfComfortZoneCandidates(queryProfile.prefType, genreIds, excludedKeys)
     ]);
 
     const candidatesMap = new Map();
@@ -1166,7 +1283,7 @@ async function recommendTonightFive() {
     // Se il mix per decade non basta (catalogo piccolo, generi rari), allarghiamo
     // con la ricerca a livelli generica esistente.
     if (candidatesMap.size < 10) {
-      const fallback = buildFallbackQueries(profile, null, {});
+      const fallback = buildFallbackQueries(queryProfile, null, {});
       for (const level of fallback.levels) {
         const found = await tmdbFetchDiscoverLevel(level.urls, fallback.type, excludedKeys);
         found.forEach(item => candidatesMap.set(uniqueKey(item), item));
@@ -1182,14 +1299,14 @@ async function recommendTonightFive() {
 
     const ranked = candidates
       .map(item => {
-        const affinity = calculateAffinity(item, profile);
+        const affinity = minAffinity(item, profiles);
         return {
           item,
           affinity,
-          reasons: buildReason(item, profile, affinity),
+          reasons: buildReason(item, queryProfile, affinity, isGroup),
           // Un po' di casualità nell'ordinamento: a parità di gusti, richieste
           // ripetute nella stessa serata non restituiscono sempre la stessa lista.
-          rankScore: scoreCandidate(item, profile, []) + Math.random() * 2.5
+          rankScore: minScore(item, profiles, []) + Math.random() * 2.5
         };
       })
       .sort((a, b) => b.rankScore - a.rankScore);
@@ -1207,12 +1324,12 @@ async function recommendTonightFive() {
     const outOfZoneRanked = outOfZoneRaw
       .filter(item => !usedKeys.has(uniqueKey(item)))
       .map(item => {
-        const affinity = calculateAffinity(item, profile);
+        const affinity = minAffinity(item, profiles);
         return {
           item,
           affinity,
-          reasons: buildOutOfZoneReason(item, profile),
-          rankScore: scoreCandidate(item, profile, []) + Math.random() * 2.5
+          reasons: buildOutOfZoneReason(item, queryProfile, isGroup),
+          rankScore: minScore(item, profiles, []) + Math.random() * 2.5
         };
       })
       .sort((a, b) => b.rankScore - a.rankScore);
@@ -1234,10 +1351,20 @@ async function recommendTonightFive() {
 
 async function discoverByTaste() {
   const area = document.getElementById("tonightResult");
+  const people = tonightSelectedPeople.length ? tonightSelectedPeople : [currentUser];
+  const isGroup = people.length >= 2;
 
-  if (votedCount() < 3) {
-    area.innerHTML = `<p class="tonight__hint">Vota almeno 3 titoli per ricevere consigli personalizzati.</p>`;
-    return;
+  if (!isGroup) {
+    if (votedCount() < 3) {
+      area.innerHTML = `<p class="tonight__hint">Vota almeno 3 titoli per ricevere consigli personalizzati.</p>`;
+      return;
+    }
+  } else {
+    const notEligible = people.filter(u => votedCountFor(u) < MIN_VOTED_FOR_GROUP_TONIGHT);
+    if (notEligible.length) {
+      area.innerHTML = `<p class="tonight__hint">${escapeHtml(notEligible.join(", "))} non ha ancora votato abbastanza (minimo ${MIN_VOTED_FOR_GROUP_TONIGHT} titoli) per la modalità di gruppo.</p>`;
+      return;
+    }
   }
   if (!navigator.onLine) {
     area.innerHTML = `<p class="tonight__hint">Sei offline. Connettiti per scoprire nuovi titoli.</p>`;
@@ -1246,10 +1373,20 @@ async function discoverByTaste() {
 
   area.innerHTML = `<p class="tonight__hint">🔍 Sto cercando qualcosa di nuovo…</p>`;
 
-  const profile = getUserTasteProfile();
+  const profiles = people.map(u => getUserTasteProfile(u)).filter(Boolean);
+  if (!profiles.length) {
+    area.innerHTML = `<p class="tonight__hint">Vota qualche titolo prima: mi serve per capire i gusti.</p>`;
+    return;
+  }
+  const queryProfile = isGroup ? mergeProfilesForQuery(profiles) : profiles[0];
   const selectedGenre = getSelectedTonightGenre();
-  const excludedKeys = new Set(db.map(x => `${x.media_type}_${x.tmdb_id}`));
-  const { type, levels, selectedBoosts } = buildFallbackQueries(profile, null, {
+  const excludedKeys = isGroup
+    ? new Set(
+        db.filter(x => seenCountAmong(x, people) > seenCapForGroupSize(people.length))
+          .map(x => `${x.media_type}_${x.tmdb_id}`)
+      )
+    : new Set(db.map(x => `${x.media_type}_${x.tmdb_id}`));
+  const { type, levels, selectedBoosts } = buildFallbackQueries(queryProfile, null, {
     useSelectedGenre: selectedGenre !== "all",
     selectedGenre
   });
@@ -1268,19 +1405,19 @@ async function discoverByTaste() {
     }
 
     const scored = candidates
-      .map(item => ({ item, score: scoreCandidate(item, profile, selectedBoosts) + Math.random() * 2.5 }))
+      .map(item => ({ item, score: minScore(item, profiles, selectedBoosts) + Math.random() * 2.5 }))
       .sort((a, b) => b.score - a.score);
 
     const topPool = scored.slice(0, Math.min(12, scored.length));
     const chosen = topPool[Math.floor(Math.random() * topPool.length)].item;
 
     const genres = chosen.genre_names || [];
-    const matchGenres = genres.filter(g => profile.topGenres.includes(g));
+    const matchGenres = genres.filter(g => queryProfile.topGenres.includes(g));
     const whyBits = [];
-    if (selectedGenre !== "all" && genres.includes(selectedGenre)) whyBits.push(`hai scelto il genere ${selectedGenre}`);
-    if (matchGenres.length) whyBits.push(`ami il genere ${matchGenres[0]}`);
-    if (profile.topDecade && decadeOf(chosen.year) === profile.topDecade) whyBits.push(`ti piacciono gli ${profile.topDecade}`);
-    if (!whyBits.length) whyBits.push("ha un buon match con i tuoi gusti");
+    if (selectedGenre !== "all" && genres.includes(selectedGenre)) whyBits.push(`${isGroup ? "avete" : "hai"} scelto il genere ${selectedGenre}`);
+    if (matchGenres.length) whyBits.push(`${isGroup ? "al gruppo piace" : "ami"} il genere ${matchGenres[0]}`);
+    if (queryProfile.topDecade && decadeOf(chosen.year) === queryProfile.topDecade) whyBits.push(`${isGroup ? "vi piacciono" : "ti piacciono"} gli ${queryProfile.topDecade}`);
+    if (!whyBits.length) whyBits.push(`ha un buon match con ${isGroup ? "i gusti del gruppo" : "i tuoi gusti"}`);
     const fallbackNote = levelLabel !== "ricerca precisa" ? "Ho allargato la ricerca." : "";
 
     area.innerHTML = renderDiscoverResult(chosen, whyBits, fallbackNote);
@@ -1292,10 +1429,41 @@ async function discoverByTaste() {
   }
 }
 
-// ─── RIVEDI UN CLASSICO (tra i titoli già votati ≥7 dalla persona) ──────────
+// ─── RIVEDI UN CLASSICO ──────────────────────────────────────────────────────
+// Da soli: tra i titoli già votati ≥7 dalla persona. In gruppo: tra quelli
+// che TUTTI i coinvolti hanno votato ≥7 — qui "già visto da tutti" è il
+// punto, non un limite da aggirare come nelle altre due modalità: si tratta
+// di riguardarlo insieme, non di scoprirlo.
 
 function suggestClassic() {
   const area = document.getElementById("tonightResult");
+  const people = tonightSelectedPeople.length ? tonightSelectedPeople : [currentUser];
+  const isGroup = people.length >= 2;
+
+  if (isGroup) {
+    const notEligible = people.filter(u => votedCountFor(u) < MIN_VOTED_FOR_GROUP_TONIGHT);
+    if (notEligible.length) {
+      area.innerHTML = `<p class="tonight__hint">${escapeHtml(notEligible.join(", "))} non ha ancora votato abbastanza (minimo ${MIN_VOTED_FOR_GROUP_TONIGHT} titoli) per la modalità di gruppo.</p>`;
+      return;
+    }
+
+    const pool = db.filter(item => people.every(u => item.votes && item.votes[u] && Number(item.votes[u].vote) >= 7));
+    if (!pool.length) {
+      area.innerHTML = `<p class="tonight__hint">Nessun titolo che piace (voto ≥ 7) a tutti i coinvolti. Continuate a votare insieme!</p>`;
+      return;
+    }
+
+    const pick = pool[Math.floor(Math.random() * pool.length)];
+    const groupVotes = people.map(u => Number(pick.votes[u].vote));
+    const avgVote = groupVotes.reduce((a, b) => a + b, 0) / groupVotes.length;
+    const votesText = people.map(u => `${u} ${Number(pick.votes[u].vote).toFixed(1)}`).join(" · ");
+    const comment = `Piace a tutti i coinvolti — ${votesText}. Una buona scusa per rivederlo insieme.`;
+
+    area.innerHTML = renderClassicResult(pick, avgVote, comment, "voto medio");
+    area.dataset.cache = "[]";
+    return;
+  }
+
   const pool = db.filter(x => x.votes && x.votes[currentUser] && Number(x.votes[currentUser].vote) >= 7);
 
   if (!pool.length) {
@@ -1697,6 +1865,18 @@ function bindGlobalEvents() {
 
   document.getElementById("reportRefreshBtn").addEventListener("click", () => { haptic(8); handleReportRefresh(); });
 
+  document.getElementById("tonightPeoplePicker").addEventListener("click", e => {
+    const btn = e.target.closest(".tonight-people-chip");
+    if (!btn || btn.disabled) return;
+    const user = btn.dataset.user;
+    if (user === currentUser) return; // sei sempre incluso, non ti si toglie
+    tonightSelectedPeople = tonightSelectedPeople.includes(user)
+      ? tonightSelectedPeople.filter(u => u !== user)
+      : [...tonightSelectedPeople, user];
+    haptic(8);
+    renderTonightPeoplePicker();
+    document.getElementById("tonightResult").innerHTML = `<p class="tonight__hint">Premi un pulsante per ricevere un consiglio.</p>`;
+  });
   document.getElementById("tonightBtn").addEventListener("click", recommendTonightFive);
   document.getElementById("tonightDiscoverBtn").addEventListener("click", discoverByTaste);
   document.getElementById("tonightClassicBtn").addEventListener("click", suggestClassic);
