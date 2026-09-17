@@ -35,8 +35,24 @@ const MIN_VOTED_FOR_REPORT = 50;
 const MIN_VOTED_FOR_GROUP_TONIGHT = MIN_VOTED_FOR_REPORT;
 // Sotto voto TMDB 6 è raro che valga la pena consigliarlo, anche se genere e
 // decade combaciano bene — filtro applicato in query, non solo sperando che
-// il punteggio lo penalizzi abbastanza.
+// il punteggio lo penalizzi abbastanza. Eccezione horror: al gruppo
+// piacciono anche gli horror mal recensiti, quindi per l'horror la soglia
+// resta questa (6); per tutto il resto sale (vedi
+// GROUP_MIN_VOTE_AVERAGE_NON_HORROR sotto e passesGroupQualityBar).
 const GROUP_MIN_VOTE_AVERAGE = 6;
+// Applicata SOLO ai titoli senza il genere Horror — un altro modo di dire
+// "un horror trash va bene, un action trash no". Filtro in-app (non nella
+// query TMDB): la query resta a GROUP_MIN_VOTE_AVERAGE per non escludere
+// gli horror prima ancora di sapere che lo sono.
+const GROUP_MIN_VOTE_AVERAGE_NON_HORROR = 6.5;
+
+// Ogni candidato arriva già filtrato a GROUP_MIN_VOTE_AVERAGE dalla query;
+// qui si stringe ulteriormente per chi non è Horror.
+function passesGroupQualityBar(item) {
+  const isHorror = (item.genre_names || []).includes("Horror");
+  if (isHorror) return true;
+  return (item.vote_average || 0) >= GROUP_MIN_VOTE_AVERAGE_NON_HORROR;
+}
 
 let currentUser = null;
 let users = [];
@@ -1479,7 +1495,7 @@ async function recommendTonightFive() {
       // Le tre fasi (fasce principali, fasce diversificanti, regista) non
       // dipendono l'una dall'altra: partono tutte insieme invece che in
       // fila, altrimenti l'attesa si somma invece di sovrapporsi.
-      const [decadePools, diversifyPools, directorResults] = await Promise.all([
+      let [decadePools, diversifyPools, directorResults] = await Promise.all([
         Promise.all(
           buckets.map(b =>
             tmdbFetchDecadeCandidates(queryProfile.prefType, b.start, b.end, primaryGenreIds.length ? primaryGenreIds : genreIds, excludedKeys, GROUP_MIN_VOTE_AVERAGE)
@@ -1494,6 +1510,18 @@ async function recommendTonightFive() {
           : Promise.resolve(buckets.map(() => [])),
         fetchDirectorCandidates(people, queryProfile.prefType, excludedKeys)
       ]);
+
+      // Soglia qualità più alta per tutto ciò che non è Horror (vedi
+      // passesGroupQualityBar) — applicata qui, subito dopo il fetch, così
+      // tutto il resto della pipeline (scelta per fascia, backfill, regista)
+      // lavora già solo su candidati che la superano.
+      decadePools = decadePools.map(pool => pool.filter(passesGroupQualityBar));
+      diversifyPools = diversifyPools.map(pool => pool.filter(passesGroupQualityBar));
+      directorResults = directorResults.map(dr => {
+        if (!dr) return dr;
+        const candidates = dr.candidates.filter(passesGroupQualityBar);
+        return candidates.length ? { ...dr, candidates } : null;
+      });
 
       // Niente rumore casuale qui (a differenza dell'algoritmo solitario
       // sotto): l'obiettivo è che il risultato sembri deliberato, non un
