@@ -787,7 +787,7 @@ export function renderTonightList(entries) {
   }
   return `
     <div class="results-grid">
-      ${entries.map(({ item, affinity, reasons }) => `
+      ${entries.map(({ item, affinity, reasons, breakdown }) => `
         <div class="poster-card" data-tonight-key="${item.media_type}_${item.id}">
           <div class="poster-card__img" style="background-image:url('${posterUrl(item.poster_path)}')">
             <span class="badge ${mediaBadgeClass(item)}">${mediaLabel(item)}</span>
@@ -807,6 +807,7 @@ export function renderTonightList(entries) {
             <div class="tonight-card__reason">
               ${reasons.length ? `🎯 ${escapeHtml(reasons.join(" · "))}` : "🎯 Consigliato in base ai tuoi gusti"}
             </div>
+            ${breakdown ? `<div class="tonight-card__breakdown">${breakdown.map(b => `${escapeHtml(b.name)} ${b.score}%`).join(" · ")}</div>` : ""}
             <button class="poster-card__scheda open-preview" data-id="${item.id}" data-type="${item.media_type}">Scheda →</button>
           </div>
         </div>

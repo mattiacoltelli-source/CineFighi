@@ -1148,6 +1148,14 @@ function buildGroupDiversifyReason(item, decadeLabel, diversifyGenres) {
   return bits;
 }
 
+// Voto previsto per ciascuna persona coinvolta, mostrato in card — quello
+// VERO, dal profilo non normalizzato: la normalizzazione serve solo a
+// scegliere e ordinare i titoli, il numero mostrato deve restare quello
+// che ci si aspetta guardando i propri voti reali, non un valore ricentrato.
+function buildBreakdown(item, peopleNames, rawProfiles) {
+  return peopleNames.map((name, i) => ({ name, score: calculateAffinity(item, rawProfiles[i]) }));
+}
+
 // Registi che piacciono a TUTTE le persone coinvolte (>=2 titoli votati da
 // ciascuna per quel regista, altrimenti una singola visione fortunata
 // conterebbe come "preferenza"), ordinati per il minimo tra le persone —
@@ -1173,33 +1181,56 @@ function sharedDirectors(people) {
     .map(x => x.director);
 }
 
+// Cerca in parallelo, per ciascun regista condiviso, un suo film non ancora
+// scelto — non dipende da "picked" (i 6 su generi/fasce), quindi può girare
+// insieme alle chiamate per fasce/generi invece che dopo: fa risparmiare
+// tempo, non solo chiamate in meno.
+async function fetchDirectorCandidates(people, type, excludedKeys) {
+  const directors = sharedDirectors(people);
+  return Promise.all(directors.map(async director => {
+    const personId = await tmdbFindPersonId(director).catch(() => null);
+    if (!personId) return null;
+    const candidates = await tmdbFetchByCrewMember(type, personId, excludedKeys, GROUP_MIN_VOTE_AVERAGE).catch(() => []);
+    return candidates.length ? { director, candidates } : null;
+  }));
+}
+
+// Tra gli slot rimpiazzabili, quello col punteggio più basso — ma MAI uno
+// già protetto (a meno che siano protetti tutti): impedisce a regista e
+// diversificazione per genere di cancellarsi a vicenda, ed evita anche che
+// un secondo regista tolga il posto al primo nello stesso giro.
+function worstReplaceableIndex(entries, protectedIndices) {
+  const candidates = entries.map((_, i) => i).filter(i => !protectedIndices.has(i));
+  const pool = candidates.length ? candidates : entries.map((_, i) => i);
+  return pool.reduce((worstI, i) => (entries[i].rankScore < entries[worstI].rankScore ? i : worstI), pool[0]);
+}
+
 // Sostituisce fino a 2 dei 6 slot già scelti (su generi/fasce) con un film
 // dello stesso regista, per chi è condiviso dai coinvolti — MAI lasciando
-// uno slot vuoto: se il regista non ha un ID TMDB risolvibile o non rende
-// nessun candidato utilizzabile, quello slot resta semplicemente quello
-// scelto su generi+fasce (il fallback "un altro criterio" richiesto è
-// proprio il resto dell'algoritmo, già calcolato prima di questa funzione).
-async function tryDirectorPicks(picked, people, profiles, type, excludedKeys) {
-  const directors = sharedDirectors(people);
-  if (!directors.length) return picked;
-
+// uno slot vuoto: se un regista non rende nessun candidato utilizzabile,
+// quello slot resta semplicemente quello scelto su generi+fasce (il
+// fallback "un altro criterio" richiesto è proprio il resto
+// dell'algoritmo, già calcolato prima di questa funzione). Non tocca gli
+// slot "per variare" (rankedGroupGenres) a meno che siano gli unici rimasti.
+function applyDirectorPicks(picked, directorResults, profiles, peopleNames, rawProfiles) {
   const result = [...picked];
-  for (const director of directors) {
-    const personId = await tmdbFindPersonId(director).catch(() => null);
-    if (!personId) continue;
+  const protectedIndices = new Set(result.map((e, i) => (e.isDiversify ? i : null)).filter(i => i !== null));
 
+  for (const dr of directorResults) {
+    if (!dr) continue;
     const usedKeys = new Set(result.map(entry => uniqueKey(entry.item)));
-    const candidates = await tmdbFetchByCrewMember(type, personId, excludedKeys, GROUP_MIN_VOTE_AVERAGE).catch(() => []);
-    const candidate = candidates.find(item => !usedKeys.has(uniqueKey(item)));
+    const candidate = dr.candidates.find(item => !usedKeys.has(uniqueKey(item)));
     if (!candidate) continue;
 
-    const worstIndex = result.reduce((worstI, entry, i, arr) => entry.rankScore < arr[worstI].rankScore ? i : worstI, 0);
+    const worstIndex = worstReplaceableIndex(result, protectedIndices);
     result[worstIndex] = {
       item: candidate,
       affinity: minAffinity(candidate, profiles),
-      reasons: [`stesso regista apprezzato da tutti: ${director}`],
-      rankScore: minScore(candidate, profiles, [])
+      reasons: [`stesso regista apprezzato da tutti: ${dr.director}`],
+      rankScore: minScore(candidate, profiles, []),
+      breakdown: buildBreakdown(candidate, peopleNames, rawProfiles)
     };
+    protectedIndices.add(worstIndex);
   }
   return result;
 }
@@ -1215,6 +1246,25 @@ function mergeProfilesForQuery(profiles) {
   profiles.forEach(p => { if (p.topDecade) decadeCount[p.topDecade] = (decadeCount[p.topDecade] || 0) + 1; });
   const topDecade = Object.entries(decadeCount).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
   return { prefType, topGenres, topDecade };
+}
+
+// Ricentra le medie di genere di ciascuna persona sulla stessa media di
+// riferimento (quella del gruppo), prima di usarle per punteggio/
+// selezione: senza, chi vota sempre alto o sempre basso sballa il
+// confronto (il genere preferito di chi vota basso può avere una media
+// grezza più bassa del genere che piace meno a chi vota sempre alto).
+// L'ORDINE dei generi preferiti da ciascuno non cambia, cambia solo dove
+// sta lo zero. Nessun effetto con un solo profilo: la modalità solitaria
+// (dove non c'è nessuno con cui confrontarsi) ritorna l'array invariato.
+function normalizeProfilesForGroup(profiles) {
+  if (profiles.length < 2) return profiles;
+  const groupAvg = profiles.reduce((sum, p) => sum + p.avgVote, 0) / profiles.length;
+  return profiles.map(p => {
+    const shift = groupAvg - p.avgVote;
+    const genreAverages = {};
+    Object.entries(p.genreAverages).forEach(([g, v]) => { genreAverages[g] = v + shift; });
+    return { ...p, genreAverages, avgVote: groupAvg };
+  });
 }
 
 // Generi del gruppo ordinati per quanto piacciono a TUTTI i coinvolti (min
@@ -1373,11 +1423,18 @@ async function recommendTonightFive() {
 
   area.innerHTML = `<p class="tonight__hint">🔍 Sto cercando 6 titoli adatti…</p>`;
 
-  const profiles = people.map(u => getUserTasteProfile(u)).filter(Boolean);
-  if (!profiles.length) {
+  const peopleProfilePairs = people
+    .map(u => ({ name: u, profile: getUserTasteProfile(u) }))
+    .filter(x => x.profile);
+  if (!peopleProfilePairs.length) {
     area.innerHTML = `<p class="tonight__hint">Vota qualche titolo prima: mi serve per capire i gusti.</p>`;
     return;
   }
+  const peopleNames = peopleProfilePairs.map(x => x.name);
+  const rawProfiles = peopleProfilePairs.map(x => x.profile);
+  // Usati per punteggio/selezione (non per il breakdown in card, che resta
+  // sui voti reali non ricentrati) — noop in modalità solitaria.
+  const profiles = normalizeProfilesForGroup(rawProfiles);
   const queryProfile = isGroup ? mergeProfilesForQuery(profiles) : profiles[0];
   const genreIds = queryProfile.topGenres.map(g => GENRE_NAME_TO_ID[g]).filter(Boolean);
   // Da soli: comportamento invariato, tutta la libreria condivisa esclusa
@@ -1416,18 +1473,24 @@ async function recommendTonightFive() {
       const primaryGenreIds = primaryGenres.map(g => GENRE_NAME_TO_ID[g]).filter(Boolean);
       const diversifyGenreIds = diversifyGenres.map(g => GENRE_NAME_TO_ID[g]).filter(Boolean);
 
-      const decadePools = await Promise.all(
-        buckets.map(b =>
-          tmdbFetchDecadeCandidates(queryProfile.prefType, b.start, b.end, primaryGenreIds.length ? primaryGenreIds : genreIds, excludedKeys, GROUP_MIN_VOTE_AVERAGE)
-        )
-      );
-      const diversifyPools = diversifyGenreIds.length
-        ? await Promise.all(
-            buckets.map(b => b.count >= 2
-              ? tmdbFetchDecadeCandidates(queryProfile.prefType, b.start, b.end, diversifyGenreIds, excludedKeys, GROUP_MIN_VOTE_AVERAGE)
-              : Promise.resolve([]))
+      // Le tre fasi (fasce principali, fasce diversificanti, regista) non
+      // dipendono l'una dall'altra: partono tutte insieme invece che in
+      // fila, altrimenti l'attesa si somma invece di sovrapporsi.
+      const [decadePools, diversifyPools, directorResults] = await Promise.all([
+        Promise.all(
+          buckets.map(b =>
+            tmdbFetchDecadeCandidates(queryProfile.prefType, b.start, b.end, primaryGenreIds.length ? primaryGenreIds : genreIds, excludedKeys, GROUP_MIN_VOTE_AVERAGE)
           )
-        : buckets.map(() => []);
+        ),
+        diversifyGenreIds.length
+          ? Promise.all(
+              buckets.map(b => b.count >= 2
+                ? tmdbFetchDecadeCandidates(queryProfile.prefType, b.start, b.end, diversifyGenreIds, excludedKeys, GROUP_MIN_VOTE_AVERAGE)
+                : Promise.resolve([]))
+            )
+          : Promise.resolve(buckets.map(() => [])),
+        fetchDirectorCandidates(people, queryProfile.prefType, excludedKeys)
+      ]);
 
       // Niente rumore casuale qui (a differenza dell'algoritmo solitario
       // sotto): l'obiettivo è che il risultato sembri deliberato, non un
@@ -1444,7 +1507,8 @@ async function recommendTonightFive() {
             item,
             affinity: minAffinity(item, profiles),
             reasons: buildGroupDecadeReason(item, bucket.label, queryProfile),
-            rankScore: minScore(item, profiles, [])
+            rankScore: minScore(item, profiles, []),
+            breakdown: buildBreakdown(item, peopleNames, rawProfiles)
           }))
           .sort((a, b) => b.rankScore - a.rankScore);
         pool.slice(0, normalCount).forEach(entry => { picked.push(entry); usedKeys.add(uniqueKey(entry.item)); });
@@ -1456,7 +1520,9 @@ async function recommendTonightFive() {
               item,
               affinity: minAffinity(item, profiles),
               reasons: buildGroupDiversifyReason(item, bucket.label, diversifyGenres),
-              rankScore: minScore(item, profiles, [])
+              rankScore: minScore(item, profiles, []),
+              breakdown: buildBreakdown(item, peopleNames, rawProfiles),
+              isDiversify: true
             }))
             .sort((a, b) => b.rankScore - a.rankScore);
           const divPick = divPool[0];
@@ -1482,7 +1548,8 @@ async function recommendTonightFive() {
             item,
             affinity: minAffinity(item, profiles),
             reasons: buildGroupDecadeReason(item, decadeOf(item.year), queryProfile),
-            rankScore: minScore(item, profiles, [])
+            rankScore: minScore(item, profiles, []),
+            breakdown: buildBreakdown(item, peopleNames, rawProfiles)
           }))
           .sort((a, b) => b.rankScore - a.rankScore);
         for (const entry of leftover) {
@@ -1500,8 +1567,10 @@ async function recommendTonightFive() {
 
       // Fino a 2 slot sostituiti da un film di un regista condiviso dai
       // coinvolti, se ce n'è uno; altrimenti i 6 restano quelli scelti sopra.
+      // (Le candidature per regista sono già state cercate sopra, in
+      // parallelo col resto — qui restano solo da applicare.)
       const withDirectorPicks = picked.length >= 2
-        ? await tryDirectorPicks(picked, people, profiles, queryProfile.prefType, excludedKeys)
+        ? applyDirectorPicks(picked, directorResults, profiles, peopleNames, rawProfiles)
         : picked;
 
       const finalSix = withDirectorPicks.sort((a, b) => Number(a.item.year || 0) - Number(b.item.year || 0));
@@ -1617,11 +1686,13 @@ async function discoverByTaste() {
 
   area.innerHTML = `<p class="tonight__hint">🔍 Sto cercando qualcosa di nuovo…</p>`;
 
-  const profiles = people.map(u => getUserTasteProfile(u)).filter(Boolean);
-  if (!profiles.length) {
+  const rawProfiles = people.map(u => getUserTasteProfile(u)).filter(Boolean);
+  if (!rawProfiles.length) {
     area.innerHTML = `<p class="tonight__hint">Vota qualche titolo prima: mi serve per capire i gusti.</p>`;
     return;
   }
+  // Stessa normalizzazione di "Dammi 6 consigli": noop in modalità solitaria.
+  const profiles = normalizeProfilesForGroup(rawProfiles);
   const queryProfile = isGroup ? mergeProfilesForQuery(profiles) : profiles[0];
   const selectedGenre = getSelectedTonightGenre();
   const excludedKeys = isGroup
