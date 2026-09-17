@@ -77,8 +77,14 @@ export async function tmdbFetchDiscoverLevel(urls, type, excludedKeys) {
 // Pesca candidati mirati su un range di anni specifico (usata per garantire un
 // mix di decadi diverse nei "5 consigli", invece di sperare che il pool
 // generico ne contenga di ogni epoca).
-export async function tmdbFetchDecadeCandidates(type, yearStart, yearEnd, genreIds, excludedKeys) {
+// minVoteAverage: filtro qualità opzionale (0 = nessuno, comportamento
+// invariato per chi non lo passa) — usato dall'algoritmo di gruppo di
+// Stasera per escludere titoli scarsi già dalla query, invece di sperare
+// che il punteggio li penalizzi abbastanza da non farli entrare nei 2 per
+// decade.
+export async function tmdbFetchDecadeCandidates(type, yearStart, yearEnd, genreIds, excludedKeys, minVoteAverage = 0) {
   const minVotes = type === "movie" ? "&vote_count.gte=80" : "&vote_count.gte=30";
+  const minAvg = minVoteAverage > 0 ? `&vote_average.gte=${minVoteAverage}` : "";
   const dateParam = type === "movie"
     ? `&primary_release_date.gte=${yearStart}-01-01&primary_release_date.lte=${yearEnd}-12-31`
     : `&first_air_date.gte=${yearStart}-01-01&first_air_date.lte=${yearEnd}-12-31`;
@@ -88,9 +94,9 @@ export async function tmdbFetchDecadeCandidates(type, yearStart, yearEnd, genreI
   const comboParam = comboGenres ? `&with_genres=${comboGenres}` : "";
 
   const urls = [
-    `${BASE_URL}/discover/${type}?api_key=${API_KEY}&language=it-IT${comboParam}${dateParam}&sort_by=popularity.desc${minVotes}&page=${randomPage(5)}`,
-    `${BASE_URL}/discover/${type}?api_key=${API_KEY}&language=it-IT${primaryGenre}${dateParam}&sort_by=vote_average.desc${minVotes}&page=${randomPage(5)}`,
-    `${BASE_URL}/discover/${type}?api_key=${API_KEY}&language=it-IT${dateParam}&sort_by=popularity.desc${minVotes}&page=${randomPage(5)}`
+    `${BASE_URL}/discover/${type}?api_key=${API_KEY}&language=it-IT${comboParam}${dateParam}&sort_by=popularity.desc${minVotes}${minAvg}&page=${randomPage(5)}`,
+    `${BASE_URL}/discover/${type}?api_key=${API_KEY}&language=it-IT${primaryGenre}${dateParam}&sort_by=vote_average.desc${minVotes}${minAvg}&page=${randomPage(5)}`,
+    `${BASE_URL}/discover/${type}?api_key=${API_KEY}&language=it-IT${dateParam}&sort_by=popularity.desc${minVotes}${minAvg}&page=${randomPage(5)}`
   ];
 
   return tmdbFetchDiscoverLevel(urls, type, excludedKeys);

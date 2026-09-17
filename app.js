@@ -33,6 +33,10 @@ const MIN_VOTED_FOR_REPORT = 50;
 // gusti individuale è troppo debole per essere affidabile in un calcolo di
 // gruppo — stesso numero non a caso, non una nuova soglia arbitraria.
 const MIN_VOTED_FOR_GROUP_TONIGHT = MIN_VOTED_FOR_REPORT;
+// Sotto voto TMDB 6 è raro che valga la pena consigliarlo, anche se genere e
+// decade combaciano bene — filtro applicato in query, non solo sperando che
+// il punteggio lo penalizzi abbastanza.
+const GROUP_MIN_VOTE_AVERAGE = 6;
 
 let currentUser = null;
 let users = [];
@@ -1334,10 +1338,13 @@ async function recommendTonightFive() {
       const decadePools = await Promise.all(
         decades.map(d => {
           const dy = parseInt(d, 10);
-          return tmdbFetchDecadeCandidates(queryProfile.prefType, dy, dy + 9, genreIds, excludedKeys);
+          return tmdbFetchDecadeCandidates(queryProfile.prefType, dy, dy + 9, genreIds, excludedKeys, GROUP_MIN_VOTE_AVERAGE);
         })
       );
 
+      // Niente rumore casuale qui (a differenza dell'algoritmo solitario
+      // sotto): l'obiettivo è che il risultato sembri deliberato, non un
+      // titolo mediocre che "vince" per fortuna in un pool ristretto.
       const usedKeys = new Set();
       const picked = [];
       decades.forEach((decadeLabel, i) => {
@@ -1347,7 +1354,7 @@ async function recommendTonightFive() {
             item,
             affinity: minAffinity(item, profiles),
             reasons: buildGroupDecadeReason(item, decadeLabel, queryProfile),
-            rankScore: minScore(item, profiles, []) + Math.random() * 2.5
+            rankScore: minScore(item, profiles, [])
           }))
           .sort((a, b) => b.rankScore - a.rankScore);
         pool.slice(0, 2).forEach(entry => { picked.push(entry); usedKeys.add(uniqueKey(entry.item)); });
@@ -1362,7 +1369,7 @@ async function recommendTonightFive() {
             item,
             affinity: minAffinity(item, profiles),
             reasons: buildGroupDecadeReason(item, decadeOf(item.year), queryProfile),
-            rankScore: minScore(item, profiles, []) + Math.random() * 2.5
+            rankScore: minScore(item, profiles, [])
           }))
           .sort((a, b) => b.rankScore - a.rankScore);
         for (const entry of leftover) {
