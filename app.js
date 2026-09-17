@@ -1138,6 +1138,16 @@ function buildGroupDecadeReason(item, decadeLabel, queryProfile) {
   return bits;
 }
 
+// Motivo per lo slot "diversificante": pescato apposta sui generi 4°-6°
+// del gruppo, non sui 3 principali che dominerebbero altrimenti tutti i 6.
+function buildGroupDiversifyReason(item, decadeLabel, diversifyGenres) {
+  const bits = [];
+  const matches = (item.genre_names || []).filter(g => diversifyGenres.includes(g));
+  if (matches.length) bits.push(`per variare: ${matches.slice(0, 2).join(" + ")}`);
+  bits.push(`anni ${decadeLabel}`);
+  return bits;
+}
+
 // Registi che piacciono a TUTTE le persone coinvolte (>=2 titoli votati da
 // ciascuna per quel regista, altrimenti una singola visione fortunata
 // conterebbe come "preferenza"), ordinati per il minimo tra le persone —
@@ -1205,6 +1215,20 @@ function mergeProfilesForQuery(profiles) {
   profiles.forEach(p => { if (p.topDecade) decadeCount[p.topDecade] = (decadeCount[p.topDecade] || 0) + 1; });
   const topDecade = Object.entries(decadeCount).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
   return { prefType, topGenres, topDecade };
+}
+
+// Generi del gruppo ordinati per quanto piacciono a TUTTI i coinvolti (min
+// tra le medie di genere di ciascuno — un genere che uno adora e un altro
+// non guarda mai non è "un genere del gruppo"), non solo l'unione grezza
+// usata per interrogare TMDB. Usata per diversificare "Dammi 6 consigli" di
+// gruppo: posizioni 1-3 sono i generi "principali", 4-6 quelli su cui
+// pescare apposta per non far uscire sempre gli stessi 2-3 generi.
+function rankedGroupGenres(profiles) {
+  const allGenres = [...new Set(profiles.flatMap(p => p.topGenres))];
+  return allGenres
+    .map(genre => ({ genre, minAvg: Math.min(...profiles.map(p => p.genreAverages[genre] ?? 0)) }))
+    .sort((a, b) => b.minAvg - a.minAvg)
+    .map(x => x.genre);
 }
 
 // L'affinità/il punteggio per il gruppo è il MINIMO tra i coinvolti, non la
@@ -1374,17 +1398,36 @@ async function recommendTonightFive() {
     // In gruppo: algoritmo diverso da quello solitario, deliberatamente più
     // semplice — 3 fasce temporali fisse (2000-2010, 2011-2020, dal 2021),
     // con più titoli quanto più recente la fascia (1/2/3), scelti su
-    // generi+media voto. Non diversifica generi/epoche con pickDiverse (qui
-    // la fascia è già garantita per costruzione) e non ha slot "fuori
-    // zona": la trasparenza del meccanismo conta più della raffinatezza.
+    // generi+media voto. Non ha slot "fuori zona": la trasparenza del
+    // meccanismo conta più della raffinatezza.
     if (isGroup) {
       const buckets = groupDecadeBuckets();
 
+      // Diversificazione per genere: i 3 generi che il gruppo vede di più
+      // (min tra le medie di ciascuno) guidano 4 dei 6 titoli; gli altri 2
+      // vanno pescati apposta tra il 4°-6° genere preferito, altrimenti gli
+      // stessi 2-3 generi dominerebbero sempre tutti e 6. Uno slot
+      // diversificante per fascia, solo per le fasce con >=2 posti (quella
+      // da 1 solo posto — 2000-2010 — resta sui generi principali: con un
+      // solo slot non c'è margine per rischiare zero risultati).
+      const groupGenresRanked = rankedGroupGenres(profiles);
+      const primaryGenres = groupGenresRanked.slice(0, 3);
+      const diversifyGenres = groupGenresRanked.slice(3, 6);
+      const primaryGenreIds = primaryGenres.map(g => GENRE_NAME_TO_ID[g]).filter(Boolean);
+      const diversifyGenreIds = diversifyGenres.map(g => GENRE_NAME_TO_ID[g]).filter(Boolean);
+
       const decadePools = await Promise.all(
         buckets.map(b =>
-          tmdbFetchDecadeCandidates(queryProfile.prefType, b.start, b.end, genreIds, excludedKeys, GROUP_MIN_VOTE_AVERAGE)
+          tmdbFetchDecadeCandidates(queryProfile.prefType, b.start, b.end, primaryGenreIds.length ? primaryGenreIds : genreIds, excludedKeys, GROUP_MIN_VOTE_AVERAGE)
         )
       );
+      const diversifyPools = diversifyGenreIds.length
+        ? await Promise.all(
+            buckets.map(b => b.count >= 2
+              ? tmdbFetchDecadeCandidates(queryProfile.prefType, b.start, b.end, diversifyGenreIds, excludedKeys, GROUP_MIN_VOTE_AVERAGE)
+              : Promise.resolve([]))
+          )
+        : buckets.map(() => []);
 
       // Niente rumore casuale qui (a differenza dell'algoritmo solitario
       // sotto): l'obiettivo è che il risultato sembri deliberato, non un
@@ -1392,6 +1435,9 @@ async function recommendTonightFive() {
       const usedKeys = new Set();
       const picked = [];
       buckets.forEach((bucket, i) => {
+        const hasDiversifySlot = bucket.count >= 2 && diversifyPools[i].length > 0;
+        const normalCount = hasDiversifySlot ? bucket.count - 1 : bucket.count;
+
         const pool = decadePools[i]
           .filter(item => !usedKeys.has(uniqueKey(item)))
           .map(item => ({
@@ -1401,13 +1447,36 @@ async function recommendTonightFive() {
             rankScore: minScore(item, profiles, [])
           }))
           .sort((a, b) => b.rankScore - a.rankScore);
-        pool.slice(0, bucket.count).forEach(entry => { picked.push(entry); usedKeys.add(uniqueKey(entry.item)); });
+        pool.slice(0, normalCount).forEach(entry => { picked.push(entry); usedKeys.add(uniqueKey(entry.item)); });
+
+        if (hasDiversifySlot) {
+          const divPool = diversifyPools[i]
+            .filter(item => !usedKeys.has(uniqueKey(item)))
+            .map(item => ({
+              item,
+              affinity: minAffinity(item, profiles),
+              reasons: buildGroupDiversifyReason(item, bucket.label, diversifyGenres),
+              rankScore: minScore(item, profiles, [])
+            }))
+            .sort((a, b) => b.rankScore - a.rankScore);
+          const divPick = divPool[0];
+          if (divPick) {
+            picked.push(divPick);
+            usedKeys.add(uniqueKey(divPick.item));
+          } else {
+            // Niente di buono tra i generi 4°-6° per questa fascia: lo slot
+            // non resta vuoto, va al prossimo titolo sui generi principali.
+            const extra = pool[normalCount];
+            if (extra) { picked.push(extra); usedKeys.add(uniqueKey(extra.item)); }
+          }
+        }
       });
 
       // Se una fascia ha reso meno titoli del previsto (catalogo piccolo),
-      // ripesca dagli avanzi delle altre fasce per arrivare comunque a 6.
+      // ripesca dagli avanzi delle altre fasce (principali + diversificanti)
+      // per arrivare comunque a 6.
       if (picked.length < 6) {
-        const leftover = decadePools.flat()
+        const leftover = [...decadePools.flat(), ...diversifyPools.flat()]
           .filter(item => !usedKeys.has(uniqueKey(item)))
           .map(item => ({
             item,
