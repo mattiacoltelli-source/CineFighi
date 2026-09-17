@@ -624,20 +624,42 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 /* TONIGHT */
 .tonight__intro { font-size:13px; color: var(--text3); margin-bottom:16px; }
 
-/* Selettore "chi c'è stasera": stessa pillola avatar+nome dello .user-chip
-   in topbar, ma multi-selezionabile — decide DI CHI sono i gusti su cui si
-   basano i consigli, non solo un filtro visivo come Barre/Bolle. Tu (il
-   profilo corrente) sei sempre incluso e non ti si può togliere: il caso
-   "nessuno selezionato" non esiste, il minimo è sempre te stesso da solo. */
-.tonight-people-picker { display:flex; gap:8px; overflow-x:auto; margin-bottom:8px; padding-bottom:2px; }
-.tonight-people-chip {
-  display:flex; align-items:center; gap:8px; background: var(--surface); border:1px solid var(--border);
-  border-radius: var(--radius-pill); padding:6px 14px 6px 6px; font-family: var(--font-display); font-weight:700;
-  font-size:13px; color: var(--text2); white-space:nowrap; flex-shrink:0; cursor:pointer;
-  transition: border-color var(--t-mid), background var(--t-mid), color var(--t-mid), box-shadow var(--t-mid);
+/* Selettore "chi c'è stasera": uno stack di avatar sovrapposti (chi è
+   coinvolto, colpo d'occhio) + nomi + matita che apre il pannello per
+   aggiungere/togliere persone — decide DI CHI sono i gusti su cui si basano
+   i consigli, non solo un filtro visivo come Barre/Bolle. Tu (il profilo
+   corrente) sei sempre incluso e non ti si può togliere: il caso "nessuno
+   selezionato" non esiste, il minimo è sempre te stesso da solo. */
+.tonight-people-summary { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+.tonight-people-stack { display:flex; flex-shrink:0; }
+.tonight-people-stack .avatar { border:2px solid var(--bg); margin-left:-10px; }
+.tonight-people-stack .avatar:first-child { margin-left:0; }
+.tonight-people-names { font-family: var(--font-display); font-weight:700; font-size:14px; color: var(--text); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.tonight-people-edit-btn {
+  width:32px; height:32px; border-radius:50%; flex-shrink:0; background: var(--surface2);
+  border:1px solid var(--border); color: var(--text2); display:flex; align-items:center; justify-content:center;
+  cursor:pointer; transition: border-color var(--t-mid), color var(--t-mid);
 }
-.tonight-people-chip.active { background: var(--surface3); color: var(--text); border-color: rgba(56,189,248,.4); box-shadow: var(--cyan-glow); }
-.tonight-people-chip.disabled { opacity:.4; cursor:default; }
+.tonight-people-edit-btn svg { width:14px; height:14px; }
+.tonight-people-edit-btn.active { border-color: rgba(56,189,248,.4); color: var(--cyan2); }
+.tonight-people-panel {
+  background: var(--surface); border:1px solid var(--border); border-radius: var(--radius-lg);
+  padding:6px; margin-bottom:8px; display:flex; flex-direction:column; gap:4px;
+}
+.tonight-people-row {
+  display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius: var(--radius-md);
+  border:0; background:transparent; cursor:pointer; text-align:left; width:100%;
+  font-family: var(--font-body); transition: background var(--t-fast);
+}
+.tonight-people-row.active { background: var(--surface2); }
+.tonight-people-row .name { font-family: var(--font-display); font-weight:700; font-size:13px; color: var(--text); flex:1; }
+.tonight-people-row .votes { font-size:11px; color: var(--text3); }
+.tonight-people-row .dot {
+  width:20px; height:20px; border-radius:50%; flex-shrink:0; border:1.5px solid var(--border2); background:transparent;
+  transition: background var(--t-fast), border-color var(--t-fast);
+}
+.tonight-people-row.active .dot { background: var(--cyan); border-color: var(--cyan); }
+.tonight-people-row.disabled { opacity:.4; cursor:default; }
 .tonight-people-note { font-size:12px; color: var(--text3); margin: -4px 0 16px; }
 
 .tonight-discover-block {

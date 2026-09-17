@@ -44,6 +44,7 @@ let watchlistMode = "me";  // me | group (Home)
 let statsMode = "me";   // group | me
 let reportMode = "io"; // gruppo | io
 let tonightSelectedPeople = []; // chi c'è stasera — sempre almeno [currentUser]
+let tonightPeoplePanelOpen = false; // pannello di modifica del selettore persone, aperto/chiuso
 let rankingMedia = "movie"; // movie | tv
 let genreView = getGenreView(); // bars | bubbles — preferenza di vista dei Generi, per dispositivo
 let currentDetailId = null;
@@ -339,6 +340,7 @@ async function handleAddUser() {
 function selectUser(name) {
   currentUser = name;
   tonightSelectedPeople = [name];
+  tonightPeoplePanelOpen = false;
   setCurrentUser(name);
   updateUserChip();
   document.getElementById("app").classList.remove("hidden");
@@ -1164,23 +1166,40 @@ function minScore(item, profiles, selectedBoosts) {
 
 function renderTonightPeoplePicker() {
   if (!tonightSelectedPeople.length) tonightSelectedPeople = [currentUser];
-  const wrap = document.getElementById("tonightPeoplePicker");
+  const stack = document.getElementById("tonightPeopleStack");
+  const names = document.getElementById("tonightPeopleNames");
+  const editBtn = document.getElementById("tonightPeopleEditBtn");
+  const panel = document.getElementById("tonightPeoplePanel");
   const note = document.getElementById("tonightPeopleNote");
   const intro = document.getElementById("tonightIntro");
-  if (!wrap || !currentUser) return;
+  if (!stack || !currentUser) return;
+
+  // Stack: tu + fino a 2 altri come avatar sovrapposti; oltre, una bolla
+  // "+N" invece di continuare ad allungare la fila all'infinito.
+  const others = tonightSelectedPeople.filter(u => u !== currentUser);
+  const displayPeople = [currentUser, ...others];
+  const maxAvatars = 3;
+  stack.innerHTML = displayPeople.length <= maxAvatars
+    ? displayPeople.map(u => avatarHtml(u, 30)).join("")
+    : displayPeople.slice(0, maxAvatars - 1).map(u => avatarHtml(u, 30)).join("") +
+      `<span class="avatar" style="width:30px;height:30px;font-size:11px;background:var(--surface3);color:var(--text2);">+${displayPeople.length - (maxAvatars - 1)}</span>`;
+
+  names.textContent = others.length ? `Tu, ${others.join(", ")}` : "Tu";
+  editBtn.classList.toggle("active", tonightPeoplePanelOpen);
+  panel.classList.toggle("hidden", !tonightPeoplePanelOpen);
 
   const currentEligible = votedCountFor(currentUser) >= MIN_VOTED_FOR_GROUP_TONIGHT;
 
-  wrap.innerHTML = users.map(u => {
+  panel.innerHTML = users.map(u => {
     const isMe = u === currentUser;
     const active = isMe || tonightSelectedPeople.includes(u);
     const votes = votedCountFor(u);
     const eligible = votes >= MIN_VOTED_FOR_GROUP_TONIGHT;
     const disabled = !isMe && (!eligible || !currentEligible);
-    const label = eligible ? escapeHtml(u) : `${escapeHtml(u)} · ${votes}/${MIN_VOTED_FOR_GROUP_TONIGHT}`;
+    const votesText = eligible ? "" : `<span class="votes">${votes}/${MIN_VOTED_FOR_GROUP_TONIGHT}</span>`;
     return `
-      <button class="tonight-people-chip${active ? " active" : ""}${disabled ? " disabled" : ""}" data-user="${escapeHtml(u)}"${disabled ? " disabled" : ""}>
-        ${avatarHtml(u, 26)}<span>${label}</span>
+      <button class="tonight-people-row${active ? " active" : ""}${disabled ? " disabled" : ""}" data-user="${escapeHtml(u)}"${disabled ? " disabled" : ""}>
+        ${avatarHtml(u, 26)}<span class="name">${escapeHtml(u)}</span>${votesText}<span class="dot"></span>
       </button>`;
   }).join("");
 
@@ -1964,8 +1983,13 @@ function bindGlobalEvents() {
 
   document.getElementById("reportRefreshBtn").addEventListener("click", () => { haptic(8); handleReportRefresh(); });
 
-  document.getElementById("tonightPeoplePicker").addEventListener("click", e => {
-    const btn = e.target.closest(".tonight-people-chip");
+  document.getElementById("tonightPeopleEditBtn").addEventListener("click", () => {
+    tonightPeoplePanelOpen = !tonightPeoplePanelOpen;
+    haptic(8);
+    renderTonightPeoplePicker();
+  });
+  document.getElementById("tonightPeoplePanel").addEventListener("click", e => {
+    const btn = e.target.closest(".tonight-people-row");
     if (!btn || btn.disabled) return;
     const user = btn.dataset.user;
     if (user === currentUser) return; // sei sempre incluso, non ti si toglie

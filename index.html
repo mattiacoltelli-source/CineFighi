@@ -212,7 +212,14 @@
       <h2 class="section__title" style="margin-bottom:6px;">Stasera cosa guardo?</h2>
       <p id="tonightIntro" class="tonight__intro">Consigli basati sui tuoi voti.</p>
 
-      <div id="tonightPeoplePicker" class="tonight-people-picker"></div>
+      <div class="tonight-people-summary">
+        <div id="tonightPeopleStack" class="tonight-people-stack"></div>
+        <div id="tonightPeopleNames" class="tonight-people-names"></div>
+        <button id="tonightPeopleEditBtn" class="tonight-people-edit-btn" aria-label="Modifica chi c'è">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+        </button>
+      </div>
+      <div id="tonightPeoplePanel" class="tonight-people-panel hidden"></div>
       <p id="tonightPeopleNote" class="tonight-people-note hidden"></p>
 
       <div class="tonight-discover-block">
