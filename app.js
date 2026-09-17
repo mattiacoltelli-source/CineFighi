@@ -19,7 +19,7 @@ import {
 import {
   tmdbFetchDetail, tmdbSearch, tmdbFetchDiscoverLevel, tmdbFetchDecadeCandidates,
   tmdbFetchOutOfComfortZoneCandidates, buildFallbackQueries, tmdbFindPersonId, tmdbFetchByCrewMember,
-  tmdbFetchByCastMembers
+  tmdbFetchByCastMembers, tmdbFetchCastNames
 } from "./tmdb.js?v=97dfb0e";
 import {
   showToast, avatarHtml, initScreens, switchScreen,
@@ -1209,12 +1209,39 @@ function buildBreakdown(item, peopleNames, rawProfiles) {
   return peopleNames.map((name, i) => ({ name, score: calculateAffinity(item, rawProfiles[i]) }));
 }
 
-// Registi che piacciono a TUTTE le persone coinvolte (>=2 titoli votati da
-// ciascuna per quel regista, altrimenti una singola visione fortunata
-// conterebbe come "preferenza"), ordinati per il minimo tra le persone —
-// stessa logica del resto dell'algoritmo di gruppo: meglio un regista che
-// piace abbastanza a tutti che uno che piace tantissimo a uno solo.
-function sharedDirectors(people) {
+// Fisher-Yates, non muta l'array originale — usato sotto per non pescare
+// sempre lo stesso sottoinsieme di registi/attori ad ogni generazione.
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// Tra i candidati non ancora usati (già ordinati per voto TMDB dalla
+// query), uno a caso tra i migliori "topK" — non sempre il primo: è quello
+// che rendeva il regista/cast stellare sempre lo stesso film ad ogni
+// generazione.
+function pickRandomAvailable(candidates, usedKeys, topK = 5) {
+  const available = candidates.filter(item => !usedKeys.has(uniqueKey(item)));
+  if (!available.length) return null;
+  const pool = available.slice(0, topK);
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+// Registi apprezzati da almeno una delle persone coinvolte (>=2 titoli
+// votati da quella persona per quel regista, altrimenti una singola
+// visione fortunata conterebbe come "preferenza") — NON deve piacere a
+// tutti: basta che lo ami anche una persona sola, se lo ama molto. Il
+// punteggio premia sia quanti lo amano sia quanto lo amano (un fan singolo
+// molto convinto può comunque superare un regista amato "così così" da
+// tutti), poi si mescola il pool dei migliori prima di sceglierne 2, così
+// non escono sempre gli stessi 2 registi in cima. Il motivo mostrato in
+// card (vedi applyDirectorPicks) riflette sempre chi lo ama davvero, mai
+// "tutti" se non è vero.
+function belovedDirectors(people) {
   const perPerson = people.map(u => {
     const votes = {};
     db.forEach(item => {
@@ -1226,34 +1253,54 @@ function sharedDirectors(people) {
     return avg;
   });
 
-  const shared = Object.keys(perPerson[0] || {}).filter(d => perPerson.every(pd => d in pd));
-  return shared
-    .map(director => ({ director, minAvg: Math.min(...perPerson.map(pd => pd[director])) }))
-    .sort((a, b) => b.minAvg - a.minAvg)
-    .slice(0, 2)
-    .map(x => x.director);
+  const directorNames = new Set();
+  perPerson.forEach(pd => Object.keys(pd).forEach(d => directorNames.add(d)));
+
+  const scored = [...directorNames].map(director => {
+    const fans = people
+      .map((name, i) => ({ name, avg: perPerson[i][director] }))
+      .filter(f => f.avg !== undefined);
+    const meanAvg = fans.reduce((sum, f) => sum + f.avg, 0) / fans.length;
+    const score = meanAvg + (fans.length - 1) * 0.3;
+    return { director, fans: fans.map(f => f.name), score };
+  });
+
+  const pool = shuffle(scored).sort((a, b) => b.score - a.score).slice(0, 6);
+  return shuffle(pool).slice(0, 2);
 }
 
-// Cerca in parallelo, per ciascun regista condiviso, un suo film non ancora
-// scelto — non dipende da "picked" (i 6 su generi/fasce), quindi può girare
-// insieme alle chiamate per fasce/generi invece che dopo: fa risparmiare
-// tempo, non solo chiamate in meno.
+function buildDirectorFansLabel(fans, totalPeople) {
+  if (fans.length >= totalPeople) return "apprezzato da tutti";
+  if (fans.length === 1) return `molto amato da ${fans[0]}`;
+  return `amato da ${fans.join(" e ")}`;
+}
+
+// Cerca in parallelo, per ciascun regista scelto da belovedDirectors, un
+// suo film non ancora scelto — non dipende da "picked" (i 6 su
+// generi/fasce), quindi può girare insieme alle chiamate per fasce/generi
+// invece che dopo: fa risparmiare tempo, non solo chiamate in meno.
 async function fetchDirectorCandidates(people, type, excludedKeys) {
-  const directors = sharedDirectors(people);
-  return Promise.all(directors.map(async director => {
+  const directors = belovedDirectors(people);
+  return Promise.all(directors.map(async ({ director, fans }) => {
     const personId = await tmdbFindPersonId(director).catch(() => null);
     if (!personId) return null;
     const candidates = await tmdbFetchByCrewMember(type, personId, excludedKeys, GROUP_MIN_VOTE_AVERAGE).catch(() => []);
-    return candidates.length ? { director, candidates } : null;
+    return candidates.length ? { director, fans, candidates } : null;
   }));
 }
 
 // Candidati per lo slot "cast stellare": non dipende da "picked", quindi
-// parte in parallelo col resto (stesso motivo del regista condiviso). Gli
-// ID sono già noti (MATTIA_STAR_ACTORS sopra), nessuna ricerca per nome.
+// parte in parallelo col resto (stesso motivo del regista). Ad ogni
+// generazione si pesca un sottoinsieme casuale degli attori invece di
+// interrogarli tutti e 23 insieme: con l'OR su tutti, TMDB restituiva
+// quasi sempre lo stesso film "cumulativo" (es. Interstellar, che ha sia
+// McConaughey che Damon) — pescando un sottoinsieme diverso ogni volta si
+// dà spazio anche agli altri.
 async function fetchStarCastCandidates(type, excludedKeys) {
-  const ids = MATTIA_STAR_ACTORS.map(a => a.id);
-  return tmdbFetchByCastMembers(type, ids, excludedKeys, GROUP_MIN_VOTE_AVERAGE).catch(() => []);
+  const actors = shuffle(MATTIA_STAR_ACTORS).slice(0, 6);
+  const ids = actors.map(a => a.id);
+  const candidates = await tmdbFetchByCastMembers(type, ids, excludedKeys, GROUP_MIN_VOTE_AVERAGE).catch(() => []);
+  return candidates;
 }
 
 // Tra gli slot rimpiazzabili, quello col punteggio più basso — ma MAI uno
@@ -1281,14 +1328,15 @@ function applyDirectorPicks(picked, directorResults, profiles, peopleNames, rawP
   for (const dr of directorResults) {
     if (!dr) continue;
     const usedKeys = new Set(result.map(entry => uniqueKey(entry.item)));
-    const candidate = dr.candidates.find(item => !usedKeys.has(uniqueKey(item)));
+    const candidate = pickRandomAvailable(dr.candidates, usedKeys);
     if (!candidate) continue;
 
     const worstIndex = worstReplaceableIndex(result, protectedIndices);
+    const fansLabel = buildDirectorFansLabel(dr.fans, peopleNames.length);
     result[worstIndex] = {
       item: candidate,
       affinity: minAffinity(candidate, profiles),
-      reasons: [`stesso regista apprezzato da tutti: ${dr.director}`],
+      reasons: [`stesso regista ${fansLabel}: ${dr.director}`],
       rankScore: minScore(candidate, profiles, []),
       breakdown: buildBreakdown(candidate, peopleNames, rawProfiles)
     };
@@ -1301,18 +1349,24 @@ function applyDirectorPicks(picked, directorResults, profiles, peopleNames, rawP
 // (MATTIA_STAR_ACTORS) — dichiarato esplicitamente nel testo del consiglio
 // come scelta sua, non un segnale di gruppo. Stessa logica di "mai slot
 // vuoto" del regista: se non c'è un candidato utilizzabile, i 6 restano
-// quelli di prima.
-function applyStarCastPick(picked, starCastCandidates, profiles, peopleNames, rawProfiles, protectedIndices) {
+// quelli di prima. Un'unica chiamata extra (tmdbFetchDetail, cache in
+// memoria) sul SOLO candidato scelto per sapere esattamente quale attore
+// della lista è nel cast, invece di scrivere un motivo generico.
+async function applyStarCastPick(picked, starCastCandidates, profiles, peopleNames, rawProfiles, protectedIndices) {
   const result = [...picked];
   const usedKeys = new Set(result.map(entry => uniqueKey(entry.item)));
-  const candidate = starCastCandidates.find(item => !usedKeys.has(uniqueKey(item)));
+  const candidate = pickRandomAvailable(starCastCandidates, usedKeys);
   if (!candidate) return result;
+
+  const castNames = new Set(await tmdbFetchCastNames(candidate.media_type, candidate.id).catch(() => []));
+  const matched = MATTIA_STAR_ACTORS.filter(a => castNames.has(a.name)).map(a => a.name);
+  const actorLabel = matched.length ? matched.join(" e ") : "un attore preferito";
 
   const worstIndex = worstReplaceableIndex(result, protectedIndices);
   result[worstIndex] = {
     item: candidate,
     affinity: minAffinity(candidate, profiles),
-    reasons: ["scelto da Mattia: cast tra i suoi attori preferiti"],
+    reasons: [`scelto da Mattia: nel cast c'è ${actorLabel}`],
     rankScore: minScore(candidate, profiles, []),
     breakdown: buildBreakdown(candidate, peopleNames, rawProfiles),
     isStarCast: true
@@ -1679,7 +1733,7 @@ async function recommendTonightFive() {
         ? applyDirectorPicks(picked, directorResults, profiles, peopleNames, rawProfiles, protectedIndices)
         : picked;
       const withStarCastPick = withDirectorPicks.length >= 2
-        ? applyStarCastPick(withDirectorPicks, starCastCandidates, profiles, peopleNames, rawProfiles, protectedIndices)
+        ? await applyStarCastPick(withDirectorPicks, starCastCandidates, profiles, peopleNames, rawProfiles, protectedIndices)
         : withDirectorPicks;
 
       const finalSix = withStarCastPick.sort((a, b) => Number(a.item.year || 0) - Number(b.item.year || 0));

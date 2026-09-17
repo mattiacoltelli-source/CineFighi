@@ -159,6 +159,24 @@ export async function tmdbFetchByCastMembers(type, personIds, excludedKeys, minV
   return tmdbFetchDiscoverLevel([url], type, excludedKeys);
 }
 
+// Nomi del cast di un titolo — usato SOLO dallo slot "cast stellare" di
+// Stasera, per sapere esattamente quale attore preferito di Mattia è nel
+// film scelto (tmdbFetchDetail normalizza il risultato e butta via i
+// credits, qui servono grezzi).
+export async function tmdbFetchCastNames(type, id) {
+  const cacheKey = `cast|${type}|${id}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) return cached;
+  try {
+    const res = await fetch(`${BASE_URL}/${type}/${id}?api_key=${API_KEY}&language=it-IT&append_to_response=credits`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    const names = (data.credits?.cast || []).map(c => c.name);
+    cacheSet(cacheKey, names);
+    return names;
+  } catch { return []; }
+}
+
 // Costruisce i 4 livelli di ricerca (precisa → ampia → solo genere → fallback),
 // esattamente come nell'algoritmo originale di CineTracker, basandosi sul
 // profilo di gusti della persona selezionata.
