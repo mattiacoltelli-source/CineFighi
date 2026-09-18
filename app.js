@@ -10,7 +10,7 @@ import {
 import {
   getCurrentUser, setCurrentUser, clearCurrentUser, MAX_USERS,
   getLastSeenAt, setLastSeenAt, getGenreView, setGenreView,
-  fetchUsers, addUser, deleteUser,
+  fetchUsers, addUser,
   fetchLibrary, addTitle, addToWatchlist, removeFromWatchlist, ensureWatchlistMembership, updateTitleStatus, removeTitle,
   upsertVote, removeVote,
   loadLatestReport, regenerateReport,
@@ -327,12 +327,9 @@ async function renderUserPickerList() {
   }
   const list = document.getElementById("userPickerList");
   list.innerHTML = users.map(u => `
-    <div class="user-pick-row">
-      <button class="user-pick-btn" data-user="${escapeHtml(u)}">
-        ${avatarHtml(u, 32)}<span>${escapeHtml(u)}</span>
-      </button>
-      <button class="user-delete-btn" data-user="${escapeHtml(u)}" title="Elimina utente">🗑</button>
-    </div>
+    <button class="user-pick-btn" data-user="${escapeHtml(u)}">
+      ${avatarHtml(u, 32)}<span>${escapeHtml(u)}</span>
+    </button>
   `).join("");
 
   const full = users.length >= MAX_USERS;
@@ -340,13 +337,13 @@ async function renderUserPickerList() {
   document.getElementById("userPickerAddRow").classList.toggle("hidden", full);
 }
 
-// ─── CONFERMA AZIONI PERICOLOSE (es. eliminare un utente) ────────────────────
+// ─── CONFERMA AZIONI PERICOLOSE (es. rimuovere un titolo) ────────────────────
 
-// yesLabel/danger: le due chiamate storiche (elimina utente, rimuovi
-// titolo) sono azioni distruttive col bottone rosso "Elimina
-// definitivamente" — il gesto segreto dei 7 tap sotto (rigenera report)
-// non distrugge nulla, quindi usa un'etichetta e uno stile neutri invece
-// di riusare quelli allarmanti pensati per le cancellazioni.
+// yesLabel/danger: le chiamate distruttive (es. rimuovi titolo) usano il
+// bottone rosso "Elimina definitivamente" — il gesto segreto dei 7 tap sotto
+// (rigenera report) non distrugge nulla, quindi usa un'etichetta e uno
+// stile neutri invece di riusare quelli allarmanti pensati per le
+// cancellazioni.
 function askConfirm(text, onYes, { yesLabel = "Elimina definitivamente", danger = true } = {}) {
   document.getElementById("confirmText").textContent = text;
   const yesBtn = document.getElementById("confirmYesBtn");
@@ -359,25 +356,6 @@ function askConfirm(text, onYes, { yesLabel = "Elimina definitivamente", danger 
 function closeConfirm() {
   document.getElementById("confirmOverlay").classList.add("hidden");
   confirmYesAction = null;
-}
-
-async function handleDeleteUser(name) {
-  askConfirm(
-    `Eliminare "${name}" dal gruppo? I voti già dati restano nella classifica, ma non potrà più votare finché non si aggiunge di nuovo.`,
-    async () => {
-      const res = await deleteUser(name);
-      if (!res.ok) { showToast("Errore, riprova", "error"); return; }
-      haptic([10, 40, 10]);
-      showToast(`${name} eliminato dal gruppo`, "success");
-      if (name === currentUser) {
-        currentUser = null;
-        clearCurrentUser();
-        document.getElementById("app").classList.add("hidden");
-      }
-      await renderUserPickerList();
-      if (!currentUser) openUserPicker(true);
-    }
-  );
 }
 
 async function handleAddUser() {
@@ -2208,8 +2186,6 @@ function bindGlobalEvents() {
     if (e.key === "Enter") handleAddUser();
   });
   document.getElementById("userPickerList").addEventListener("click", e => {
-    const delBtn = e.target.closest(".user-delete-btn");
-    if (delBtn) { handleDeleteUser(delBtn.dataset.user); return; }
     const btn = e.target.closest(".user-pick-btn");
     if (btn) selectUser(btn.dataset.user);
   });

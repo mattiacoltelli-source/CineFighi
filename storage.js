@@ -84,14 +84,12 @@ export async function addUser(rawName) {
   return { ok: true, existing: false, name: clean };
 }
 
-// Elimina un utente dal gruppo. I suoi voti già dati restano (scelta voluta:
-// la media di gruppo resta corretta, semplicemente non può più votare finché
-// non si aggiunge di nuovo).
-export async function deleteUser(name) {
-  const { error } = await supabase.from("users").delete().eq("name", name);
-  if (error) { console.error("deleteUser:", error); return { ok: false }; }
-  return { ok: true };
-}
+// Niente deleteUser lato client: dal 2026-09-18 "users" non ha più una
+// policy RLS DELETE pubblica (chiusa dopo un incidente reale), quindi un
+// DELETE con la chiave anon/publishable non dà errore ma non cancella
+// nulla. Rimuovere un utente ora richiede la service role key (vedi
+// scripts/cleanup-write-residue.mjs nel repo qa-agent).
+
 // ─── LIBRERIA (titoli + voti, uniti in un unico oggetto comodo da usare) ─────
 // Ogni titolo torna con: { ...campi, votes: { "Mattia": { vote, comment }, ... } }
 
