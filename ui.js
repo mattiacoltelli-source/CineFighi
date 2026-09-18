@@ -303,19 +303,20 @@ const GENRE_BUBBLE_LAYOUT = [
 ];
 
 // Respiro: un unico impulso morbido (solo scale + un filo di brightness),
-// stesso per tutte, sfasato abbastanza (550ms) da una bolla alla successiva
+// stesso per tutte, sfasato abbastanza (850ms) da una bolla alla successiva
 // che non si leggano mai come un blocco unico che pulsa insieme. Periodo
-// leggermente diverso per ognuna (4,0s → 4,5s) invece che identico: le fasi
-// non tornano mai a coincidere allo stesso modo, quindi il respiro non si
-// ripete mai in un pattern perfettamente meccanico — costo zero, stessa
-// @keyframes, solo animation-duration diversa.
+// diverso per ognuna (3,8s → 5,3s, spread più ampio di prima) invece che
+// quasi identico: le fasi non tornano mai a coincidere allo stesso modo,
+// quindi il respiro non si ripete mai in un pattern perfettamente
+// meccanico — costo zero, stessa @keyframes, solo animation-duration
+// diversa.
 //
 // Un po' di sovrapposizione qui è l'aspetto voluto (vedi GENRE_BUBBLE_LAYOUT
 // sopra): se la pulsazione fa toccare per un attimo una coppia che a riposo
 // ha un piccolo distacco non è un problema, fa parte dell'effetto "bolle
 // vive", non un errore da evitare con un margine di sicurezza calcolato.
-const GENRE_PULSE_STAGGER_MS = 550;
-const GENRE_PULSE_PERIODS_S = [4.0, 4.1, 4.2, 4.3, 4.4, 4.5];
+const GENRE_PULSE_STAGGER_MS = 850;
+const GENRE_PULSE_PERIODS_S = [3.8, 4.1, 4.4, 4.7, 5.0, 5.3];
 
 // Sciabordio del liquido: stesso principio dello stagger del respiro, ma
 // più veloce (4,6s-5,6s) perché è un dettaglio piccolo che deve leggersi
