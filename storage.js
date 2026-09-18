@@ -87,9 +87,16 @@ export async function addUser(rawName) {
 // Elimina un utente dal gruppo. I suoi voti già dati restano (scelta voluta:
 // la media di gruppo resta corretta, semplicemente non può più votare finché
 // non si aggiunge di nuovo).
+// .select() dopo il delete non è decorativo: su questa tabella il DELETE
+// pubblico è bloccato via RLS (dopo l'incidente in cui erano stati
+// cancellati tutti gli utenti) — senza policy per quel comando Postgres non
+// solleva un errore, filtra semplicemente 0 righe. Senza .select() il
+// codice vedrebbe error=null e riporterebbe "ok" anche se non ha eliminato
+// nulla; controllando data.length ci si accorge della differenza.
 export async function deleteUser(name) {
-  const { error } = await supabase.from("users").delete().eq("name", name);
+  const { data, error } = await supabase.from("users").delete().eq("name", name).select();
   if (error) { console.error("deleteUser:", error); return { ok: false }; }
+  if (!data || data.length === 0) { console.error("deleteUser: nessuna riga eliminata (RLS?)"); return { ok: false }; }
   return { ok: true };
 }
 // ─── LIBRERIA (titoli + voti, uniti in un unico oggetto comodo da usare) ─────
