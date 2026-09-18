@@ -297,9 +297,9 @@ export function renderGenreBars(entries) {
 // gruppo spostato a sinistra anche quando il centro geometrico è giusto —
 // contano i bordi esterni che l'occhio segue riga per riga, non il centroide.
 const GENRE_BUBBLE_LAYOUT = [
-  { left: 3, top: 6 }, { left: 52, top: 3 },
-  { left: 23, top: 27 }, { left: 60, top: 30 },
-  { left: 6, top: 56 }, { left: 52, top: 54 },
+  { left: 5.5, top: 6 }, { left: 54.5, top: 3 },
+  { left: 25.5, top: 27 }, { left: 62.5, top: 30 },
+  { left: 8.5, top: 56 }, { left: 54.5, top: 54 },
 ];
 
 // Respiro: un unico impulso morbido (solo scale + un filo di brightness),
