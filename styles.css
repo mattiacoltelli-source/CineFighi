@@ -408,10 +408,10 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
    per il voto), stare su elementi diversi evita che le due animazioni si
    contendano la stessa proprietà. */
 .genre-bubble-breathe { position:relative; width:100%; height:100%;
-  animation: genreBubblePulse 7.5s ease-in-out infinite; }
+  animation: genreBubblePulse 4.2s ease-in-out infinite; }
 @keyframes genreBubblePulse {
   0%, 100% { transform: scale(1); filter: brightness(1); }
-  50% { transform: scale(1.11); filter: brightness(1.07); }
+  50% { transform: scale(1.085); filter: brightness(1.05); }
 }
 
 @media (prefers-reduced-motion: reduce) {
