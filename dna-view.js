@@ -201,6 +201,19 @@ function renderPeopleControl() {
       ? `Nella rete ci sono solo i titoli votati 7 o più da ${selectedPeople.length === 1 ? selectedPeople[0] : "almeno una delle persone scelte"}.`
       : "Nella rete ci sono solo i titoli votati 7 o più da almeno una persona.";
   }
+
+  // Solo per la coppia (non per il terzetto): un numero secco, non una
+  // percentuale — il denominatore di un "% di affinità" sarebbe arbitrario e
+  // sembrerebbe un punteggio inventato. Stesso criterio di isMeetingPoint,
+  // solo aggregato invece che per nodo.
+  const affinity = el("dnaAffinity");
+  if (affinity) {
+    let insieme = 0;
+    if (selectedPeople?.length === 2 && index) {
+      for (const f of index.films.values()) if (f.fans.length === 2) insieme++;
+    }
+    affinity.textContent = insieme > 0 ? `${insieme} ${insieme === 1 ? "titolo amato" : "titoli amati"} da entrambi.` : "";
+  }
 }
 
 function renderPeopleSheet() {
