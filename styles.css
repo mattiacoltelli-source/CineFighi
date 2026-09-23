@@ -856,7 +856,7 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
    l'informazione (chi ha votato cosa) e deve stare nella stessa schermata,
    senza obbligare a scorrere per leggerlo. */
 .dna-stage {
-  position:relative; height:42vh; min-height:250px; max-height:380px;
+  position:relative; height:44vh; min-height:260px; max-height:390px;
   border-radius:16px; background: var(--surface); border:1px solid var(--surface3);
   overflow:hidden;
   /* Il gesto dentro il riquadro è nostro (vedi il trascinamento in
@@ -871,12 +871,12 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
    barra di navigazione. Lì il riquadro della rete cede un po' di spazio:
    l'informazione sta tutta a schermo senza scorrere, che è quello che conta. */
 @media (max-height: 780px) {
-  .dna-stage { height:36vh; min-height:210px; }
+  .dna-stage { height:38vh; min-height:220px; }
 }
 /* Telefoni davvero piccoli: il riquadro cede ancora, e le pastiglie dei
    votanti si stringono. Qui lo spazio non basta per essere generosi. */
 @media (max-height: 680px) {
-  .dna-stage { height:30vh; min-height:170px; }
+  .dna-stage { height:32vh; min-height:180px; }
   .dna__intro { font-size:12px; margin-bottom:8px; }
   .dna-panel { margin-top:9px; min-height:0; }
   .dna-fans { gap:5px; }
