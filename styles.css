@@ -865,6 +865,20 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
   touch-action:none; cursor:grab;
 }
 .dna-stage.is-panning { cursor:grabbing; }
+/* Sfumatura ai quattro bordi: un nodo che esce dall'inquadratura si spegne
+   invece di essere tranciato di netto, che sembrava un errore di disegno.
+   È una maschera statica su un layer già composto, non costa un ridisegno. */
+.dna-viewport {
+  position:absolute; inset:0; overflow:hidden; border-radius:16px;
+  -webkit-mask-image:
+    linear-gradient(to right, transparent 0, #000 30px, #000 calc(100% - 30px), transparent 100%),
+    linear-gradient(to bottom, transparent 0, #000 30px, #000 calc(100% - 30px), transparent 100%);
+  mask-image:
+    linear-gradient(to right, transparent 0, #000 30px, #000 calc(100% - 30px), transparent 100%),
+    linear-gradient(to bottom, transparent 0, #000 30px, #000 calc(100% - 30px), transparent 100%);
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+}
 .dna-canvas {
   position:absolute; left:50%; top:50%; width:0; height:0;
   transition: transform .2s ease-out; will-change: transform;
@@ -902,7 +916,19 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   color: var(--text2);
 }
-.dna-node.is-far { opacity:.5; }
+/* Profondità dalla camera. Quello che stai guardando e i suoi vicini restano
+   pieni, il resto si spegne progressivamente: la rete resta tutta lì, ma
+   l'occhio sa dove guardare anche con trenta nodi aperti. I nodi spenti
+   restano toccabili — toccarli ricentra, e si riaccendono. */
+.dna-node.dna-h0, .dna-node.dna-h1 { opacity:1; }
+.dna-node.dna-h2 { opacity:.6; }
+.dna-node.dna-h3 { opacity:.34; }
+.dna-node.dna-h4 { opacity:.2; }
+.dna-edge.dna-h0, .dna-edge.dna-h1 { opacity:1; }
+.dna-edge.dna-h2 { opacity:.6; }
+.dna-edge.dna-h3 { opacity:.34; }
+.dna-edge.dna-h4 { opacity:.2; }
+.dna-node, .dna-edge { transition: opacity .2s ease-out; }
 .dna-node.is-focus .dna-node__label { color: var(--text); font-weight:700; }
 
 .dna-node__poster {
