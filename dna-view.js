@@ -202,17 +202,21 @@ function renderPeopleControl() {
       : "Nella rete ci sono solo i titoli votati 7 o più da almeno una persona.";
   }
 
-  // Solo per la coppia (non per il terzetto): un numero secco, non una
+  // Solo in modalità condivisa (2 o 3 persone): un numero secco, non una
   // percentuale — il denominatore di un "% di affinità" sarebbe arbitrario e
   // sembrerebbe un punteggio inventato. Stesso criterio di isMeetingPoint,
-  // solo aggregato invece che per nodo.
+  // solo aggregato invece che per nodo. Con 3 persone il numero è fisiologicamente
+  // più piccolo (intersezione più severa), ma sui dati reali del gruppo non è mai
+  // zero: resta un dato interessante, non un vuoto imbarazzante.
   const affinity = el("dnaAffinity");
   if (affinity) {
+    const n = selectedPeople?.length;
     let insieme = 0;
-    if (selectedPeople?.length === 2 && index) {
-      for (const f of index.films.values()) if (f.fans.length === 2) insieme++;
+    if ((n === 2 || n === 3) && index) {
+      for (const f of index.films.values()) if (f.fans.length === n) insieme++;
     }
-    affinity.textContent = insieme > 0 ? `${insieme} ${insieme === 1 ? "titolo amato" : "titoli amati"} da entrambi.` : "";
+    const chi = n === 2 ? "da entrambi" : "da tutti e tre";
+    affinity.textContent = insieme > 0 ? `${insieme} ${insieme === 1 ? "titolo amato" : "titoli amati"} ${chi}.` : "";
   }
 }
 
