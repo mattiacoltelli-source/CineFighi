@@ -591,7 +591,6 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .mini-fill { height:100%; border-radius: var(--radius-pill); background: linear-gradient(90deg, var(--orange), var(--orange2)); }
 
 /* TONIGHT */
-.tonight__intro { font-size:13px; color: var(--text3); margin-bottom:16px; }
 
 /* Selettore "chi c'è stasera": uno stack di avatar sovrapposti (chi è
    coinvolto, colpo d'occhio) + nomi + matita che apre il pannello per
@@ -599,79 +598,14 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
    i consigli, non solo un filtro visivo come Barre/Bolle. Tu (il profilo
    corrente) sei sempre incluso e non ti si può togliere: il caso "nessuno
    selezionato" non esiste, il minimo è sempre te stesso da solo. */
-.tonight-people-summary { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
-.tonight-people-stack { display:flex; flex-shrink:0; }
-.tonight-people-stack .avatar { border:2px solid var(--bg); margin-left:-10px; }
-.tonight-people-stack .avatar:first-child { margin-left:0; }
-.tonight-people-names { font-family: var(--font-display); font-weight:700; font-size:14px; color: var(--text); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.tonight-people-edit-btn {
-  width:32px; height:32px; border-radius:50%; flex-shrink:0; background: var(--surface2);
-  border:1px solid var(--border); color: var(--text2); display:flex; align-items:center; justify-content:center;
-  cursor:pointer; transition: border-color var(--t-mid), color var(--t-mid);
-}
-.tonight-people-edit-btn svg { width:14px; height:14px; }
-.tonight-people-edit-btn.active { border-color: rgba(56,189,248,.4); color: var(--cyan2); }
-.tonight-people-panel {
-  background: var(--surface); border:1px solid var(--border); border-radius: var(--radius-lg);
-  padding:6px; margin-bottom:8px; display:flex; flex-direction:column; gap:4px;
-}
-.tonight-people-row {
-  display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius: var(--radius-md);
-  border:0; background:transparent; cursor:pointer; text-align:left; width:100%;
-  font-family: var(--font-body); transition: background var(--t-fast);
-}
-.tonight-people-row.active { background: var(--surface2); }
-.tonight-people-row .name { font-family: var(--font-display); font-weight:700; font-size:13px; color: var(--text); flex:1; }
-.tonight-people-row .votes { font-size:11px; color: var(--text3); }
-.tonight-people-row .dot {
-  width:20px; height:20px; border-radius:50%; flex-shrink:0; border:1.5px solid var(--border2); background:transparent;
-  transition: background var(--t-fast), border-color var(--t-fast);
-}
-.tonight-people-row.active .dot { background: var(--cyan); border-color: var(--cyan); }
-.tonight-people-row.disabled { opacity:.4; cursor:default; }
-.tonight-people-note { font-size:12px; color: var(--text3); margin: -4px 0 16px; }
 
-.tonight-discover-block {
-  background: var(--surface); border:1px solid var(--border); border-radius: var(--radius-xl);
-  padding:14px; margin-bottom:14px;
-}
-.tonight-select-wrap { position:relative; margin-bottom:10px; }
-.tonight-select-wrap::after {
-  content:""; position:absolute; right:18px; top:50%; width:10px; height:10px;
-  transform:translateY(-65%) rotate(45deg); border-right:2px solid var(--text3); border-bottom:2px solid var(--text3);
-  pointer-events:none;
-}
-.tonight-select-wrap select {
-  appearance:none; -webkit-appearance:none; -moz-appearance:none; width:100%;
-  background: var(--surface2); color: var(--text); border:1px solid var(--border); border-radius: var(--radius-md);
-  min-height:56px; padding:0 44px 0 16px; font-family: var(--font-display); font-size:16px; font-weight:700;
-}
-.tonight-select-wrap select:focus { border-color: rgba(56,189,248,.45); outline:none; }
-.tonight-discover-btn { width:100%; }
 
-.tonight-main-btn {
-  width:100%; min-height:78px; border-radius: var(--radius-xl); font-family: var(--font-display); font-size:16px; font-weight:800;
-  background: linear-gradient(160deg, var(--cyan2), var(--cyan)); color:#062a3a; box-shadow: var(--cyan-glow); margin-bottom:12px;
-}
-.tonight-secondary-actions { margin-bottom:16px; }
-.tonight-mini-btn { width:100%; }
 
-.tonight-result { min-height:60px; }
-.tonight__hint { color: var(--text3); font-size:14px; padding:12px 0; }
-.tonight-card__affinity {
-  position:absolute; top:8px; right:8px; background: rgba(0,0,0,.75);
-  color: var(--cyan2); font-family: var(--font-display); font-size:11px; font-weight:800; padding:3px 7px;
-  border-radius: var(--radius-pill); white-space:nowrap; border:1px solid rgba(56,189,248,.3); z-index:2;
-}
-.tonight-card__reason { font-size:12px; color: var(--text2); margin-top:6px; line-height:1.4; }
 /* Voto previsto per persona (solo consigli di gruppo): un dettaglio in
    più, non deve competere visivamente col motivo sopra. */
-.tonight-card__breakdown { font-size:11px; color: var(--text3); margin-top:4px; }
 
 /* Risultato singolo (Scopri / Classico): stessa card "poster grande" dei
    5 consigli, centrata invece che in griglia a 2 colonne. */
-.tonight-solo { display:flex; justify-content:center; }
-.tonight-solo .poster-card { width:100%; max-width:240px; }
 
 /* DETAIL */
 #screen-detail { padding-bottom:20px; }
@@ -854,3 +788,80 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
   .rank-row__vote { grid-column:2/4; justify-self:start; margin-top:4px; }
 }
 @media (max-width:560px) { .podium-grid { grid-template-columns:repeat(3,1fr); } }
+
+/* ─── DNA ──────────────────────────────────────────────────────────────────
+   La rete vive su un piano virtuale illimitato: .dna-canvas è un punto di
+   dimensione zero al centro del palco, e tutto (nodi e archi) è posizionato
+   rispetto a quel punto, anche con coordinate negative. Muovere la camera è
+   quindi una sola translate sul canvas, non un riposizionamento dei nodi —
+   una transizione sola, che il telefono anima sul compositor. */
+.dna-head { display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom:6px; }
+.dna-head .section__title { margin-bottom:0; }
+.dna-reset-btn { flex-shrink:0; font-size:12px; }
+.dna__intro { font-size:13px; color: var(--text3); margin-bottom:14px; line-height:1.45; }
+
+.dna-stage {
+  position:relative; height:56vh; min-height:320px; max-height:460px;
+  border-radius:16px; background: var(--surface); border:1px solid var(--surface3);
+  overflow:hidden; touch-action:manipulation;
+}
+.dna-canvas {
+  position:absolute; left:50%; top:50%; width:0; height:0;
+  transition: transform .2s ease-out; will-change: transform;
+}
+.dna-edges {
+  position:absolute; left:0; top:0; width:1px; height:1px;
+  overflow:visible; pointer-events:none;
+}
+.dna-edge { stroke: var(--surface3); stroke-width:1.5; }
+.dna-edge--ama { stroke: rgba(56,189,248,.34); }
+.dna-edge--appartiene { stroke: rgba(255,157,77,.24); }
+.dna-nodes { position:absolute; left:0; top:0; width:0; height:0; }
+
+.dna-node {
+  position:absolute; transform: translate(-50%, -50%);
+  display:flex; flex-direction:column; align-items:center; gap:4px;
+  width:52px; min-height:52px; padding:0; border:0; background:none;
+  color: var(--text2); cursor:pointer; -webkit-tap-highlight-color: transparent;
+}
+.dna-node__label {
+  font-size:10px; line-height:1.2; text-align:center; max-width:76px;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  color: var(--text2);
+}
+.dna-node.is-far { opacity:.5; }
+.dna-node.is-focus .dna-node__label { color: var(--text); font-weight:700; }
+
+.dna-node__poster {
+  width:46px; height:46px; border-radius:12px; display:flex; align-items:center; justify-content:center;
+  background-size:cover; background-position:center; background-color: var(--surface2);
+  border:1px solid var(--surface3); font-size:18px;
+}
+.dna-node__genre {
+  width:46px; height:46px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+  background: var(--surface2); border:1px solid rgba(255,157,77,.35);
+  font-family: var(--font-display); font-weight:800; font-size:12px; color: var(--orange);
+}
+.dna-node .avatar { border:2px solid var(--surface); }
+
+/* Il nodo su cui è centrata la camera e la radice: due anelli, nessuna
+   animazione — devono solo farsi riconoscere a colpo d'occhio. */
+.dna-node.is-focus .dna-node__poster,
+.dna-node.is-focus .dna-node__genre,
+.dna-node.is-focus .avatar { box-shadow: 0 0 0 2px var(--cyan); }
+.dna-node.is-root .avatar { box-shadow: 0 0 0 2px var(--orange); }
+.dna-node.is-focus.is-root .avatar { box-shadow: 0 0 0 2px var(--cyan); }
+.dna-node.is-open::after {
+  content:""; position:absolute; top:-3px; right:3px;
+  width:7px; height:7px; border-radius:50%; background: var(--green);
+  border:2px solid var(--surface);
+}
+
+.dna-panel { margin-top:14px; min-height:64px; }
+.dna-panel__head { display:flex; align-items:center; gap:8px; margin-bottom:4px; }
+.dna-panel__head strong { font-family: var(--font-display); font-size:15px; color: var(--text); }
+.dna-panel__line { font-size:13px; color: var(--text2); margin:2px 0; }
+.dna-panel__btn { margin-top:8px; }
+.dna-panel__hint { display:block; font-size:11px; color: var(--text3); margin-top:6px; }
+.dna-hint { font-size:14px; color: var(--text3); padding:12px 0; }
+.dna-note { font-size:11px; color: var(--text3); margin-top:14px; line-height:1.45; }

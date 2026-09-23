@@ -3,8 +3,8 @@
 // Non parlano con Supabase né con TMDB.
 
 import {
-  escapeHtml, mediaLabel, mediaBadgeClass, posterUrl, uniqueKey,
-  average, voteCount, rawNumberToFixed, firstVoter, firstOfNames
+  escapeHtml, mediaLabel, mediaBadgeClass, posterUrl,
+  average, voteCount, firstVoter, firstOfNames
 } from "./cine-core.js?v=89252ec";
 
 // ─── ANIMAZIONI (numeri che contano, barre che si riempiono, tattile) ───────
@@ -768,88 +768,6 @@ export function renderGroupReport({ groupStats, memberProfiles, leaderboard, pai
     : `<p class="empty-hint">Ancora nessun titolo con abbastanza voti per dirlo.</p>`;
   document.getElementById("groupReportUnanimous").innerHTML = unanimous.length ? extremesPodiumHtml(unanimous)
     : `<p class="empty-hint">Ancora nessun titolo con abbastanza voti per dirlo.</p>`;
-}
-
-// ─── TONIGHT (consigli, con affinità % e motivo, come CineTracker) ───────────
-
-export function renderTonightList(entries) {
-  if (!entries.length) {
-    return `<p class="tonight__hint">Vota qualche titolo prima: mi serve per capire i tuoi gusti.</p>`;
-  }
-  return `
-    <div class="results-grid">
-      ${entries.map(({ item, affinity, reasons, breakdown }) => `
-        <div class="poster-card" data-tonight-key="${item.media_type}_${item.id}">
-          <div class="poster-card__img" style="background-image:url('${posterUrl(item.poster_path)}')">
-            <span class="badge ${mediaBadgeClass(item)}">${mediaLabel(item)}</span>
-            <span class="tonight-card__affinity">${affinity}%</span>
-            <div class="poster-card__actions">
-              <button class="poster-btn poster-btn--watch action-add-tonight" data-id="${item.id}" data-type="${item.media_type}" data-status="watchlist">
-                ♡ Lista
-              </button>
-              <button class="poster-btn poster-btn--seen action-add-tonight" data-id="${item.id}" data-type="${item.media_type}" data-status="seen">
-                ✓ Visto
-              </button>
-            </div>
-          </div>
-          <div class="poster-card__info">
-            <div class="poster-card__title">${escapeHtml(item.title)}</div>
-            <div class="poster-card__meta">${item.year} · ${mediaLabel(item)} · ★ ${rawNumberToFixed(item.vote_average, 1)} TMDB</div>
-            <div class="tonight-card__reason">
-              ${reasons.length ? `🎯 ${escapeHtml(reasons.join(" · "))}` : "🎯 Consigliato in base ai tuoi gusti"}
-            </div>
-            ${breakdown ? `<div class="tonight-card__breakdown">${breakdown.map(b => `${escapeHtml(b.name)} ${b.score}%`).join(" · ")}</div>` : ""}
-            <button class="poster-card__scheda open-preview" data-id="${item.id}" data-type="${item.media_type}">Scheda →</button>
-          </div>
-        </div>
-      `).join("")}
-    </div>
-  `;
-}
-
-// ─── SCOPRI PER GENERE (un titolo, con motivo e aggiunta rapida) ────────────
-
-export function renderDiscoverResult(chosen, whyBits, fallbackNote) {
-  return `
-    <div class="tonight-solo">
-      <div class="poster-card" data-tonight-key="${chosen.media_type}_${chosen.id}">
-        <div class="poster-card__img" style="background-image:url('${posterUrl(chosen.poster_path)}')">
-          <span class="badge ${mediaBadgeClass(chosen)}">${mediaLabel(chosen)}</span>
-          <div class="poster-card__actions">
-            <button class="poster-btn poster-btn--watch action-add-tonight" data-id="${chosen.id}" data-type="${chosen.media_type}" data-status="watchlist">♡ Lista</button>
-            <button class="poster-btn poster-btn--seen action-add-tonight" data-id="${chosen.id}" data-type="${chosen.media_type}" data-status="seen">✓ Visto</button>
-          </div>
-        </div>
-        <div class="poster-card__info">
-          <div class="poster-card__title">✨ ${escapeHtml(chosen.title)}</div>
-          <div class="poster-card__meta">${chosen.year} · ${mediaLabel(chosen)} · ★ ${rawNumberToFixed(chosen.vote_average, 1)} TMDB</div>
-          <div class="tonight-card__reason">
-            Scelto perché ${escapeHtml(whyBits.join(", "))}.${fallbackNote ? ` ${escapeHtml(fallbackNote)}` : ""}
-          </div>
-          <button class="poster-card__scheda open-preview" data-id="${chosen.id}" data-type="${chosen.media_type}">Scheda →</button>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-// ─── RIVEDI UN CLASSICO (titolo già votato ≥7, apre la scheda del gruppo) ───
-
-export function renderClassicResult(pick, myVote, comment, voteLabel = "il tuo voto") {
-  return `
-    <div class="tonight-solo">
-      <div class="poster-card open-detail" data-id="${pick.id}">
-        <div class="poster-card__img" style="background-image:url('${posterUrl(pick.poster_path)}')">
-          <span class="badge ${mediaBadgeClass(pick)}">${mediaLabel(pick)}</span>
-        </div>
-        <div class="poster-card__info">
-          <div class="poster-card__title">🏛️ ${escapeHtml(pick.title)}</div>
-          <div class="poster-card__meta">${pick.year} · ${mediaLabel(pick)} · ${escapeHtml(voteLabel)}: ${Number(myVote).toFixed(1)}</div>
-          <div class="tonight-card__reason">${escapeHtml(comment)}</div>
-        </div>
-      </div>
-    </div>
-  `;
 }
 
 // ─── REPORT ──────────────────────────────────────────────────────────────────
