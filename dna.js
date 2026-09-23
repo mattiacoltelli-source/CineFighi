@@ -311,10 +311,11 @@ function bridgeScore(net, index, sourceId, candId) {
   return 0;
 }
 
-// `prefer` mette un candidato preciso in testa, saltando l'ordinamento: serve
-// solo alla partenza, per aprire la rete lungo un ponte già scelto (vedi
-// bestBridge). Non cambia la regola — è un'eccezione dichiarata, per un caso
-// solo, e il resto dei vicini continua a essere scelto come sempre.
+// `prefer` mette uno o più candidati precisi in testa, saltando
+// l'ordinamento: serve solo alla partenza, per aprire la rete su un titolo
+// già scelto e sulle persone che lo amano (vedi bestOpening). Non cambia la
+// regola — è un'eccezione dichiarata, per un caso solo, e tutti gli altri
+// vicini continuano a essere scelti come sempre.
 export function pickNeighbours(net, index, sourceId, limit = 5, prefer = null) {
   const cands = neighboursOf(index, sourceId)
     .filter(n => !net.linked.has(edgeKey(sourceId, n.id)))
@@ -325,10 +326,12 @@ export function pickNeighbours(net, index, sourceId, limit = 5, prefer = null) {
   const perType = new Map();
   const pool = [...cands];
 
-  const voluto = prefer ? pool.find(c => c.id === prefer) : null;
-  if (voluto) {
+  for (const id of (Array.isArray(prefer) ? prefer : prefer ? [prefer] : [])) {
+    if (picked.length >= limit) break;
+    const voluto = pool.find(c => c.id === id);
+    if (!voluto) continue;
     picked.push(voluto);
-    perType.set(voluto.type, 1);
+    perType.set(voluto.type, (perType.get(voluto.type) || 0) + 1);
     pool.splice(pool.indexOf(voluto), 1);
   }
 
@@ -420,45 +423,49 @@ export function hopsFrom(net, startId) {
   return hops;
 }
 
-// ─── IL PONTE DI PARTENZA ────────────────────────────────────────────────────
+// ─── IL TITOLO DI PARTENZA ───────────────────────────────────────────────────
 //
-// Il legame più forte che parte da una persona: quella con cui condivide più
-// titoli amati, e fra quei titoli quello che piace di più a entrambi.
+// Fra i titoli che una persona ha amato, quello che ha amato INSIEME a più
+// gente. È da lì che si apre la rete.
 //
-// Serve alla schermata iniziale. Aprire la rete solo sui vicini della radice
-// mostra un punto di partenza ma non promette niente; aprirla già lungo
-// "tu → film condiviso → l'altra persona" fa vedere il meccanismo funzionare
-// prima ancora che uno tocchi qualcosa — ed è il punto dell'intera pagina.
+// Prima si sceglieva "la persona con cui condividi di più" e poi un film con
+// lei: con due nomi selezionati era giusto, ma con tutto il gruppo dentro
+// apriva su una coppia qualsiasi — e una coppia, quando hai detto "tutti",
+// non rappresenta niente.
 //
-// Ritorna null quando un ponte non esiste: una persona sola nella rete (per
-// esempio con il filtro su un solo nome), o nessun titolo in comune. In quel
-// caso la schermata riparte dal comportamento di sempre.
-export function bestBridge(index, rootUser) {
+// Con questa regola sola il comportamento cambia da sé a seconda di quanti
+// sono: con due persone selezionate esce il titolo che condividono (i fan
+// possibili sono due), con tutto il gruppo esce quello che mette d'accordo
+// più gente possibile, con una persona sola non esce niente e la schermata
+// riparte come sempre. Nessun ramo sul numero di selezionati: è l'indice,
+// già filtrato a monte, a far cambiare il risultato.
+//
+// A parità di persone vince il titolo con la somma dei voti più alta, poi
+// l'id: l'apertura resta deterministica.
+export function bestOpening(index, rootUser, maxPersone = 6) {
   const miei = index.byPerson.get(rootUser) || [];
   if (!miei.length) return null;
 
-  const insieme = new Map();   // altra persona -> [chiavi film condivisi]
-  for (const e of miei) {
-    for (const f of index.films.get(e.id)?.fans || []) {
-      if (f.name === rootUser) continue;
-      if (!insieme.has(f.name)) insieme.set(f.name, []);
-      insieme.get(f.name).push(e.id);
-    }
-  }
-  if (!insieme.size) return null;
+  const scelto = miei
+    .map(e => index.films.get(e.id))
+    .filter(Boolean)
+    .map(f => ({
+      f,
+      altri: f.fans.filter(x => x.name !== rootUser),
+      somma: f.fans.reduce((t, x) => t + x.vote, 0)
+    }))
+    .filter(x => x.altri.length > 0)
+    .sort((a, b) => b.altri.length - a.altri.length || b.somma - a.somma || a.f.key.localeCompare(b.f.key))[0];
 
-  // Ordine deterministico: più titoli in comune, poi il nome alfabetico.
-  const [persona, films] = [...insieme.entries()]
-    .sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]))[0];
+  // Nessun titolo in comune con nessuno: succede con il filtro su una sola
+  // persona, o con chi ha votato poco.
+  if (!scelto) return null;
 
-  const votoDi = (filmKey, nome) =>
-    index.films.get(filmKey)?.fans.find(f => f.name === nome)?.vote || 0;
-
-  const film = films
-    .map(id => ({ id, w: votoDi(id, rootUser) + votoDi(id, persona) }))
-    .sort((a, b) => b.w - a.w || a.id.localeCompare(b.id))[0];
-
-  return { film: film.id, persona, condivisi: films.length };
+  return {
+    film: scelto.f.key,
+    persone: scelto.altri.slice(0, maxPersone).map(x => personId(x.name)),
+    altri: scelto.altri.length
+  };
 }
 
 // ─── REGISTI ─────────────────────────────────────────────────────────────────

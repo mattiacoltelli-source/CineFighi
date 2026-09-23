@@ -10,7 +10,7 @@
 // soprattutto non fa ballare i nodi già piazzati ad ogni apertura.
 
 import {
-  buildIndex, createNetwork, expand, collapse, hopsFrom, nodeType, bestBridge, LIKE_THRESHOLD
+  buildIndex, createNetwork, expand, collapse, hopsFrom, nodeType, bestOpening, LIKE_THRESHOLD
 } from "./dna.js?v=a375891";
 import { escapeHtml } from "./cine-core.js?v=a375891";
 import { avatarHtml, haptic } from "./ui.js?v=a375891";
@@ -235,29 +235,38 @@ function openSheet(apri) {
   renderPeopleControl();
 }
 
+// Quanti nodi apre la partenza. La radice ne apre pochi perché il centro
+// della scena è il titolo, non lei; il titolo invece apre tutte le persone
+// che lo amano, fino a sei — con un gruppo di sette è esattamente il punto.
+const START_ROOT_NEIGHBOURS = 2;
+const START_PEOPLE = 6;
+
 // La rete non si apre su un punto di partenza ma su un collegamento già
-// completo: tu → il film che condividi di più → la persona con cui lo
-// condividi. Il meccanismo della pagina si vede funzionare prima ancora di
-// toccare qualcosa, invece di dover essere spiegato.
+// completo: il titolo che ami insieme a più gente, con quella gente attorno.
+// Il meccanismo della pagina si vede funzionare prima ancora di toccare
+// qualcosa, invece di dover essere spiegato.
 //
-// La camera si ferma sul FILM, non su di te: è il nodo in mezzo, quindi da
-// lì si vedono entrambe le estremità del ponte, e il pannello racconta
-// subito la cosa interessante ("l'hanno amato in due, con questi voti").
+// Quanta gente ci sia attorno lo decide la selezione, non un ramo nel codice:
+// con "Tutti" esce il titolo che mette d'accordo più persone possibile (per
+// questo gruppo, quello che hanno amato tutti e sette), con due nomi
+// selezionati esce il titolo che quei due condividono. Vedi bestOpening.
+//
+// La camera si ferma sul TITOLO, non su di te: è il nodo al centro della
+// costellazione, e il pannello racconta subito la cosa interessante — chi
+// l'ha amato e con che voto.
 function apriSulPonte(radice) {
-  const ponte = bestBridge(index, radice);
-  if (!ponte) {
+  const start = bestOpening(index, radice, START_PEOPLE);
+  if (!start) {
     // Nessun titolo in comune con nessuno (succede col filtro su una persona
     // sola): si riparte dal comportamento di sempre.
     expandNode(net.rootId, false);
     return;
   }
 
-  layoutChildren(net.rootId, expand(net, index, net.rootId, MAX_NEIGHBOURS, ponte.film));
-  layoutChildren(ponte.film, expand(net, index, ponte.film, 2, personNodeId(ponte.persona)));
-  focusId = ponte.film;
+  layoutChildren(net.rootId, expand(net, index, net.rootId, START_ROOT_NEIGHBOURS, start.film));
+  layoutChildren(start.film, expand(net, index, start.film, START_PEOPLE, start.persone));
+  focusId = start.film;
 }
-
-const personNodeId = (nome) => `persona:${nome}`;
 
 function renderMessage(text) {
   const nodes = el("dnaNodes");
