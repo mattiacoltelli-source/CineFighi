@@ -311,7 +311,11 @@ function bridgeScore(net, index, sourceId, candId) {
   return 0;
 }
 
-export function pickNeighbours(net, index, sourceId, limit = 5) {
+// `prefer` mette un candidato preciso in testa, saltando l'ordinamento: serve
+// solo alla partenza, per aprire la rete lungo un ponte già scelto (vedi
+// bestBridge). Non cambia la regola — è un'eccezione dichiarata, per un caso
+// solo, e il resto dei vicini continua a essere scelto come sempre.
+export function pickNeighbours(net, index, sourceId, limit = 5, prefer = null) {
   const cands = neighboursOf(index, sourceId)
     .filter(n => !net.linked.has(edgeKey(sourceId, n.id)))
     .map(n => ({ ...n, bridge: bridgeScore(net, index, sourceId, n.id), type: nodeType(n.id) }))
@@ -320,6 +324,13 @@ export function pickNeighbours(net, index, sourceId, limit = 5) {
   const picked = [];
   const perType = new Map();
   const pool = [...cands];
+
+  const voluto = prefer ? pool.find(c => c.id === prefer) : null;
+  if (voluto) {
+    picked.push(voluto);
+    perType.set(voluto.type, 1);
+    pool.splice(pool.indexOf(voluto), 1);
+  }
 
   while (picked.length < limit && pool.length) {
     // Non si scende mai di livello di ponte per amore della varietà:
@@ -338,13 +349,13 @@ export function pickNeighbours(net, index, sourceId, limit = 5) {
 
 // Apre un nodo: aggiunge fino a `limit` vicini e i relativi archi.
 // Ritorna gli id dei nodi NUOVI (quelli già presenti hanno solo un arco in più).
-export function expand(net, index, id, limit = 5) {
+export function expand(net, index, id, limit = 5, prefer = null) {
   const source = net.nodes.get(id);
   if (!source) return [];
   source.expanded = true;
 
   const added = [];
-  for (const cand of pickNeighbours(net, index, id, limit)) {
+  for (const cand of pickNeighbours(net, index, id, limit, prefer)) {
     const isNew = !net.nodes.has(cand.id);
     addNode(net, index, cand.id, id);
     addEdge(net, id, cand.id, cand.kind, cand.w);
@@ -407,6 +418,47 @@ export function hopsFrom(net, startId) {
     }
   }
   return hops;
+}
+
+// ─── IL PONTE DI PARTENZA ────────────────────────────────────────────────────
+//
+// Il legame più forte che parte da una persona: quella con cui condivide più
+// titoli amati, e fra quei titoli quello che piace di più a entrambi.
+//
+// Serve alla schermata iniziale. Aprire la rete solo sui vicini della radice
+// mostra un punto di partenza ma non promette niente; aprirla già lungo
+// "tu → film condiviso → l'altra persona" fa vedere il meccanismo funzionare
+// prima ancora che uno tocchi qualcosa — ed è il punto dell'intera pagina.
+//
+// Ritorna null quando un ponte non esiste: una persona sola nella rete (per
+// esempio con il filtro su un solo nome), o nessun titolo in comune. In quel
+// caso la schermata riparte dal comportamento di sempre.
+export function bestBridge(index, rootUser) {
+  const miei = index.byPerson.get(rootUser) || [];
+  if (!miei.length) return null;
+
+  const insieme = new Map();   // altra persona -> [chiavi film condivisi]
+  for (const e of miei) {
+    for (const f of index.films.get(e.id)?.fans || []) {
+      if (f.name === rootUser) continue;
+      if (!insieme.has(f.name)) insieme.set(f.name, []);
+      insieme.get(f.name).push(e.id);
+    }
+  }
+  if (!insieme.size) return null;
+
+  // Ordine deterministico: più titoli in comune, poi il nome alfabetico.
+  const [persona, films] = [...insieme.entries()]
+    .sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]))[0];
+
+  const votoDi = (filmKey, nome) =>
+    index.films.get(filmKey)?.fans.find(f => f.name === nome)?.vote || 0;
+
+  const film = films
+    .map(id => ({ id, w: votoDi(id, rootUser) + votoDi(id, persona) }))
+    .sort((a, b) => b.w - a.w || a.id.localeCompare(b.id))[0];
+
+  return { film: film.id, persona, condivisi: films.length };
 }
 
 // ─── REGISTI ─────────────────────────────────────────────────────────────────

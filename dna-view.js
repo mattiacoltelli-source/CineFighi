@@ -10,7 +10,7 @@
 // soprattutto non fa ballare i nodi già piazzati ad ogni apertura.
 
 import {
-  buildIndex, createNetwork, expand, collapse, hopsFrom, nodeType, LIKE_THRESHOLD
+  buildIndex, createNetwork, expand, collapse, hopsFrom, nodeType, bestBridge, LIKE_THRESHOLD
 } from "./dna.js?v=2578662";
 import { escapeHtml } from "./cine-core.js?v=2578662";
 import { avatarHtml, haptic } from "./ui.js?v=2578662";
@@ -153,9 +153,7 @@ export function showDna({ db, users, currentUser }) {
     const root = net.nodes.get(net.rootId);
     root.x = 0;
     root.y = 0;
-    // Il primo livello è già aperto: una schermata con un pallino solo e
-    // nessun indizio su cosa fare non aiuta nessuno.
-    expandNode(net.rootId, false);
+    apriSulPonte(radice);
   }
 
   renderPeopleControl();
@@ -237,6 +235,30 @@ function openSheet(apri) {
   renderPeopleControl();
 }
 
+// La rete non si apre su un punto di partenza ma su un collegamento già
+// completo: tu → il film che condividi di più → la persona con cui lo
+// condividi. Il meccanismo della pagina si vede funzionare prima ancora di
+// toccare qualcosa, invece di dover essere spiegato.
+//
+// La camera si ferma sul FILM, non su di te: è il nodo in mezzo, quindi da
+// lì si vedono entrambe le estremità del ponte, e il pannello racconta
+// subito la cosa interessante ("l'hanno amato in due, con questi voti").
+function apriSulPonte(radice) {
+  const ponte = bestBridge(index, radice);
+  if (!ponte) {
+    // Nessun titolo in comune con nessuno (succede col filtro su una persona
+    // sola): si riparte dal comportamento di sempre.
+    expandNode(net.rootId, false);
+    return;
+  }
+
+  layoutChildren(net.rootId, expand(net, index, net.rootId, MAX_NEIGHBOURS, ponte.film));
+  layoutChildren(ponte.film, expand(net, index, ponte.film, 2, personNodeId(ponte.persona)));
+  focusId = ponte.film;
+}
+
+const personNodeId = (nome) => `persona:${nome}`;
+
 function renderMessage(text) {
   const nodes = el("dnaNodes");
   const edges = el("dnaEdges");
@@ -306,6 +328,24 @@ function expandNode(id, focus = true) {
   const added = expand(net, index, id, MAX_NEIGHBOURS);
   layoutChildren(id, added);
   if (focus) focusId = id;
+  return added;
+}
+
+// Aprendo un nodo la camera non si ferma sul nodo ma sul baricentro fra lui e
+// i figli appena nati: così i nuovi nodi entrano nell'inquadratura invece di
+// spuntare mezzi fuori dal bordo. Lo spostamento è al massimo un raggio, e la
+// prima trascinata dell'utente riparte semplicemente da qui.
+function centraSuiFigli(id, added) {
+  const p = net.nodes.get(id);
+  if (!p || !added.length) { panX = 0; panY = 0; return; }
+  let sx = p.x, sy = p.y, n = 1;
+  for (const c of added) {
+    const nodo = net.nodes.get(c);
+    if (!nodo || nodo.x === null) continue;
+    sx += nodo.x; sy += nodo.y; n++;
+  }
+  panX = p.x - sx / n;
+  panY = p.y - sy / n;
 }
 
 // ─── RENDER ──────────────────────────────────────────────────────────────────
@@ -328,6 +368,11 @@ function nodeInner(node) {
   return `<span class="dna-node__genre">${escapeHtml(node.label.slice(0, 3).toUpperCase())}</span>`;
 }
 
+// I vicini di quello che stai guardando restano pieni; più ci si allontana,
+// più si spengono. Quattro livelli bastano: oltre, i nodi escono comunque dal
+// DOM (DOM_MAX_HOPS).
+function depthClass(h) { return Math.min(h ?? 0, 4); }
+
 function render() {
   const nodesEl = el("dnaNodes");
   const edgesEl = el("dnaEdges");
@@ -349,7 +394,9 @@ function render() {
       const a = net.nodes.get(e.a);
       const b = net.nodes.get(e.b);
       const suFocus = e.a === focusId || e.b === focusId ? " is-focus" : "";
-      return `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" class="dna-edge dna-edge--${e.kind}${suFocus}"/>`;
+      // Un arco è lontano quanto il più lontano dei suoi due estremi.
+      const h = Math.max(hops.get(e.a) ?? 0, hops.get(e.b) ?? 0);
+      return `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" class="dna-edge dna-edge--${e.kind} dna-h${depthClass(h)}${suFocus}"/>`;
     })
     .join("");
 
@@ -359,6 +406,11 @@ function render() {
     const cls = [
       "dna-node",
       `dna-node--${n.type}`,
+      // Profondità dalla camera: è già calcolata per il budget DOM, qui
+      // diventa anche visibile. Senza, un nodo a quattro salti pesa
+      // all'occhio quanto il vicino di quello attivo, ed è il motivo per
+      // cui una rete molto aperta diventa illeggibile.
+      `dna-h${depthClass(h)}`,
       n.id === focusId ? "is-focus" : "",
       n.id === net.rootId ? "is-root" : "",
       n.expanded ? "is-open" : "",
@@ -529,14 +581,18 @@ export function initDnaView() {
       // toccare la rete. Apre o richiude solo il nodo già attivo, cioè quello
       // che il pannello sta già descrivendo — così guardare non è mai un'azione
       // distruttiva, e "richiudi" non capita mai per sbaglio.
+      let nuovi = null;
       if (id === focusId) {
         if (node.expanded) collapse(net, id);
-        else expandNode(id, false);
+        else nuovi = expandNode(id, false);
       } else if (!node.expanded) {
-        expandNode(id, false);
+        nuovi = expandNode(id, false);
       }
       focusId = id;
-      panX = 0; panY = 0;   // toccare un nodo ricentra sempre
+      // Toccare un nodo ricentra sempre; se ha appena figliato, la camera si
+      // sposta quel tanto che basta a far entrare i nuovi nodi.
+      if (nuovi) centraSuiFigli(id, nuovi);
+      else { panX = 0; panY = 0; }
       render();
     });
   }

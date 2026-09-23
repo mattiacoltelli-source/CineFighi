@@ -220,9 +220,14 @@
       <p class="dna__intro">Tocca un nodo per aprirlo, trascina per spostarti. Dove due rami si ritrovano sullo stesso film, genere o regista, quello è DNA in comune.</p>
 
       <div id="dnaStage" class="dna-stage">
-        <div id="dnaCanvas" class="dna-canvas">
-          <svg id="dnaEdges" class="dna-edges"></svg>
-          <div id="dnaNodes" class="dna-nodes"></div>
+        <!-- Il viewport porta la sfumatura ai bordi: i nodi che escono
+             svaniscono invece di essere tagliati a metà. Sta qui e non sul
+             riquadro perché il foglio delle persone non deve sfumare. -->
+        <div class="dna-viewport">
+          <div id="dnaCanvas" class="dna-canvas">
+            <svg id="dnaEdges" class="dna-edges"></svg>
+            <div id="dnaNodes" class="dna-nodes"></div>
+          </div>
         </div>
         <!-- Il selettore delle persone copre il riquadro invece di spingere
              la pagina in basso: così aprirlo e chiuderlo non sposta niente. -->
