@@ -112,6 +112,53 @@ Deno.serve(async (req) => {
       "Content-Type": "application/json",
     };
 
+    // ── 0. Freno: un report recente non si rigenera ────────────────────────
+    //
+    // Il report di gruppo deve cambiare ogni 4 mesi, non ogni giorno. Finora
+    // la cadenza era affidata solo a CHI chiama (il cron lato Supabase e il
+    // controllo annuale lato client), e bastava che qualcos'altro invocasse
+    // questa funzione perche' il report venisse riscritto — con una chiamata
+    // a Claude ogni volta. E' successo davvero: due rigenerazioni al giorno,
+    // tutti i giorni, per giorni.
+    //
+    // Il freno sta qui e non nel chiamante perche' questo e' l'unico punto
+    // che vale per TUTTI: il client, un test, il cron, una riesecuzione a
+    // mano. 90 giorni non ostacola mai il cron vero (le sue esecuzioni
+    // distano ~120 giorni) e ferma qualunque ripetizione ravvicinata.
+    //
+    // `force: true` lo scavalca: e' il gesto nascosto dei 7 tap, che chiede
+    // conferma esplicita prima di spendere una chiamata.
+    const MIN_GIORNI_FRA_REPORT = 90;
+
+    let force = false;
+    try {
+      const body = await req.json();
+      force = body?.force === true;
+    } catch {
+      // nessun corpo, o corpo non JSON: nessun forzamento
+    }
+
+    if (!force) {
+      const ultimoRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/group_report?select=generated_at,payload&order=generated_at.desc&limit=1`,
+        { headers: restHeaders },
+      );
+      if (ultimoRes.ok) {
+        const [ultimo] = await ultimoRes.json();
+        const quando = ultimo?.generated_at ? new Date(ultimo.generated_at).getTime() : NaN;
+        const giorni = Number.isNaN(quando) ? Infinity : (Date.now() - quando) / 86_400_000;
+        if (giorni < MIN_GIORNI_FRA_REPORT) {
+          console.log(`Rigenerazione saltata: l'ultimo report ha ${giorni.toFixed(1)} giorni (minimo ${MIN_GIORNI_FRA_REPORT}).`);
+          // Non e' un errore: il chiamante riceve il report che c'e' gia',
+          // quindi l'app mostra la cosa giusta senza accorgersi di niente.
+          return new Response(JSON.stringify({ ...ultimo, skipped: true, days_old: Math.round(giorni) }), {
+            headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+          });
+        }
+      }
+      // Lettura fallita: si prosegue. Meglio un report in piu' che nessuno.
+    }
+
     // ── 1. Dati grezzi: intera libreria + tutti i voti + elenco utenti ──────
     const [titlesRes, votesRes, usersRes] = await Promise.all([
       fetch(`${SUPABASE_URL}/rest/v1/titles?select=*`, { headers: restHeaders }),
