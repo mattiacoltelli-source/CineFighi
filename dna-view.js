@@ -11,9 +11,9 @@
 
 import {
   buildIndex, createNetwork, expand, collapse, hopsFrom, nodeType
-} from "./dna.js?v=89252ec";
-import { escapeHtml } from "./cine-core.js?v=89252ec";
-import { avatarHtml, haptic } from "./ui.js?v=89252ec";
+} from "./dna.js?v=cf1a482";
+import { escapeHtml } from "./cine-core.js?v=cf1a482";
+import { avatarHtml, haptic } from "./ui.js?v=cf1a482";
 
 // Quanti vicini apre un tap. Cinque è il numero oltre il quale il ventaglio
 // radiale inizia a sovrapporsi su uno schermo da telefono.
