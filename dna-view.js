@@ -44,6 +44,19 @@ let focusId = null;
 let signature = "";
 let bound = false;
 
+// Spostamento manuale della camera rispetto al nodo attivo (vedi il
+// trascinamento in fondo al file). Si azzera ad ogni tap su un nodo: toccare
+// un nodo ricentra sempre, quindi non ci si perde mai fuori dalla rete.
+let panX = 0;
+let panY = 0;
+let shownIds = [];          // i nodi davvero nel DOM all'ultimo render
+
+// Oltre questa distanza in pixel un trascinamento non è più un tap. Sotto,
+// il dito che si muove di poco mentre tocca non deve aprire niente per
+// sbaglio, ma nemmeno sembrare che l'app non abbia sentito il tocco.
+const DRAG_THRESHOLD = 8;
+const PAN_MARGIN = 48;      // quanto si può andare oltre l'ultimo nodo
+
 const el = (id) => document.getElementById(id);
 
 // ─── COSTRUZIONE / RICOSTRUZIONE ─────────────────────────────────────────────
@@ -76,6 +89,7 @@ export function showDna({ db, users, currentUser }) {
     index = buildIndex(db, users);
     net = createNetwork(index, currentUser);
     focusId = net.rootId;
+    panX = 0; panY = 0;
     const root = net.nodes.get(net.rootId);
     root.x = 0;
     root.y = 0;
@@ -228,8 +242,8 @@ function render() {
     </button>`;
   }).join("");
 
-  const focus = net.nodes.get(focusId) || net.nodes.get(net.rootId);
-  canvas.style.transform = `translate(${(-focus.x).toFixed(1)}px, ${(-focus.y).toFixed(1)}px)`;
+  shownIds = visible.map(n => n.id);
+  applyCamera();
 
   renderPanel(net.nodes.get(focusId));
 }
@@ -237,6 +251,36 @@ function render() {
 // Il pannello è il posto dove sta l'informazione: la rete mostra i
 // collegamenti, qui si legge chi, quanto e perché. È il motivo per cui un tap
 // apre pochi rami — quello che non diventa un nodo si legge qui sotto.
+// Unico punto in cui si muove la camera: posizione del nodo attivo più lo
+// spostamento manuale. È una sola translate sul contenitore, non un
+// riposizionamento dei nodi, quindi il telefono la anima sul compositor.
+function applyCamera(animata = true) {
+  const canvas = el("dnaCanvas");
+  if (!canvas || !net) return;
+  const focus = net.nodes.get(focusId) || net.nodes.get(net.rootId);
+  canvas.classList.toggle("is-dragging", !animata);
+  canvas.style.transform = `translate(${(-focus.x + panX).toFixed(1)}px, ${(-focus.y + panY).toFixed(1)}px)`;
+}
+
+// Fin dove si può trascinare: quanto basta a portare al centro qualunque
+// nodo a schermo, e non un pixel di più. Così non si finisce mai nel vuoto
+// senza sapere come tornare indietro.
+function panLimits() {
+  const focus = net?.nodes.get(focusId);
+  if (!focus) return { minX: 0, maxX: 0, minY: 0, maxY: 0 };
+  let dxMin = 0, dxMax = 0, dyMin = 0, dyMax = 0;
+  for (const id of shownIds) {
+    const n = net.nodes.get(id);
+    if (!n || n.x === null) continue;
+    dxMin = Math.min(dxMin, n.x - focus.x); dxMax = Math.max(dxMax, n.x - focus.x);
+    dyMin = Math.min(dyMin, n.y - focus.y); dyMax = Math.max(dyMax, n.y - focus.y);
+  }
+  return {
+    minX: -dxMax - PAN_MARGIN, maxX: -dxMin + PAN_MARGIN,
+    minY: -dyMax - PAN_MARGIN, maxY: -dyMin + PAN_MARGIN
+  };
+}
+
 function renderPanel(node) {
   const panel = el("dnaPanel");
   if (!panel || !node) return;
@@ -335,6 +379,8 @@ export function initDnaView() {
   if (bound) return;
   bound = true;
 
+  bindPan();
+
   const nodesEl = el("dnaNodes");
   if (nodesEl) {
     nodesEl.addEventListener("click", e => {
@@ -343,16 +389,76 @@ export function initDnaView() {
       const id = btn.dataset.node;
       const node = net?.nodes.get(id);
       if (!node) return;
+      if (dragged) return;   // era un trascinamento, non un tocco
       haptic(8);
-      // Regola unica: il primo tap apre, il secondo richiude. La scheda di un
-      // film si apre dal pulsante nel pannello, mai al tap sul nodo — così non
-      // c'è mai da indovinare cosa farà un tocco.
-      if (node.expanded) collapse(net, id);
-      else expandNode(id, false);
+      // Un tap su un nodo che non è quello attivo lo SELEZIONA soltanto: serve
+      // a leggerne il pannello (chi l'ha votato, i generi, la regia) senza
+      // toccare la rete. Apre o richiude solo il nodo già attivo, cioè quello
+      // che il pannello sta già descrivendo — così guardare non è mai un'azione
+      // distruttiva, e "richiudi" non capita mai per sbaglio.
+      if (id === focusId) {
+        if (node.expanded) collapse(net, id);
+        else expandNode(id, false);
+      } else if (!node.expanded) {
+        expandNode(id, false);
+      }
       focusId = id;
+      panX = 0; panY = 0;   // toccare un nodo ricentra sempre
       render();
     });
   }
+}
+
+// Trascinamento a un dito per guardarsi intorno. 1:1, senza inerzia e senza
+// pinch: un trascinamento diretto è già quello che il pollice si aspetta,
+// mentre l'inerzia fatta male è la prima cosa che tradisce un finto nativo.
+// Serve perché i nodi ai bordi del riquadro sono tagliati a metà e prima
+// l'unico modo di raggiungerli era toccarli, cioè espanderli.
+let dragged = false;
+
+function bindPan() {
+  const stage = el("dnaStage");
+  if (!stage) return;
+
+  let pid = null, x0 = 0, y0 = 0, baseX = 0, baseY = 0, lim = null;
+
+  stage.addEventListener("pointerdown", e => {
+    if (!net || pid !== null || e.button > 0) return;
+    pid = e.pointerId;
+    dragged = false;
+    x0 = e.clientX; y0 = e.clientY;
+    baseX = panX; baseY = panY;
+    lim = panLimits();
+  });
+
+  stage.addEventListener("pointermove", e => {
+    if (e.pointerId !== pid) return;
+    const dx = e.clientX - x0, dy = e.clientY - y0;
+    if (!dragged) {
+      if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+      dragged = true;
+      stage.classList.add("is-panning");
+      // Da qui in poi il gesto è nostro: il browser non deve più provare a
+      // scrollare la pagina a metà trascinamento.
+      try { stage.setPointerCapture(pid); } catch {}
+    }
+    panX = Math.min(lim.maxX, Math.max(lim.minX, baseX + dx));
+    panY = Math.min(lim.maxY, Math.max(lim.minY, baseY + dy));
+    applyCamera(false);   // niente transizione mentre il dito è giù: deve seguirlo
+  });
+
+  const fine = e => {
+    if (e.pointerId !== pid) return;
+    try { stage.releasePointerCapture(pid); } catch {}
+    pid = null;
+    stage.classList.remove("is-panning");
+    applyCamera(true);
+    // Il click arriva DOPO il pointerup: il flag deve sopravvivere fino a lì,
+    // e sparire subito dopo, altrimenti il tap successivo verrebbe ignorato.
+    if (dragged) setTimeout(() => { dragged = false; }, 0);
+  };
+  stage.addEventListener("pointerup", fine);
+  stage.addEventListener("pointercancel", fine);
 }
 
 // "Ricomincia da me": butta via l'esplorazione e riparte dal nodo persona.
@@ -360,4 +466,6 @@ export function initDnaView() {
 export function resetDna() {
   signature = "";
   net = null;
+  panX = 0;
+  panY = 0;
 }
