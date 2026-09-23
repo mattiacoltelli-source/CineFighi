@@ -795,9 +795,61 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
    rispetto a quel punto, anche con coordinate negative. Muovere la camera è
    quindi una sola translate sul canvas, non un riposizionamento dei nodi —
    una transizione sola, che il telefono anima sul compositor. */
-.dna-head { display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom:6px; }
-.dna-head .section__title { margin-bottom:0; }
+.dna-head { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+.dna-head .section__title { margin-bottom:0; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .dna-reset-btn { flex-shrink:0; font-size:12px; }
+
+/* Il filtro persone: una pastiglia, non una barra di strumenti. Sta nella
+   riga del titolo per non aggiungere una riga alla pagina, e l'etichetta è
+   già lo stato ("Tutti", un nome, oppure "2 persone"), così non serve un
+   secondo indicatore da nessun'altra parte. */
+.dna-people-btn {
+  flex-shrink:0; display:inline-flex; align-items:center; gap:6px;
+  min-height:32px; padding:0 11px; border-radius:999px;
+  background: var(--surface2); border:1px solid var(--surface3);
+  color: var(--text2); font-family: var(--font-display); font-weight:700; font-size:12px;
+  cursor:pointer; -webkit-tap-highlight-color: transparent; max-width:46%;
+}
+.dna-people-btn svg { width:13px; height:13px; flex-shrink:0; }
+.dna-people-btn span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dna-people-btn.is-active { border-color: rgba(56,189,248,.45); color: var(--cyan); background: var(--cyan-dim); }
+
+/* Il foglio di scelta copre il riquadro della rete invece di spingere la
+   pagina: aprirlo e chiuderlo non sposta di un pixel quello che c'è sotto. */
+.dna-sheet {
+  position:absolute; inset:0; z-index:2; display:flex; flex-direction:column;
+  /* Opaco, non semitrasparente: con la rete che traspare dietro le righe
+     il foglio sembra un errore di sovrapposizione, non una scelta. */
+  background: var(--surface); border-radius:16px;
+  touch-action:pan-y;   /* il riquadro blocca i gesti, qui invece si scorre */
+}
+.dna-sheet__head {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:12px 14px 8px; border-bottom:1px solid var(--surface3);
+}
+.dna-sheet__head strong { font-family: var(--font-display); font-size:14px; color: var(--text); }
+.dna-sheet__list { flex:1; overflow-y:auto; padding:6px; overscroll-behavior:contain; }
+.dna-sheet__row {
+  width:100%; display:flex; align-items:center; gap:10px;
+  min-height:46px; padding:6px 10px; border-radius:12px;
+  background:none; border:0; color: var(--text2); cursor:pointer; text-align:left;
+  -webkit-tap-highlight-color: transparent;
+}
+.dna-sheet__row.is-active { background: var(--surface2); }
+.dna-sheet__name { flex:1; min-width:0; font-family: var(--font-display); font-weight:700; font-size:13px; color: var(--text);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dna-sheet__meta { flex-shrink:0; font-size:11px; color: var(--text3); }
+.dna-sheet__dot {
+  flex-shrink:0; width:18px; height:18px; border-radius:50%;
+  border:2px solid var(--surface3); background:none;
+}
+.dna-sheet__row.is-active .dna-sheet__dot { background: var(--cyan); border-color: var(--cyan); }
+.dna-sheet__all {
+  width:26px; height:26px; flex-shrink:0; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  background: var(--surface2); border:1px solid var(--surface3);
+  color: var(--text3); font-size:13px; line-height:1;
+}
 .dna__intro { font-size:12.5px; color: var(--text3); margin-bottom:10px; line-height:1.4; }
 
 /* Il palco si prende meno spazio di prima: il pannello qui sotto ora porta

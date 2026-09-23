@@ -211,7 +211,11 @@
     <section id="screen-tonight" class="hidden">
       <div class="dna-head">
         <h2 class="section__title">Il DNA del gruppo</h2>
-        <button id="dnaResetBtn" type="button" class="btn-link-quiet dna-reset-btn">Ricomincia da me</button>
+        <button id="dnaPeopleBtn" type="button" class="dna-people-btn" aria-haspopup="true" aria-expanded="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 20v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9.5" cy="7" r="4"/><path d="M22 20v-2a4 4 0 0 0-3-3.87"/></svg>
+          <span id="dnaPeopleLabel">Tutti</span>
+        </button>
+        <button id="dnaResetBtn" type="button" class="btn-link-quiet dna-reset-btn">Ricomincia</button>
       </div>
       <p class="dna__intro">Tocca un nodo per aprirlo, trascina per spostarti. Dove due rami si ritrovano sullo stesso film, genere o regista, quello è DNA in comune.</p>
 
@@ -220,10 +224,19 @@
           <svg id="dnaEdges" class="dna-edges"></svg>
           <div id="dnaNodes" class="dna-nodes"></div>
         </div>
+        <!-- Il selettore delle persone copre il riquadro invece di spingere
+             la pagina in basso: così aprirlo e chiuderlo non sposta niente. -->
+        <div id="dnaPeopleSheet" class="dna-sheet hidden">
+          <div class="dna-sheet__head">
+            <strong>Persone</strong>
+            <button id="dnaPeopleDoneBtn" type="button" class="btn-link-quiet">Fatto</button>
+          </div>
+          <div id="dnaPeopleList" class="dna-sheet__list"></div>
+        </div>
       </div>
 
       <div id="dnaPanel" class="dna-panel"></div>
-      <p class="dna-note">Nella rete ci sono solo i titoli votati 7 o più da almeno una persona.</p>
+      <p id="dnaNote" class="dna-note">Nella rete ci sono solo i titoli votati 7 o più da almeno una persona.</p>
     </section>
 
     <!-- REPORT -->
