@@ -798,10 +798,13 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .dna-head { display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom:6px; }
 .dna-head .section__title { margin-bottom:0; }
 .dna-reset-btn { flex-shrink:0; font-size:12px; }
-.dna__intro { font-size:13px; color: var(--text3); margin-bottom:14px; line-height:1.45; }
+.dna__intro { font-size:12.5px; color: var(--text3); margin-bottom:10px; line-height:1.4; }
 
+/* Il palco si prende meno spazio di prima: il pannello qui sotto ora porta
+   l'informazione (chi ha votato cosa) e deve stare nella stessa schermata,
+   senza obbligare a scorrere per leggerlo. */
 .dna-stage {
-  position:relative; height:56vh; min-height:320px; max-height:460px;
+  position:relative; height:42vh; min-height:250px; max-height:380px;
   border-radius:16px; background: var(--surface); border:1px solid var(--surface3);
   overflow:hidden; touch-action:manipulation;
 }
@@ -816,16 +819,17 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .dna-edge { stroke: var(--surface3); stroke-width:1.5; }
 .dna-edge--ama { stroke: rgba(56,189,248,.34); }
 .dna-edge--appartiene { stroke: rgba(255,157,77,.24); }
+.dna-edge--diretto { stroke: rgba(56,189,248,.2); stroke-dasharray:3 4; }
 .dna-nodes { position:absolute; left:0; top:0; width:0; height:0; }
 
 .dna-node {
   position:absolute; transform: translate(-50%, -50%);
-  display:flex; flex-direction:column; align-items:center; gap:4px;
-  width:52px; min-height:52px; padding:0; border:0; background:none;
+  display:flex; flex-direction:column; align-items:center; gap:5px;
+  width:62px; min-height:62px; padding:0; border:0; background:none;
   color: var(--text2); cursor:pointer; -webkit-tap-highlight-color: transparent;
 }
 .dna-node__label {
-  font-size:10px; line-height:1.2; text-align:center; max-width:76px;
+  font-size:11px; line-height:1.2; text-align:center; max-width:88px;
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   color: var(--text2);
 }
@@ -833,14 +837,21 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .dna-node.is-focus .dna-node__label { color: var(--text); font-weight:700; }
 
 .dna-node__poster {
-  width:46px; height:46px; border-radius:12px; display:flex; align-items:center; justify-content:center;
+  width:56px; height:56px; border-radius:14px; display:flex; align-items:center; justify-content:center;
   background-size:cover; background-position:center; background-color: var(--surface2);
-  border:1px solid var(--surface3); font-size:18px;
+  border:1px solid var(--surface3); font-size:20px;
 }
 .dna-node__genre {
-  width:46px; height:46px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+  width:56px; height:56px; border-radius:50%; display:flex; align-items:center; justify-content:center;
   background: var(--surface2); border:1px solid rgba(255,157,77,.35);
-  font-family: var(--font-display); font-weight:800; font-size:12px; color: var(--orange);
+  font-family: var(--font-display); font-weight:800; font-size:13px; color: var(--orange);
+}
+/* Il regista si distingue dal genere per forma e colore: quadrato smussato e
+   ciano, dove il genere è tondo e arancione. */
+.dna-node__director {
+  width:56px; height:56px; border-radius:16px; display:flex; align-items:center; justify-content:center;
+  background: var(--surface2); border:1px solid rgba(56,189,248,.4);
+  font-family: var(--font-display); font-weight:800; font-size:14px; color: var(--cyan);
 }
 .dna-node .avatar { border:2px solid var(--surface); }
 
@@ -848,20 +859,51 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
    animazione — devono solo farsi riconoscere a colpo d'occhio. */
 .dna-node.is-focus .dna-node__poster,
 .dna-node.is-focus .dna-node__genre,
+.dna-node.is-focus .dna-node__director,
 .dna-node.is-focus .avatar { box-shadow: 0 0 0 2px var(--cyan); }
 .dna-node.is-root .avatar { box-shadow: 0 0 0 2px var(--orange); }
 .dna-node.is-focus.is-root .avatar { box-shadow: 0 0 0 2px var(--cyan); }
 .dna-node.is-open::after {
-  content:""; position:absolute; top:-3px; right:3px;
-  width:7px; height:7px; border-radius:50%; background: var(--green);
+  content:""; position:absolute; top:-2px; right:2px;
+  width:8px; height:8px; border-radius:50%; background: var(--green);
   border:2px solid var(--surface);
 }
 
-.dna-panel { margin-top:14px; min-height:64px; }
+.dna-panel { margin-top:12px; min-height:88px; }
 .dna-panel__head { display:flex; align-items:center; gap:8px; margin-bottom:4px; }
+.dna-panel__head strong { flex:1; min-width:0; }
 .dna-panel__head strong { font-family: var(--font-display); font-size:15px; color: var(--text); }
 .dna-panel__line { font-size:13px; color: var(--text2); margin:2px 0; }
-.dna-panel__btn { margin-top:8px; }
-.dna-panel__hint { display:block; font-size:11px; color: var(--text3); margin-top:6px; }
+.dna-panel__scheda {
+  flex-shrink:0; background:none; border:0; padding:4px 0 4px 8px; cursor:pointer;
+  font-family: var(--font-display); font-weight:700; font-size:12px; color: var(--cyan);
+}
+.dna-panel__hint { display:block; font-size:11px; color: var(--text3); margin-top:8px; }
+.dna-panel__label { color: var(--text3); font-size:11px; margin-top:8px; }
+
+/* Chi ha amato un titolo: avatar, nome e voto su una riga che va a capo da
+   sola — con 7 persone nel gruppo non serve altro. */
+.dna-fans { display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; }
+.dna-fan {
+  display:inline-flex; align-items:center; gap:5px;
+  background: var(--surface2); border:1px solid var(--surface3);
+  border-radius:999px; padding:3px 9px 3px 3px;
+}
+.dna-fan__name { font-size:12px; color: var(--text); }
+.dna-fan__vote { font-family: var(--font-display); font-weight:800; font-size:12px; color: var(--green); }
+
+.dna-pills { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.dna-pill {
+  font-size:11px; color: var(--text2); background: var(--surface2);
+  border:1px solid var(--surface3); border-radius:999px; padding:3px 10px;
+}
+
+.dna-chip {
+  width:30px; height:30px; flex-shrink:0; display:flex; align-items:center; justify-content:center;
+  font-family: var(--font-display); font-weight:800; font-size:11px;
+  background: var(--surface2); border:1px solid var(--surface3);
+}
+.dna-chip--genere { border-radius:50%; color: var(--orange); border-color: rgba(255,157,77,.35); }
+.dna-chip--regista { border-radius:9px; color: var(--cyan); border-color: rgba(56,189,248,.4); }
 .dna-hint { font-size:14px; color: var(--text3); padding:12px 0; }
-.dna-note { font-size:11px; color: var(--text3); margin-top:14px; line-height:1.45; }
+.dna-note { font-size:11px; color: var(--text3); margin-top:12px; line-height:1.4; }

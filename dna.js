@@ -53,6 +53,7 @@ export function normalizeGenres(names) {
 export const personId = (name) => `persona:${name}`;
 export const filmId = (id) => `film:${id}`;
 export const genreId = (name) => `genere:${name}`;
+export const directorId = (name) => `regista:${name}`;
 
 export function nodeType(id) {
   const i = id.indexOf(":");
@@ -70,6 +71,7 @@ export function buildIndex(db, users = null) {
   const byPerson = new Map();    // nome    -> [{ id, w }]  film amati, con il voto come peso
   const byGenre = new Map();     // genere  -> [{ id, w }]  film del genere, con il n. di fan come peso
   const genrePop = new Map();    // genere  -> quanti film amati da almeno uno
+  const byDirector = new Map();  // regista -> [{ id, w }]  suoi film amati
 
   for (const t of db || []) {
     const genres = normalizeGenres(t.genre_names);
@@ -108,9 +110,33 @@ export function buildIndex(db, users = null) {
       byGenre.get(g).push({ id: key, w: fans.length });
       genrePop.set(g, (genrePop.get(g) || 0) + 1);
     }
+    if (t.director) {
+      if (!byDirector.has(t.director)) byDirector.set(t.director, []);
+      byDirector.get(t.director).push({ id: key, w: fans.length });
+    }
   }
 
-  return { films, byPerson, byGenre, genrePop };
+  const index = { films, byPerson, byGenre, genrePop, byDirector, directors: new Map(), personDirectors: new Map() };
+  // Solo i registi che superano la soglia diventano nodi: uno con un film solo
+  // sarebbe un vicolo cieco, non un pezzo di DNA del gruppo.
+  for (const d of directorScores(index)) index.directors.set(d.name, d);
+
+  // I registi di ciascuna persona. Senza questo collegamento i registi
+  // sarebbero quasi invisibili: solo 1 film amato su 4 e' di un regista
+  // sopra soglia, quindi aprendo un film spesso non ne comparirebbe nessuno.
+  for (const [name, entries] of byPerson) {
+    const tally = new Map();
+    for (const e of entries) {
+      const dir = films.get(e.id)?.director;
+      if (dir && index.directors.has(dir)) tally.set(dir, (tally.get(dir) || 0) + 1);
+    }
+    const suoi = [...tally.entries()]
+      .filter(([, n]) => n >= DIRECTOR_MIN_PER_PERSON)
+      .map(([dir, n]) => ({ id: directorId(dir), n }))
+      .sort((a, b) => b.n - a.n || a.id.localeCompare(b.id));
+    if (suoi.length) index.personDirectors.set(name, suoi);
+  }
+  return index;
 }
 
 // ─── VICINI DI UN NODO ───────────────────────────────────────────────────────
@@ -121,7 +147,13 @@ export function neighboursOf(index, id) {
   const key = id.slice(type.length + 1);
 
   if (type === "persona") {
-    return (index.byPerson.get(key) || []).map(e => ({ id: e.id, kind: "ama", w: e.w }));
+    return [
+      ...(index.byPerson.get(key) || []).map(e => ({ id: e.id, kind: "ama", w: e.w })),
+      // Peso su scala piu' alta dei voti (7-10) di proposito: tra i candidati
+      // di una persona, "tre film dello stesso regista" e' un segnale piu'
+      // forte di "un film votato 9".
+      ...(index.personDirectors.get(key) || []).map(d => ({ id: d.id, kind: "diretto", w: 10 + d.n * 10 }))
+    ];
   }
 
   if (type === "film") {
@@ -132,8 +164,18 @@ export function neighboursOf(index, id) {
       // Peso di un genere = quanto è diffuso tra i film amati dal gruppo.
       // A parità di tutto il resto si espande prima il genere più
       // rappresentativo, non il primo che TMDB ha messo in lista.
-      ...film.genres.map(g => ({ id: genreId(g), kind: "appartiene", w: index.genrePop.get(g) || 0 }))
+      ...film.genres.map(g => ({ id: genreId(g), kind: "appartiene", w: index.genrePop.get(g) || 0 })),
+      // Il regista compare solo se ha abbastanza film amati dal gruppo da
+      // essere un segnale (vedi DIRECTOR_MIN_FILMS): il peso è il suo
+      // punteggio, così tra i candidati si piazza tra le persone e i generi.
+      ...(index.directors.has(film.director)
+        ? [{ id: directorId(film.director), kind: "diretto", w: Math.round(index.directors.get(film.director).score * 10) }]
+        : [])
     ];
+  }
+
+  if (type === "regista") {
+    return (index.byDirector.get(key) || []).map(e => ({ id: e.id, kind: "diretto", w: e.w }));
   }
 
   if (type === "genere") {
@@ -168,11 +210,51 @@ function metaFor(index, id) {
   const key = id.slice(type.length + 1);
   if (type === "film") {
     const f = index.films.get(id);
-    return f ? { id: f.id, year: f.year, poster_path: f.poster_path, media_type: f.media_type, director: f.director, fans: f.fans.length } : {};
+    if (!f) return {};
+    return {
+      id: f.id, year: f.year, poster_path: f.poster_path, media_type: f.media_type,
+      director: f.director, genres: f.genres, fans: f.fans
+    };
   }
-  if (type === "genere") return { count: index.genrePop.get(key) || 0 };
-  if (type === "persona") return { liked: (index.byPerson.get(key) || []).length };
+  if (type === "genere") return { count: index.genrePop.get(key) || 0, topFans: topFansOfGenre(index, key) };
+  if (type === "persona") return {
+    liked: (index.byPerson.get(key) || []).length,
+    topGenres: topGenresOfPerson(index, key),
+    topDirectors: (index.personDirectors.get(key) || []).slice(0, 3).map(d => ({ name: d.id.slice(8), film: d.n }))
+  };
+  if (type === "regista") {
+    const d = index.directors.get(key);
+    const films = (index.byDirector.get(key) || [])
+      .map(e => index.films.get(e.id))
+      .filter(Boolean)
+      .sort((a, b) => b.fans.length - a.fans.length || a.title.localeCompare(b.title));
+    return d ? { films: d.films, people: d.people, score: d.score, titoli: films.slice(0, 3).map(f => f.title) } : {};
+  }
   return {};
+}
+
+// I 3 generi piu' presenti tra i film che una persona ha amato.
+export function topGenresOfPerson(index, name) {
+  const tally = new Map();
+  for (const e of index.byPerson.get(name) || []) {
+    for (const g of index.films.get(e.id)?.genres || []) tally.set(g, (tally.get(g) || 0) + 1);
+  }
+  return [...tally.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 3)
+    .map(([g, n]) => ({ genere: g, film: n }));
+}
+
+// Chi, nel gruppo, ha amato piu' titoli di un certo genere.
+export function topFansOfGenre(index, genere) {
+  const tally = new Map();
+  for (const e of index.byGenre.get(genere) || []) {
+    for (const f of index.films.get(e.id)?.fans || []) tally.set(f.name, (tally.get(f.name) || 0) + 1);
+  }
+  return [...tally.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 3)
+    .map(([name, n]) => ({ name, film: n }));
 }
 
 function addNode(net, index, id, parentId) {
@@ -327,7 +409,7 @@ export function hopsFrom(net, startId) {
   return hops;
 }
 
-// ─── REGISTI (pronto per la fase 2) ──────────────────────────────────────────
+// ─── REGISTI ─────────────────────────────────────────────────────────────────
 // Sostituisce belovedDirectors() del vecchio blocco Stasera, che ordinava i
 // registi per media semplice + un bonus fisso e poi mescolava a caso.
 //
@@ -345,6 +427,9 @@ export function hopsFrom(net, startId) {
 //
 // Non è ancora usata dalla schermata: i nodi Regista arrivano in fase 2.
 export const DIRECTOR_MIN_FILMS = 3;
+// Un film solo non dice niente sui gusti: un regista compare tra i TUOI
+// quando ne hai amati almeno due.
+export const DIRECTOR_MIN_PER_PERSON = 2;
 const DIRECTOR_PRIOR_WEIGHT = 5;
 const DIRECTOR_PRIOR_MEAN = 6.84;   // media di tutti i voti del gruppo
 
