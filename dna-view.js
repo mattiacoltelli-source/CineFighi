@@ -10,7 +10,7 @@
 // soprattutto non fa ballare i nodi già piazzati ad ogni apertura.
 
 import {
-  buildIndex, createNetwork, expand, collapse, hopsFrom, nodeType, LIKE_THRESHOLD
+  buildIndex, createNetwork, expand, collapse, hopsFrom, nodeType, sharedCountOf, LIKE_THRESHOLD
 } from "./dna.js?v=abd2fa7";
 import { escapeHtml } from "./cine-core.js?v=abd2fa7";
 import { avatarHtml, haptic } from "./ui.js?v=abd2fa7";
@@ -171,11 +171,17 @@ export function showDna({ db, users, currentUser }) {
 // ─── SELETTORE DELLE PERSONE ─────────────────────────────────────────────────
 
 // Etichetta discreta sul pulsante: dice lo stato senza occupare una riga in
-// più. "Tutti" quando non c'è filtro, il nome quando è una sola, il conteggio
-// quando sono più d'una.
+// più. "Tutti" quando non c'è filtro, il nome quando è una sola. Con 2-3
+// persone (la modalità condivisa, vedi dna.js::isModalitaCondivisa) i nomi
+// separati da "+" invece del conteggio: è lo stesso posto in cui prima si
+// leggeva "2 persone", ma dice CHI, non solo quanti — coerente col fatto che
+// da qui in poi la rete racconta il loro incontro, non una lista.
 function peopleLabel() {
   if (!selectedPeople) return "Tutti";
   if (selectedPeople.length === 1) return selectedPeople[0];
+  if (selectedPeople.length <= 3) {
+    return selectedPeople.map(u => u === ctx?.currentUser ? "Tu" : u).join(" + ");
+  }
   return `${selectedPeople.length} persone`;
 }
 
@@ -357,6 +363,18 @@ function nodeInner(node) {
 // DOM (DOM_MAX_HOPS).
 function depthClass(h) { return Math.min(h ?? 0, 4); }
 
+// Un nodo è un "punto d'incontro" quando lo amano TUTTE le persone che stai
+// guardando — non una parte di loro. Solo in modalità condivisa (2-3
+// selezionati), e solo film/genere/regista: una persona non può essere un
+// punto d'incontro di se stessa. È lo stesso sharedCountOf che ordina i
+// candidati in dna.js, qui usato per decidere l'evidenza visiva invece
+// dell'ordine — la stessa informazione, letta in due punti diversi.
+function isMeetingPoint(n) {
+  if (!index?.shared || !selectedPeople) return false;
+  if (n.type !== "film" && n.type !== "genere" && n.type !== "regista") return false;
+  return sharedCountOf(index, n.id) === selectedPeople.length;
+}
+
 function render() {
   const nodesEl = el("dnaNodes");
   const edgesEl = el("dnaEdges");
@@ -380,7 +398,11 @@ function render() {
       const suFocus = e.a === focusId || e.b === focusId ? " is-focus" : "";
       // Un arco è lontano quanto il più lontano dei suoi due estremi.
       const h = Math.max(hops.get(e.a) ?? 0, hops.get(e.b) ?? 0);
-      return `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" class="dna-edge dna-edge--${e.kind} dna-h${depthClass(h)}${suFocus}"/>`;
+      // Un arco fra due punti d'incontro (o fra una persona e un punto
+      // d'incontro) è il tratto che racconta l'incrocio: più spesso, non un
+      // colore nuovo — lo stesso trattamento già riservato a is-focus.
+      const suIncontro = isMeetingPoint(a) || isMeetingPoint(b) ? " is-shared" : "";
+      return `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" class="dna-edge dna-edge--${e.kind} dna-h${depthClass(h)}${suFocus}${suIncontro}"/>`;
     })
     .join("");
 
@@ -398,7 +420,10 @@ function render() {
       n.id === focusId ? "is-focus" : "",
       n.id === net.rootId ? "is-root" : "",
       n.expanded ? "is-open" : "",
-      withLabel ? "" : "is-far"
+      withLabel ? "" : "is-far",
+      // Punto d'incontro: lo ama ognuna delle persone che stai guardando.
+      // Solo in modalità condivisa — vedi isMeetingPoint.
+      isMeetingPoint(n) ? "is-shared" : ""
     ].filter(Boolean).join(" ");
     return `<button type="button" class="${cls}" data-node="${escapeHtml(n.id)}"
       style="left:${n.x.toFixed(1)}px;top:${n.y.toFixed(1)}px"
@@ -499,6 +524,14 @@ function pillsHtml(items) {
 function panelBody(node) {
   const m = node.meta;
 
+  // Una riga sola, e solo quando conta davvero: non "chi lo ama" (i nomi
+  // sono già nella lista fan o nel conteggio persone qui sotto), ma se è
+  // TUTTI quelli che stai guardando o solo una parte — un confronto che
+  // altrimenti il lettore dovrebbe fare a mente contando le teste.
+  const incontro = isMeetingPoint(node)
+    ? `<p class="dna-panel__line dna-panel__line--shared">Punto d'incontro: piace a ${selectedPeople.length === 2 ? "entrambi" : "tutti e tre"}.</p>`
+    : "";
+
   if (node.type === "persona") {
     const n = m.liked || 0;
     // Non "sei la radice" ma "sei tu": con un filtro attivo la rete può
@@ -521,6 +554,7 @@ function panelBody(node) {
     const regia = m.director ? `Regia di ${escapeHtml(m.director)}` : "";
     const fans = m.fans || [];
     return `
+      ${incontro}
       <p class="dna-panel__line">${tipo}${regia ? ` · ${regia}` : ""}</p>
       <p class="dna-panel__line dna-panel__label">Chi l'ha amato (${fans.length})</p>
       ${fansHtml(fans)}
@@ -532,6 +566,7 @@ function panelBody(node) {
       ? `<p class="dna-panel__line">Nella rete: ${m.titoli.map(t => escapeHtml(t)).join(" · ")}${m.films > m.titoli.length ? ` e altri ${m.films - m.titoli.length}` : ""}.</p>`
       : "";
     return `
+      ${incontro}
       <p class="dna-panel__line">${m.films} ${m.films === 1 ? "film amato" : "film amati"} nel gruppo, da ${m.people} ${m.people === 1 ? "persona" : "persone"} diverse.</p>
       ${titoli}`;
   }
@@ -541,6 +576,7 @@ function panelBody(node) {
     ? `<p class="dna-panel__line">Chi lo ama di più: ${m.topFans.map(f => `${escapeHtml(f.name)} (${f.film})`).join(" · ")}.</p>`
     : "";
   return `
+    ${incontro}
     <p class="dna-panel__line">${c} ${c === 1 ? "titolo amato" : "titoli amati"} dal gruppo in questo genere.</p>
     ${chi}`;
 }
