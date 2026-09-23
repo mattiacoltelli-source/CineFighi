@@ -10,7 +10,7 @@
 // soprattutto non fa ballare i nodi già piazzati ad ogni apertura.
 
 import {
-  buildIndex, createNetwork, expand, collapse, hopsFrom, nodeType
+  buildIndex, createNetwork, expand, collapse, hopsFrom, nodeType, LIKE_THRESHOLD
 } from "./dna.js?v=e6cf7aa";
 import { escapeHtml } from "./cine-core.js?v=e6cf7aa";
 import { avatarHtml, haptic } from "./ui.js?v=e6cf7aa";
@@ -44,6 +44,19 @@ let focusId = null;
 let signature = "";
 let bound = false;
 
+// Chi sta dentro la rete. null = tutto il gruppo, cioè esattamente il
+// comportamento di sempre. Quando invece è una lista, quei nomi vengono
+// passati a buildIndex, che scarta i voti di tutti gli altri PRIMA di
+// costruire il grafo: film, generi e registi si ricalcolano su quelle
+// persone soltanto. Non è un filtro grafico sui nodi già disegnati — la rete
+// è proprio un'altra rete, costruita dallo stesso identico motore.
+let selectedPeople = null;
+
+// L'ultimo contesto passato da app.js, così il selettore può ridisegnare da
+// solo senza farsi ripassare db/users/currentUser ad ogni interazione.
+let ctx = null;
+let sheetOpen = false;
+
 // Spostamento manuale della camera rispetto al nodo attivo (vedi il
 // trascinamento in fondo al file). Si azzera ad ogni tap su un nodo: toccare
 // un nodo ricentra sempre, quindi non ci si perde mai fuori dalla rete.
@@ -71,23 +84,70 @@ function librarySignature(db, currentUser) {
   for (const t of db) {
     for (const v of Object.values(t.votes || {})) { n++; sum += Number(v?.vote) || 0; }
   }
-  return `${currentUser}|${db.length}|${n}|${sum}`;
+  // La selezione entra nella firma: cambiarla deve ricostruire la rete, non
+  // riusare quella di prima.
+  const chi = selectedPeople ? selectedPeople.join(",") : "*";
+  return `${currentUser}|${chi}|${db.length}|${n}|${sum}`;
+}
+
+// Quanti titoli ha amato ciascuno, su TUTTA la libreria: è una proprietà
+// della persona, non della selezione, quindi nel selettore il numero non
+// deve ballare a seconda di chi è spuntato.
+function likedCounts(db) {
+  const conta = new Map();
+  for (const t of db || []) {
+    for (const [nome, v] of Object.entries(t.votes || {})) {
+      if (Number(v?.vote) >= LIKE_THRESHOLD) conta.set(nome, (conta.get(nome) || 0) + 1);
+    }
+  }
+  return conta;
+}
+
+// Da dove parte la rete. Normalmente da te; se però la selezione non ti
+// include, si parte da chi, fra i selezionati, ha amato più titoli — è la
+// persona da cui la rete racconta di più, e la scelta resta deterministica
+// (a parità di titoli vince il nome in ordine alfabetico).
+function rootUserFor(persone, me) {
+  if (persone.includes(me) && index.byPerson.get(me)?.length) return me;
+  const ordinati = persone
+    .map(u => ({ u, n: index.byPerson.get(u)?.length || 0 }))
+    .filter(x => x.n > 0)
+    .sort((a, b) => b.n - a.n || a.u.localeCompare(b.u));
+  return ordinati[0]?.u || null;
 }
 
 export function showDna({ db, users, currentUser }) {
   const stage = el("dnaStage");
   if (!stage) return;
+  ctx = { db, users, currentUser };
 
   if (!db || !db.length) {
     renderMessage("Sto caricando la libreria…");
     return;
   }
 
+  // Una selezione che nel frattempo non esiste più (utente rimosso dal
+  // gruppo) torna semplicemente a "Tutti" invece di svuotare la rete.
+  if (selectedPeople) {
+    const vive = selectedPeople.filter(u => users.includes(u));
+    selectedPeople = vive.length ? vive : null;
+  }
+  const persone = selectedPeople || users;
+
   const sig = librarySignature(db, currentUser);
   if (sig !== signature || !net) {
     signature = sig;
-    index = buildIndex(db, users);
-    net = createNetwork(index, currentUser);
+    index = buildIndex(db, persone);
+    const radice = rootUserFor(persone, currentUser);
+    if (!radice) {
+      net = null;
+      renderPeopleControl();
+      renderMessage(selectedPeople
+        ? "Nessuno dei selezionati ha ancora votato un titolo 7 o più."
+        : "Vota almeno un titolo con 7 o più: la rete parte da lì.");
+      return;
+    }
+    net = createNetwork(index, radice);
     focusId = net.rootId;
     panX = 0; panY = 0;
     const root = net.nodes.get(net.rootId);
@@ -98,13 +158,83 @@ export function showDna({ db, users, currentUser }) {
     expandNode(net.rootId, false);
   }
 
-  const root = net.nodes.get(net.rootId);
-  if (!root || !index.byPerson.get(currentUser)?.length) {
-    renderMessage("Vota almeno un titolo con 7 o più: la rete parte da lì.");
-    return;
-  }
-
+  renderPeopleControl();
   render();
+}
+
+// ─── SELETTORE DELLE PERSONE ─────────────────────────────────────────────────
+
+// Etichetta discreta sul pulsante: dice lo stato senza occupare una riga in
+// più. "Tutti" quando non c'è filtro, il nome quando è una sola, il conteggio
+// quando sono più d'una.
+function peopleLabel() {
+  if (!selectedPeople) return "Tutti";
+  if (selectedPeople.length === 1) return selectedPeople[0];
+  return `${selectedPeople.length} persone`;
+}
+
+function renderPeopleControl() {
+  const btn = el("dnaPeopleBtn");
+  const label = el("dnaPeopleLabel");
+  if (!btn || !label) return;
+  label.textContent = peopleLabel();
+  btn.classList.toggle("is-active", !!selectedPeople);
+  btn.setAttribute("aria-expanded", sheetOpen ? "true" : "false");
+
+  // Con un filtro attivo "almeno una persona" sarebbe ambiguo: la nota deve
+  // dire che il conto è fatto solo su chi è stato scelto.
+  const nota = el("dnaNote");
+  if (nota) {
+    nota.textContent = selectedPeople
+      ? `Nella rete ci sono solo i titoli votati 7 o più da ${selectedPeople.length === 1 ? selectedPeople[0] : "almeno una delle persone scelte"}.`
+      : "Nella rete ci sono solo i titoli votati 7 o più da almeno una persona.";
+  }
+}
+
+function renderPeopleSheet() {
+  const lista = el("dnaPeopleList");
+  if (!lista || !ctx) return;
+  const conta = likedCounts(ctx.db);
+  const tutti = !selectedPeople;
+
+  const riga = (nome, attiva, meta, avatar) => `
+    <button type="button" class="dna-sheet__row${attiva ? " is-active" : ""}" data-user="${escapeHtml(nome)}">
+      ${avatar}
+      <span class="dna-sheet__name">${escapeHtml(nome === "*" ? "Tutti" : nome)}</span>
+      <span class="dna-sheet__meta">${escapeHtml(meta)}</span>
+      <span class="dna-sheet__dot"></span>
+    </button>`;
+
+  lista.innerHTML = [
+    riga("*", tutti, `${ctx.users.length} persone`, `<span class="dna-sheet__all">∗</span>`),
+    ...ctx.users.map(u => {
+      const n = conta.get(u) || 0;
+      return riga(u, !tutti && selectedPeople.includes(u), `${n} amati`, avatarHtml(u, 26));
+    })
+  ].join("");
+}
+
+function togglePerson(nome) {
+  if (nome === "*") { selectedPeople = null; return; }
+  const attuale = selectedPeople ? [...selectedPeople] : [];
+  const i = attuale.indexOf(nome);
+  if (i === -1) attuale.push(nome);
+  else attuale.splice(i, 1);
+  // Deselezionare l'ultima persona non lascia una rete vuota: si torna a
+  // "Tutti", che è anche il modo più veloce per rimettere tutto a posto.
+  if (!attuale.length) { selectedPeople = null; return; }
+  // Ordine stabile (quello del gruppo): la firma della rete non deve
+  // cambiare solo perché ho spuntato gli stessi nomi in un ordine diverso.
+  selectedPeople = ctx.users.filter(u => attuale.includes(u));
+}
+
+function openSheet(apri) {
+  const sheet = el("dnaPeopleSheet");
+  if (!sheet) return;
+  sheetOpen = apri;
+  if (apri) renderPeopleSheet();
+  sheet.classList.toggle("hidden", !apri);
+  renderPeopleControl();
 }
 
 function renderMessage(text) {
@@ -331,7 +461,9 @@ function panelBody(node) {
 
   if (node.type === "persona") {
     const n = m.liked || 0;
-    const io = node.id === net.rootId;
+    // Non "sei la radice" ma "sei tu": con un filtro attivo la rete può
+    // partire da qualcun altro, e dargli del "tu" sarebbe sbagliato.
+    const io = node.label === ctx?.currentUser;
     const generi = (m.topGenres || []).length
       ? `<p class="dna-panel__line">Generi più presenti: ${m.topGenres.map(g => `${escapeHtml(g.genere)} (${g.film})`).join(" · ")}.</p>`
       : "";
@@ -380,6 +512,7 @@ export function initDnaView() {
   bound = true;
 
   bindPan();
+  bindPeople();
 
   const nodesEl = el("dnaNodes");
   if (nodesEl) {
@@ -424,6 +557,8 @@ function bindPan() {
 
   stage.addEventListener("pointerdown", e => {
     if (!net || pid !== null || e.button > 0) return;
+    // Il selettore è dentro al riquadro: lì i tocchi sono suoi, non della rete.
+    if (e.target.closest(".dna-sheet")) return;
     pid = e.pointerId;
     dragged = false;
     x0 = e.clientX; y0 = e.clientY;
@@ -461,7 +596,32 @@ function bindPan() {
   stage.addEventListener("pointercancel", fine);
 }
 
-// "Ricomincia da me": butta via l'esplorazione e riparte dal nodo persona.
+function bindPeople() {
+  const btn = el("dnaPeopleBtn");
+  const done = el("dnaPeopleDoneBtn");
+  const lista = el("dnaPeopleList");
+
+  btn?.addEventListener("click", () => { haptic(8); openSheet(!sheetOpen); });
+  done?.addEventListener("click", () => { haptic(8); openSheet(false); });
+
+  lista?.addEventListener("click", e => {
+    const riga = e.target.closest(".dna-sheet__row");
+    if (!riga || !ctx) return;
+    haptic(8);
+    togglePerson(riga.dataset.user);
+    // Il foglio resta aperto: scegliere più persone è la cosa normale, e
+    // richiuderlo ad ogni spunta obbligherebbe a riaprirlo ogni volta.
+    renderPeopleSheet();
+    // La rete si ricostruisce da zero con la nuova selezione: firma diversa,
+    // quindi showDna ripassa da buildIndex (vedi librarySignature).
+    resetDna();
+    showDna(ctx);
+  });
+}
+
+// "Ricomincia": butta via l'esplorazione e riparte dal nodo persona. Il
+// filtro delle persone NON si tocca — è una scelta, non uno stato temporaneo
+// dell'esplorazione.
 // Il prossimo showDna() ricostruisce tutto da zero (la firma non combacia più).
 export function resetDna() {
   signature = "";
