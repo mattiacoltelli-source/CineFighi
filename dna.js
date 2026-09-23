@@ -311,12 +311,7 @@ function bridgeScore(net, index, sourceId, candId) {
   return 0;
 }
 
-// `prefer` mette uno o più candidati precisi in testa, saltando
-// l'ordinamento: serve solo alla partenza, per aprire la rete su un titolo
-// già scelto e sulle persone che lo amano (vedi bestOpening). Non cambia la
-// regola — è un'eccezione dichiarata, per un caso solo, e tutti gli altri
-// vicini continuano a essere scelti come sempre.
-export function pickNeighbours(net, index, sourceId, limit = 5, prefer = null) {
+export function pickNeighbours(net, index, sourceId, limit = 5) {
   const cands = neighboursOf(index, sourceId)
     .filter(n => !net.linked.has(edgeKey(sourceId, n.id)))
     .map(n => ({ ...n, bridge: bridgeScore(net, index, sourceId, n.id), type: nodeType(n.id) }))
@@ -325,15 +320,6 @@ export function pickNeighbours(net, index, sourceId, limit = 5, prefer = null) {
   const picked = [];
   const perType = new Map();
   const pool = [...cands];
-
-  for (const id of (Array.isArray(prefer) ? prefer : prefer ? [prefer] : [])) {
-    if (picked.length >= limit) break;
-    const voluto = pool.find(c => c.id === id);
-    if (!voluto) continue;
-    picked.push(voluto);
-    perType.set(voluto.type, (perType.get(voluto.type) || 0) + 1);
-    pool.splice(pool.indexOf(voluto), 1);
-  }
 
   while (picked.length < limit && pool.length) {
     // Non si scende mai di livello di ponte per amore della varietà:
@@ -352,13 +338,13 @@ export function pickNeighbours(net, index, sourceId, limit = 5, prefer = null) {
 
 // Apre un nodo: aggiunge fino a `limit` vicini e i relativi archi.
 // Ritorna gli id dei nodi NUOVI (quelli già presenti hanno solo un arco in più).
-export function expand(net, index, id, limit = 5, prefer = null) {
+export function expand(net, index, id, limit = 5) {
   const source = net.nodes.get(id);
   if (!source) return [];
   source.expanded = true;
 
   const added = [];
-  for (const cand of pickNeighbours(net, index, id, limit, prefer)) {
+  for (const cand of pickNeighbours(net, index, id, limit)) {
     const isNew = !net.nodes.has(cand.id);
     addNode(net, index, cand.id, id);
     addEdge(net, id, cand.id, cand.kind, cand.w);
@@ -421,51 +407,6 @@ export function hopsFrom(net, startId) {
     }
   }
   return hops;
-}
-
-// ─── IL TITOLO DI PARTENZA ───────────────────────────────────────────────────
-//
-// Fra i titoli che una persona ha amato, quello che ha amato INSIEME a più
-// gente. È da lì che si apre la rete.
-//
-// Prima si sceglieva "la persona con cui condividi di più" e poi un film con
-// lei: con due nomi selezionati era giusto, ma con tutto il gruppo dentro
-// apriva su una coppia qualsiasi — e una coppia, quando hai detto "tutti",
-// non rappresenta niente.
-//
-// Con questa regola sola il comportamento cambia da sé a seconda di quanti
-// sono: con due persone selezionate esce il titolo che condividono (i fan
-// possibili sono due), con tutto il gruppo esce quello che mette d'accordo
-// più gente possibile, con una persona sola non esce niente e la schermata
-// riparte come sempre. Nessun ramo sul numero di selezionati: è l'indice,
-// già filtrato a monte, a far cambiare il risultato.
-//
-// A parità di persone vince il titolo con la somma dei voti più alta, poi
-// l'id: l'apertura resta deterministica.
-export function bestOpening(index, rootUser, maxPersone = 6) {
-  const miei = index.byPerson.get(rootUser) || [];
-  if (!miei.length) return null;
-
-  const scelto = miei
-    .map(e => index.films.get(e.id))
-    .filter(Boolean)
-    .map(f => ({
-      f,
-      altri: f.fans.filter(x => x.name !== rootUser),
-      somma: f.fans.reduce((t, x) => t + x.vote, 0)
-    }))
-    .filter(x => x.altri.length > 0)
-    .sort((a, b) => b.altri.length - a.altri.length || b.somma - a.somma || a.f.key.localeCompare(b.f.key))[0];
-
-  // Nessun titolo in comune con nessuno: succede con il filtro su una sola
-  // persona, o con chi ha votato poco.
-  if (!scelto) return null;
-
-  return {
-    film: scelto.f.key,
-    persone: scelto.altri.slice(0, maxPersone).map(x => personId(x.name)),
-    altri: scelto.altri.length
-  };
 }
 
 // ─── REGISTI ─────────────────────────────────────────────────────────────────
