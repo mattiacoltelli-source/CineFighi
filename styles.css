@@ -806,12 +806,20 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .dna-stage {
   position:relative; height:42vh; min-height:250px; max-height:380px;
   border-radius:16px; background: var(--surface); border:1px solid var(--surface3);
-  overflow:hidden; touch-action:manipulation;
+  overflow:hidden;
+  /* Il gesto dentro il riquadro è nostro (vedi il trascinamento in
+     dna-view.js): senza questo il browser proverebbe comunque a scrollare la
+     pagina a metà trascinamento e il movimento risulterebbe a scatti. */
+  touch-action:none; cursor:grab;
 }
+.dna-stage.is-panning { cursor:grabbing; }
 .dna-canvas {
   position:absolute; left:50%; top:50%; width:0; height:0;
   transition: transform .2s ease-out; will-change: transform;
 }
+/* Mentre il dito è giù la camera deve seguirlo 1:1: con la transizione
+   attiva resterebbe indietro di 200ms e sembrerebbe scollata dal gesto. */
+.dna-canvas.is-dragging { transition:none; }
 .dna-edges {
   position:absolute; left:0; top:0; width:1px; height:1px;
   overflow:visible; pointer-events:none;
