@@ -10,7 +10,7 @@
 // soprattutto non fa ballare i nodi già piazzati ad ogni apertura.
 
 import {
-  buildIndex, createNetwork, expand, collapse, hopsFrom, nodeType, bestOpening, LIKE_THRESHOLD
+  buildIndex, createNetwork, expand, collapse, hopsFrom, nodeType, LIKE_THRESHOLD
 } from "./dna.js?v=b76952c";
 import { escapeHtml } from "./cine-core.js?v=b76952c";
 import { avatarHtml, haptic } from "./ui.js?v=b76952c";
@@ -153,7 +153,15 @@ export function showDna({ db, users, currentUser }) {
     const root = net.nodes.get(net.rootId);
     root.x = 0;
     root.y = 0;
-    apriSulPonte(radice);
+    // E qui la rete si ferma: un nodo solo, il tuo, e basta.
+    //
+    // Le versioni precedenti aprivano gia' qualcosa — prima i tuoi vicini,
+    // poi un ponte verso un'altra persona, poi il titolo che unisce tutto il
+    // gruppo — e ogni volta la schermata arrivava gia' piena, prima ancora
+    // che tu avessi toccato niente. Con sette persone attorno a un titolo
+    // erano nove nodi al primo sguardo, e da li' bastavano pochi tocchi per
+    // renderla illeggibile. Adesso tutto quello che c'e' dentro ce l'hai
+    // messo tu, un tocco alla volta.
   }
 
   renderPeopleControl();
@@ -233,39 +241,6 @@ function openSheet(apri) {
   if (apri) renderPeopleSheet();
   sheet.classList.toggle("hidden", !apri);
   renderPeopleControl();
-}
-
-// Quanti nodi apre la partenza. La radice ne apre pochi perché il centro
-// della scena è il titolo, non lei; il titolo invece apre tutte le persone
-// che lo amano, fino a sei — con un gruppo di sette è esattamente il punto.
-const START_ROOT_NEIGHBOURS = 2;
-const START_PEOPLE = 6;
-
-// La rete non si apre su un punto di partenza ma su un collegamento già
-// completo: il titolo che ami insieme a più gente, con quella gente attorno.
-// Il meccanismo della pagina si vede funzionare prima ancora di toccare
-// qualcosa, invece di dover essere spiegato.
-//
-// Quanta gente ci sia attorno lo decide la selezione, non un ramo nel codice:
-// con "Tutti" esce il titolo che mette d'accordo più persone possibile (per
-// questo gruppo, quello che hanno amato tutti e sette), con due nomi
-// selezionati esce il titolo che quei due condividono. Vedi bestOpening.
-//
-// La camera si ferma sul TITOLO, non su di te: è il nodo al centro della
-// costellazione, e il pannello racconta subito la cosa interessante — chi
-// l'ha amato e con che voto.
-function apriSulPonte(radice) {
-  const start = bestOpening(index, radice, START_PEOPLE);
-  if (!start) {
-    // Nessun titolo in comune con nessuno (succede col filtro su una persona
-    // sola): si riparte dal comportamento di sempre.
-    expandNode(net.rootId, false);
-    return;
-  }
-
-  layoutChildren(net.rootId, expand(net, index, net.rootId, START_ROOT_NEIGHBOURS, start.film));
-  layoutChildren(start.film, expand(net, index, start.film, START_PEOPLE, start.persone));
-  focusId = start.film;
 }
 
 function renderMessage(text) {
@@ -435,6 +410,10 @@ function render() {
 
   shownIds = visible.map(n => n.id);
   applyCamera();
+
+  // Con un nodo solo il riquadro sarebbe una scatola quasi vuota: finche' non
+  // si apre niente, una riga dice cosa fare. Sparisce al primo tocco.
+  el("dnaStartHint")?.classList.toggle("hidden", net.nodes.size > 1);
 
   renderPanel(net.nodes.get(focusId));
 }

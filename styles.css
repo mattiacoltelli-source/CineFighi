@@ -993,6 +993,13 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
   border:2px solid var(--surface);
 }
 
+/* Il suggerimento della prima apertura: dentro al riquadro, in basso, e via
+   al primo tocco. Non intercetta i gesti, cosi' non ruba il trascinamento. */
+.dna-start-hint {
+  position:absolute; left:0; right:0; bottom:16px; z-index:1;
+  text-align:center; font-size:11.5px; color: var(--text3); pointer-events:none;
+}
+
 .dna-panel { margin-top:12px; min-height:88px; }
 .dna-panel__head { display:flex; align-items:center; gap:8px; margin-bottom:4px; }
 .dna-panel__head strong { flex:1; min-width:0; }

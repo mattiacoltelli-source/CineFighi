@@ -217,7 +217,7 @@
         </button>
         <button id="dnaResetBtn" type="button" class="btn-link-quiet dna-reset-btn">Ricomincia</button>
       </div>
-      <p class="dna__intro">Tocca un nodo per aprirlo, trascina per spostarti. Dove due rami si ritrovano sullo stesso film, genere o regista, quello è DNA in comune.</p>
+      <p class="dna__intro">Dove due rami si ritrovano sullo stesso film, genere o regista, quello è DNA in comune. Trascina per spostarti.</p>
 
       <div id="dnaStage" class="dna-stage">
         <!-- Il viewport porta la sfumatura ai bordi: i nodi che escono
@@ -231,6 +231,7 @@
         </div>
         <!-- Il selettore delle persone copre il riquadro invece di spingere
              la pagina in basso: così aprirlo e chiuderlo non sposta niente. -->
+        <p id="dnaStartHint" class="dna-start-hint hidden">tocca il tuo nodo per aprire</p>
         <div id="dnaPeopleSheet" class="dna-sheet hidden">
           <div class="dna-sheet__head">
             <strong>Persone</strong>
