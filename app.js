@@ -807,7 +807,7 @@ async function handleReportRefresh() {
 // la sua conferma prima e un toast di esito dopo: niente stato "spinning"
 // da gestire qui, solo il flag groupReportRefreshing per evitare doppie
 // chiamate in corsa.
-async function handleGroupReportRefresh() {
+async function handleGroupReportRefresh(force = false) {
   if (groupReportRefreshing) return;
 
   if (!navigator.onLine) {
@@ -818,10 +818,19 @@ async function handleGroupReportRefresh() {
   groupReportRefreshing = true;
 
   try {
-    const report = await regenerateGroupReport();
+    const report = await regenerateGroupReport(force);
     groupReportCache = report;
     renderGroupReportScreen();
-    showToast("Report di gruppo generato.", "success", "Report");
+    // Il server puo' aver rifiutato di rigenerare perche' il report e'
+    // ancora recente: in quel caso restituisce quello che c'e' gia', e dirlo
+    // "generato" sarebbe una bugia.
+    showToast(
+      report?.skipped
+        ? `Il report ha ${report.days_old} giorni: e' gia' aggiornato.`
+        : "Report di gruppo generato.",
+      report?.skipped ? "info" : "success",
+      "Report",
+    );
   } catch (e) {
     console.error(e);
     showToast(e.message || "Generazione non riuscita. Riprova.", "error", "Report");
@@ -1135,7 +1144,9 @@ function bindGlobalEvents() {
       isIo
         ? "Rigenerare ora il tuo report personale? Userà una chiamata a Claude, anche se non è ancora passato un anno dall'ultimo aggiornamento."
         : "Rigenerare ora il report di gruppo? Userà una chiamata a Claude, anche se non è ancora passato un anno dall'ultimo aggiornamento.",
-      async () => { if (isIo) await handleReportRefresh(); else await handleGroupReportRefresh(); },
+      // Il gesto nascosto e' l'unico che forza: l'utente ha appena confermato
+      // di voler spendere una chiamata a Claude.
+      async () => { if (isIo) await handleReportRefresh(); else await handleGroupReportRefresh(true); },
       { yesLabel: "Rigenera", danger: false }
     );
   });

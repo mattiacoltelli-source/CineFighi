@@ -448,8 +448,12 @@ export async function loadLatestGroupReport(onUpdate) {
   return await fetchTask;
 }
 
-export async function regenerateGroupReport() {
-  const { data, error } = await supabase.functions.invoke("generate-group-report", { body: {} });
+// `force` scavalca il freno lato server (vedi la Edge Function: un report
+// piu' recente di 90 giorni non viene rigenerato). Lo passa solo il gesto
+// nascosto dei 7 tap, che chiede conferma prima di spendere una chiamata a
+// Claude; tutto il resto chiama senza, e quindi non puo' fare danni.
+export async function regenerateGroupReport(force = false) {
+  const { data, error } = await supabase.functions.invoke("generate-group-report", { body: { force } });
   if (error) throw error;
   if (data?.error) throw new Error(data.error);
   if (data) {
