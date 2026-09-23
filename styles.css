@@ -865,6 +865,24 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
   touch-action:none; cursor:grab;
 }
 .dna-stage.is-panning { cursor:grabbing; }
+
+/* Su uno schermo corto il pannello sotto può diventare alto — con un titolo
+   amato da sette persone sono tre righe di nomi — e finirebbe dietro alla
+   barra di navigazione. Lì il riquadro della rete cede un po' di spazio:
+   l'informazione sta tutta a schermo senza scorrere, che è quello che conta. */
+@media (max-height: 780px) {
+  .dna-stage { height:36vh; min-height:210px; }
+}
+/* Telefoni davvero piccoli: il riquadro cede ancora, e le pastiglie dei
+   votanti si stringono. Qui lo spazio non basta per essere generosi. */
+@media (max-height: 680px) {
+  .dna-stage { height:30vh; min-height:170px; }
+  .dna__intro { font-size:12px; margin-bottom:8px; }
+  .dna-panel { margin-top:9px; min-height:0; }
+  .dna-fans { gap:5px; }
+  .dna-fan { padding:2px 8px 2px 3px; }
+  .dna-pills { margin-top:6px; }
+}
 /* Sfumatura ai quattro bordi: un nodo che esce dall'inquadratura si spegne
    invece di essere tranciato di netto, che sembrava un errore di disegno.
    È una maschera statica su un layer già composto, non costa un ridisegno. */
