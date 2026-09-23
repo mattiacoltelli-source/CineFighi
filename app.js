@@ -28,6 +28,7 @@ import {
   renderDetailFacts, renderVotesList, renderReportMeta, renderGroupReportMeta, renderReportContent, renderReportGate,
   haptic, animateValue
 } from "./ui.js?v=89252ec";
+import { initDnaView, showDna, resetDna } from "./dna-view.js?v=89252ec";
 
 const MIN_VOTED_FOR_REPORT = 50;
 // Stessa soglia del Report (sopra): sotto i 50 voti anche qui il profilo di
@@ -407,7 +408,7 @@ function goToScreen(screen) {
   if (getVisibleScreen() === "home" && screen !== "home") markHomeSeen();
   switchScreen(screen);
   if (screen === "home") renderHome();
-  if (screen === "tonight") renderTonightPeoplePicker();
+  if (screen === "tonight") showDna({ db, users, currentUser });
 }
 
 function renderHome() {
@@ -2319,29 +2320,13 @@ function bindGlobalEvents() {
 
   document.getElementById("reportRefreshBtn").addEventListener("click", () => { haptic(8); handleReportRefresh(); });
 
-  document.getElementById("tonightPeopleEditBtn").addEventListener("click", () => {
-    tonightPeoplePanelOpen = !tonightPeoplePanelOpen;
-    haptic(8);
-    renderTonightPeoplePicker();
-  });
-  document.getElementById("tonightPeoplePanel").addEventListener("click", e => {
-    const btn = e.target.closest(".tonight-people-row");
-    if (!btn || btn.disabled) return;
-    const user = btn.dataset.user;
-    if (user === currentUser) return; // sei sempre incluso, non ti si toglie
-    tonightSelectedPeople = tonightSelectedPeople.includes(user)
-      ? tonightSelectedPeople.filter(u => u !== user)
-      : [...tonightSelectedPeople, user];
-    haptic(8);
-    renderTonightPeoplePicker();
-    document.getElementById("tonightResult").innerHTML = `<p class="tonight__hint">Premi un pulsante per ricevere un consiglio.</p>`;
-  });
-  document.getElementById("tonightBtn").addEventListener("click", recommendTonightFive);
-  document.getElementById("tonightDiscoverBtn").addEventListener("click", discoverByTaste);
-  document.getElementById("tonightClassicBtn").addEventListener("click", suggestClassic);
-  document.getElementById("tonightResult").addEventListener("click", e => {
-    const btn = e.target.closest(".action-add-tonight");
-    if (btn) handleAddFromTonight(btn.dataset.id, btn.dataset.type, btn.dataset.status);
+  // DNA (la schermata che prima era "Stasera"). Il tap sui nodi lo gestisce
+  // dna-view.js in delega; qui resta solo il "Ricomincia da me", che ha
+  // bisogno di db/users/currentUser e quindi vive di là da app.js.
+  initDnaView();
+  document.getElementById("dnaResetBtn").addEventListener("click", () => {
+    resetDna();
+    showDna({ db, users, currentUser });
   });
 
   document.getElementById("detailBackBtn").addEventListener("click", () => { haptic(8); history.back(); });

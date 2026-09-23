@@ -1,0 +1,369 @@
+// ─── dna.js ──────────────────────────────────────────────────────────────────
+// Il "DNA del gruppo": costruisce la rete che collega persone, film e generi
+// partendo dalla libreria già in memoria (`db`, vedi storage.js::fetchLibrary).
+//
+// Questo file non tocca il DOM e non fa NESSUNA chiamata di rete: riceve la
+// libreria, restituisce nodi e archi. Il disegno è in dna-view.js.
+//
+// Due scelte di fondo, decise guardando i dati veri del gruppo:
+//
+//  1. Non esiste un arco diretto Persona→Persona. Tutte e 21 le coppie di
+//     utenti hanno almeno un film in comune: un arco sempre presente non
+//     direbbe nulla. Due persone si incontrano solo ATTRAVERSO un film o un
+//     genere — è quello il collegamento che porta informazione.
+//
+//  2. Niente casualità. Stesso tap, stessa rete: l'ordine dei vicini è
+//     completamente deterministico (vedi pickNeighbours), così l'esplorazione
+//     è riproducibile e i test non diventano instabili.
+
+// Soglia "questo film mi è piaciuto". NON è una soglia nuova: è la stessa già
+// usata dall'app (vedi il vecchio blocco Stasera e le statistiche).
+export const LIKE_THRESHOLD = 7;
+
+// TMDB usa tassonomie diverse per film e serie: la stessa cosa arriva con due
+// nomi a seconda del media_type. Senza questa mappa la rete mostrerebbe
+// "Fantascienza" e "Sci-Fi & Fantasy" come due generi scollegati.
+export const GENRE_ALIASES = {
+  "sci-fi & fantasy": "Fantascienza",
+  "action & adventure": "Azione",
+  "war & politics": "Guerra"
+};
+
+// "televisione film" (TMDB: "TV Movie") non è un genere, è un formato:
+// non dice niente sui gusti di nessuno.
+export const GENRE_IGNORED = new Set(["televisione film"]);
+
+export function normalizeGenres(names) {
+  const out = [];
+  for (const raw of names || []) {
+    const clean = String(raw || "").trim();
+    if (!clean) continue;
+    const key = clean.toLowerCase();
+    if (GENRE_IGNORED.has(key)) continue;
+    const name = GENRE_ALIASES[key] || clean;
+    if (!out.includes(name)) out.push(name);
+  }
+  return out;
+}
+
+// ─── ID DEI NODI ─────────────────────────────────────────────────────────────
+// Tipizzati e stabili: sono anche la chiave con cui un nodo già presente nella
+// rete viene riusato invece che duplicato (è così che nascono i "ponti").
+
+export const personId = (name) => `persona:${name}`;
+export const filmId = (id) => `film:${id}`;
+export const genreId = (name) => `genere:${name}`;
+
+export function nodeType(id) {
+  const i = id.indexOf(":");
+  return i === -1 ? "" : id.slice(0, i);
+}
+
+// ─── INDICE ──────────────────────────────────────────────────────────────────
+// Una passata sola sulla libreria, poi tutto è lookup O(1). Con ~570 titoli
+// costa nulla, e va rifatta solo quando cambiano i voti.
+
+export function buildIndex(db, users = null) {
+  const known = users && users.length ? new Set(users) : null;
+
+  const films = new Map();       // filmId -> { id, key, title, year, poster_path, media_type, director, genres, fans }
+  const byPerson = new Map();    // nome    -> [{ id, w }]  film amati, con il voto come peso
+  const byGenre = new Map();     // genere  -> [{ id, w }]  film del genere, con il n. di fan come peso
+  const genrePop = new Map();    // genere  -> quanti film amati da almeno uno
+
+  for (const t of db || []) {
+    const genres = normalizeGenres(t.genre_names);
+
+    // I fan sono ordinati per nome: serve a rendere deterministico ogni
+    // successivo ordinamento a parità di peso.
+    const fans = Object.entries(t.votes || {})
+      .filter(([name, v]) => Number(v?.vote) >= LIKE_THRESHOLD && (!known || known.has(name)))
+      .map(([name, v]) => ({ name, vote: Number(v.vote) }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    // Un titolo che non è piaciuto a nessuno non entra nella rete: la rete
+    // mostra ciò che è stato amato, non il catalogo. Sono ~1/3 dei titoli,
+    // ed è il motivo della nota in fondo alla schermata.
+    if (!fans.length) continue;
+
+    const key = filmId(t.id);
+    films.set(key, {
+      id: String(t.id),
+      key,
+      title: t.title,
+      year: t.year,
+      poster_path: t.poster_path,
+      media_type: t.media_type,
+      director: t.director || "",
+      genres,
+      fans
+    });
+
+    for (const f of fans) {
+      if (!byPerson.has(f.name)) byPerson.set(f.name, []);
+      byPerson.get(f.name).push({ id: key, w: f.vote });
+    }
+    for (const g of genres) {
+      if (!byGenre.has(g)) byGenre.set(g, []);
+      byGenre.get(g).push({ id: key, w: fans.length });
+      genrePop.set(g, (genrePop.get(g) || 0) + 1);
+    }
+  }
+
+  return { films, byPerson, byGenre, genrePop };
+}
+
+// ─── VICINI DI UN NODO ───────────────────────────────────────────────────────
+// Tutti i vicini possibili (non ancora filtrati per quelli già collegati).
+
+export function neighboursOf(index, id) {
+  const type = nodeType(id);
+  const key = id.slice(type.length + 1);
+
+  if (type === "persona") {
+    return (index.byPerson.get(key) || []).map(e => ({ id: e.id, kind: "ama", w: e.w }));
+  }
+
+  if (type === "film") {
+    const film = index.films.get(id);
+    if (!film) return [];
+    return [
+      ...film.fans.map(f => ({ id: personId(f.name), kind: "ama", w: f.vote })),
+      // Peso di un genere = quanto è diffuso tra i film amati dal gruppo.
+      // A parità di tutto il resto si espande prima il genere più
+      // rappresentativo, non il primo che TMDB ha messo in lista.
+      ...film.genres.map(g => ({ id: genreId(g), kind: "appartiene", w: index.genrePop.get(g) || 0 }))
+    ];
+  }
+
+  if (type === "genere") {
+    return (index.byGenre.get(key) || []).map(e => ({ id: e.id, kind: "appartiene", w: e.w }));
+  }
+
+  return [];
+}
+
+// ─── RETE ────────────────────────────────────────────────────────────────────
+
+export function createNetwork(index, rootUser) {
+  const net = {
+    rootId: personId(rootUser),
+    nodes: new Map(),
+    edges: [],
+    linked: new Set()   // "a|b" ordinato: evita archi doppi
+  };
+  addNode(net, index, net.rootId, null);
+  return net;
+}
+
+function labelFor(index, id) {
+  const type = nodeType(id);
+  const key = id.slice(type.length + 1);
+  if (type === "film") return index.films.get(id)?.title || key;
+  return key;
+}
+
+function metaFor(index, id) {
+  const type = nodeType(id);
+  const key = id.slice(type.length + 1);
+  if (type === "film") {
+    const f = index.films.get(id);
+    return f ? { id: f.id, year: f.year, poster_path: f.poster_path, media_type: f.media_type, director: f.director, fans: f.fans.length } : {};
+  }
+  if (type === "genere") return { count: index.genrePop.get(key) || 0 };
+  if (type === "persona") return { liked: (index.byPerson.get(key) || []).length };
+  return {};
+}
+
+function addNode(net, index, id, parentId) {
+  if (net.nodes.has(id)) return net.nodes.get(id);
+  const node = {
+    id,
+    type: nodeType(id),
+    label: labelFor(index, id),
+    meta: metaFor(index, id),
+    parent: parentId,
+    expanded: false,
+    x: null,
+    y: null
+  };
+  net.nodes.set(id, node);
+  return node;
+}
+
+const edgeKey = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`);
+
+function addEdge(net, a, b, kind, w) {
+  const k = edgeKey(a, b);
+  if (net.linked.has(k)) return null;
+  net.linked.add(k);
+  const edge = { a, b, kind, w };
+  net.edges.push(edge);
+  return edge;
+}
+
+export function degree(net, id) {
+  let n = 0;
+  for (const e of net.edges) if (e.a === id || e.b === id) n++;
+  return n;
+}
+
+// ─── SCELTA DEI VICINI DA MOSTRARE ───────────────────────────────────────────
+//
+// L'ordine è la parte che decide se la rete racconta qualcosa o se cresce
+// come un albero piatto. In ordine di priorità:
+//
+//   1. PONTE — il candidato è già nella rete (2 punti), oppure è nuovo ma ha
+//      almeno un altro vicino già nella rete (1 punto). Aprirlo chiude un
+//      anello: è esattamente ciò che si vuole vedere.
+//   2. VARIETÀ DI TIPO — a parità di ponte, si alterna il tipo, così un film
+//      non mostra cinque persone di fila prima di un genere.
+//   3. PESO — voto più alto / genere più diffuso.
+//   4. ID — tie-break finale, deterministico.
+
+function bridgeScore(net, index, sourceId, candId) {
+  if (net.nodes.has(candId)) return 2;
+  for (const n of neighboursOf(index, candId)) {
+    if (n.id !== sourceId && net.nodes.has(n.id)) return 1;
+  }
+  return 0;
+}
+
+export function pickNeighbours(net, index, sourceId, limit = 5) {
+  const cands = neighboursOf(index, sourceId)
+    .filter(n => !net.linked.has(edgeKey(sourceId, n.id)))
+    .map(n => ({ ...n, bridge: bridgeScore(net, index, sourceId, n.id), type: nodeType(n.id) }))
+    .sort((a, b) => b.bridge - a.bridge || b.w - a.w || a.id.localeCompare(b.id));
+
+  const picked = [];
+  const perType = new Map();
+  const pool = [...cands];
+
+  while (picked.length < limit && pool.length) {
+    // Non si scende mai di livello di ponte per amore della varietà:
+    // il ponte viene prima, sempre.
+    const topBridge = pool[0].bridge;
+    const tier = pool.filter(c => c.bridge === topBridge);
+    const minSeen = Math.min(...tier.map(c => perType.get(c.type) || 0));
+    const chosen = tier.find(c => (perType.get(c.type) || 0) === minSeen);
+    picked.push(chosen);
+    perType.set(chosen.type, (perType.get(chosen.type) || 0) + 1);
+    pool.splice(pool.indexOf(chosen), 1);
+  }
+
+  return picked;
+}
+
+// Apre un nodo: aggiunge fino a `limit` vicini e i relativi archi.
+// Ritorna gli id dei nodi NUOVI (quelli già presenti hanno solo un arco in più).
+export function expand(net, index, id, limit = 5) {
+  const source = net.nodes.get(id);
+  if (!source) return [];
+  source.expanded = true;
+
+  const added = [];
+  for (const cand of pickNeighbours(net, index, id, limit)) {
+    const isNew = !net.nodes.has(cand.id);
+    addNode(net, index, cand.id, id);
+    addEdge(net, id, cand.id, cand.kind, cand.w);
+    if (isNew) added.push(cand.id);
+  }
+  return added;
+}
+
+// Richiude un nodo. Spariscono solo i nodi che esistevano SOLO grazie a lui:
+// un nodo con altri collegamenti vivi (un ponte) o aperto a mano dall'utente
+// resta dov'è. La rimozione è a cascata, così si richiude anche un ramo
+// profondo in un colpo solo.
+export function collapse(net, id) {
+  const node = net.nodes.get(id);
+  if (!node) return [];
+  node.expanded = false;
+
+  const removed = [];
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const n of [...net.nodes.values()]) {
+      if (n.id === net.rootId || n.expanded) continue;
+      if (!n.parent || !net.nodes.has(n.parent)) continue;
+      if (net.nodes.get(n.parent).expanded) continue;
+      if (degree(net, n.id) > 1) continue;   // è un ponte: resta
+      net.nodes.delete(n.id);
+      for (let i = net.edges.length - 1; i >= 0; i--) {
+        const e = net.edges[i];
+        if (e.a === n.id || e.b === n.id) {
+          net.linked.delete(edgeKey(e.a, e.b));
+          net.edges.splice(i, 1);
+        }
+      }
+      removed.push(n.id);
+      changed = true;
+    }
+  }
+  return removed;
+}
+
+// Distanza in salti da un nodo, su tutta la rete. Serve al renderer per
+// decidere chi disegnare e chi etichettare (vedi il budget DOM in dna-view).
+export function hopsFrom(net, startId) {
+  const hops = new Map([[startId, 0]]);
+  const adj = new Map();
+  for (const e of net.edges) {
+    if (!adj.has(e.a)) adj.set(e.a, []);
+    if (!adj.has(e.b)) adj.set(e.b, []);
+    adj.get(e.a).push(e.b);
+    adj.get(e.b).push(e.a);
+  }
+  const queue = [startId];
+  while (queue.length) {
+    const cur = queue.shift();
+    for (const next of adj.get(cur) || []) {
+      if (hops.has(next)) continue;
+      hops.set(next, hops.get(cur) + 1);
+      queue.push(next);
+    }
+  }
+  return hops;
+}
+
+// ─── REGISTI (pronto per la fase 2) ──────────────────────────────────────────
+// Sostituisce belovedDirectors() del vecchio blocco Stasera, che ordinava i
+// registi per media semplice + un bonus fisso e poi mescolava a caso.
+//
+// Qui la media è "ritirata" verso la media del gruppo in proporzione a quanti
+// film abbiamo di quel regista (shrinkage bayesiano): un regista con un solo
+// 10 non scavalca più chi ne ha sei da 8. Più il bonus per quante persone
+// diverse lo hanno amato — che è l'informazione interessante in un gruppo.
+//
+//   score = (voti × media + K × MEDIA_GRUPPO) / (voti + K) + 0.10 × (persone − 1)
+//
+// Nota: l'indice contiene solo i film amati da almeno una persona, quindi la
+// soglia qui sotto è "almeno 3 film AMATI", non "3 film in catalogo" — più
+// stretta di quella dell'analisi, e più adatta a una rete che per definizione
+// mostra solo ciò che è piaciuto.
+//
+// Non è ancora usata dalla schermata: i nodi Regista arrivano in fase 2.
+export const DIRECTOR_MIN_FILMS = 3;
+const DIRECTOR_PRIOR_WEIGHT = 5;
+const DIRECTOR_PRIOR_MEAN = 6.84;   // media di tutti i voti del gruppo
+
+export function directorScores(index) {
+  const byDirector = new Map();
+  for (const film of index.films.values()) {
+    if (!film.director) continue;
+    if (!byDirector.has(film.director)) byDirector.set(film.director, { films: [], votes: [], people: new Set() });
+    const d = byDirector.get(film.director);
+    d.films.push(film.key);
+    for (const f of film.fans) { d.votes.push(f.vote); d.people.add(f.name); }
+  }
+
+  return [...byDirector.entries()]
+    .filter(([, d]) => d.films.length >= DIRECTOR_MIN_FILMS)
+    .map(([name, d]) => {
+      const sum = d.votes.reduce((a, b) => a + b, 0);
+      const shrunk = (sum + DIRECTOR_PRIOR_WEIGHT * DIRECTOR_PRIOR_MEAN) / (d.votes.length + DIRECTOR_PRIOR_WEIGHT);
+      return { name, films: d.films.length, people: d.people.size, score: shrunk + 0.10 * (d.people.size - 1) };
+    })
+    .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
+}
