@@ -15,26 +15,28 @@ import {
 import { escapeHtml } from "./cine-core.js?v=cf1a482";
 import { avatarHtml, haptic } from "./ui.js?v=cf1a482";
 
-// Quanti vicini apre un tap. Cinque è il numero oltre il quale il ventaglio
-// radiale inizia a sovrapporsi su uno schermo da telefono.
-const MAX_NEIGHBOURS = 5;
+// Quanti vicini apre un tap. Quattro invece di cinque: meno rami per tap
+// vuol dire nodi più grandi e una rete che resta leggibile su un telefono,
+// e il pannello qui sotto racconta comunque tutto quello che un nodo in più
+// avrebbe mostrato.
+const MAX_NEIGHBOURS = 4;
 
 // Budget DOM: oltre questi limiti (misurati DALLA camera, non dalla radice,
 // altrimenti esplorando in profondità sparirebbe tutto) i nodi lontani
 // perdono prima l'etichetta e poi escono dal DOM. Restano comunque in memoria
 // nella rete: tornando indietro ricompaiono identici, stesse posizioni.
-const MAX_DOM_NODES = 40;
-const LABEL_MAX_HOPS = 2;
+const MAX_DOM_NODES = 32;
+const LABEL_MAX_HOPS = 3;
 const DOM_MAX_HOPS = 4;
 
-const RADIUS = 96;          // distanza figlio-genitore
-const MIN_GAP = 78;         // distanza minima tra due nodi qualsiasi (nodo 52px + etichetta)
+const RADIUS = 112;         // distanza figlio-genitore
+const MIN_GAP = 94;         // distanza minima tra due nodi qualsiasi (nodo 62px + etichetta)
 const PLACE_TRIES = 24;
 
 // posterUrl() di cine-core serve immagini w500: qui i poster stanno in un
 // nodo da 48px e possono essercene decine a schermo. w154 è circa dieci volte
 // più leggero e a questa dimensione indistinguibile.
-const DNA_POSTER = "https://image.tmdb.org/t/p/w154";
+const DNA_POSTER = "https://image.tmdb.org/t/p/w185";
 
 let index = null;
 let net = null;
@@ -164,13 +166,20 @@ function expandNode(id, focus = true) {
 
 // ─── RENDER ──────────────────────────────────────────────────────────────────
 
+function initials(name) {
+  return name.trim().split(/\s+/).map(w => w[0]).join("").slice(0, 2).toUpperCase();
+}
+
 function nodeInner(node) {
-  if (node.type === "persona") return avatarHtml(node.label, 42);
+  if (node.type === "persona") return avatarHtml(node.label, 52);
   if (node.type === "film") {
     const src = node.meta.poster_path ? `${DNA_POSTER}${node.meta.poster_path}` : "";
     return src
       ? `<span class="dna-node__poster" style="background-image:url('${src}')"></span>`
       : `<span class="dna-node__poster dna-node__poster--empty">🎬</span>`;
+  }
+  if (node.type === "regista") {
+    return `<span class="dna-node__director">${escapeHtml(initials(node.label))}</span>`;
   }
   return `<span class="dna-node__genre">${escapeHtml(node.label.slice(0, 3).toUpperCase())}</span>`;
 }
@@ -224,40 +233,99 @@ function render() {
   renderPanel(net.nodes.get(focusId));
 }
 
+// Il pannello è il posto dove sta l'informazione: la rete mostra i
+// collegamenti, qui si legge chi, quanto e perché. È il motivo per cui un tap
+// apre pochi rami — quello che non diventa un nodo si legge qui sotto.
 function renderPanel(node) {
   const panel = el("dnaPanel");
   if (!panel || !node) return;
 
-  const chiudi = node.expanded ? `<span class="dna-panel__hint">Toccalo di nuovo per richiudere</span>` : "";
+  const chiudi = node.expanded
+    ? `<span class="dna-panel__hint">Toccalo di nuovo per richiudere</span>`
+    : `<span class="dna-panel__hint">Toccalo per aprire i collegamenti</span>`;
+
+  // "Scheda →" sta nella riga del titolo e non in fondo: su un telefono
+  // piccolo un bottone in coda al pannello finisce dietro la barra di
+  // navigazione, e la scheda è la cosa che si vuole raggiungere subito.
+  const scheda = node.type === "film"
+    ? `<button type="button" class="dna-panel__scheda open-detail" data-id="${escapeHtml(node.meta.id)}">Scheda →</button>`
+    : "";
+
+  panel.innerHTML = `
+    <div class="dna-panel__head">${panelIcon(node)}<strong>${escapeHtml(panelTitle(node))}</strong>${scheda}</div>
+    ${panelBody(node)}
+    ${chiudi}`;
+}
+
+function panelIcon(node) {
+  if (node.type === "persona") return avatarHtml(node.label, 30);
+  if (node.type === "regista") return `<span class="dna-chip dna-chip--regista">${escapeHtml(initials(node.label))}</span>`;
+  if (node.type === "genere") return `<span class="dna-chip dna-chip--genere">${escapeHtml(node.label.slice(0, 3).toUpperCase())}</span>`;
+  return "";
+}
+
+function panelTitle(node) {
+  if (node.type === "film" && node.meta.year) return `${node.label} (${node.meta.year})`;
+  return node.label;
+}
+
+function fansHtml(fans) {
+  return `<div class="dna-fans">${fans
+    .slice()
+    .sort((a, b) => b.vote - a.vote || a.name.localeCompare(b.name))
+    .map(f => `<span class="dna-fan">${avatarHtml(f.name, 22)}<span class="dna-fan__name">${escapeHtml(f.name)}</span><span class="dna-fan__vote">${f.vote.toFixed(1)}</span></span>`)
+    .join("")}</div>`;
+}
+
+function pillsHtml(items) {
+  return `<div class="dna-pills">${items.map(t => `<span class="dna-pill">${escapeHtml(t)}</span>`).join("")}</div>`;
+}
+
+function panelBody(node) {
+  const m = node.meta;
 
   if (node.type === "persona") {
-    const n = node.meta.liked || 0;
-    const chi = node.id === net.rootId ? "Tu" : escapeHtml(node.label);
-    panel.innerHTML = `
-      <div class="dna-panel__head">${avatarHtml(node.label, 28)}<strong>${escapeHtml(node.label)}</strong></div>
-      <p class="dna-panel__line">${chi} ${node.id === net.rootId ? "hai" : "ha"} amato ${n} ${n === 1 ? "titolo" : "titoli"}.</p>
-      ${chiudi}`;
-    return;
+    const n = m.liked || 0;
+    const io = node.id === net.rootId;
+    const generi = (m.topGenres || []).length
+      ? `<p class="dna-panel__line">Generi più presenti: ${m.topGenres.map(g => `${escapeHtml(g.genere)} (${g.film})`).join(" · ")}.</p>`
+      : "";
+    const registi = (m.topDirectors || []).length
+      ? `<p class="dna-panel__line">Registi ricorrenti: ${m.topDirectors.map(d => `${escapeHtml(d.name)} (${d.film})`).join(" · ")}.</p>`
+      : "";
+    return `
+      <p class="dna-panel__line">${io ? "Hai" : "Ha"} amato ${n} ${n === 1 ? "titolo" : "titoli"} (voto 7 o più).</p>
+      ${generi}
+      ${registi}`;
   }
 
   if (node.type === "film") {
-    const anno = node.meta.year ? ` (${node.meta.year})` : "";
-    const regia = node.meta.director ? `<p class="dna-panel__line">Regia di ${escapeHtml(node.meta.director)}.</p>` : "";
-    const fans = node.meta.fans || 0;
-    panel.innerHTML = `
-      <div class="dna-panel__head"><strong>${escapeHtml(node.label)}${anno}</strong></div>
-      <p class="dna-panel__line">Amato da ${fans} ${fans === 1 ? "persona" : "persone"} del gruppo.</p>
-      ${regia}
-      <button type="button" class="btn btn--ghost dna-panel__btn open-detail" data-id="${escapeHtml(node.meta.id)}">Apri la scheda</button>
-      ${chiudi}`;
-    return;
+    const tipo = m.media_type === "tv" ? "Serie" : "Film";
+    const regia = m.director ? `Regia di ${escapeHtml(m.director)}` : "";
+    const fans = m.fans || [];
+    return `
+      <p class="dna-panel__line">${tipo}${regia ? ` · ${regia}` : ""}</p>
+      <p class="dna-panel__line dna-panel__label">Chi l'ha amato (${fans.length})</p>
+      ${fansHtml(fans)}
+      ${(m.genres || []).length ? pillsHtml(m.genres) : ""}`;
   }
 
-  const c = node.meta.count || 0;
-  panel.innerHTML = `
-    <div class="dna-panel__head"><strong>${escapeHtml(node.label)}</strong></div>
+  if (node.type === "regista") {
+    const titoli = (m.titoli || []).length
+      ? `<p class="dna-panel__line">Nella rete: ${m.titoli.map(t => escapeHtml(t)).join(" · ")}${m.films > m.titoli.length ? ` e altri ${m.films - m.titoli.length}` : ""}.</p>`
+      : "";
+    return `
+      <p class="dna-panel__line">${m.films} ${m.films === 1 ? "film amato" : "film amati"} nel gruppo, da ${m.people} ${m.people === 1 ? "persona" : "persone"} diverse.</p>
+      ${titoli}`;
+  }
+
+  const c = m.count || 0;
+  const chi = (m.topFans || []).length
+    ? `<p class="dna-panel__line">Chi lo ama di più: ${m.topFans.map(f => `${escapeHtml(f.name)} (${f.film})`).join(" · ")}.</p>`
+    : "";
+  return `
     <p class="dna-panel__line">${c} ${c === 1 ? "titolo amato" : "titoli amati"} dal gruppo in questo genere.</p>
-    ${chiudi}`;
+    ${chi}`;
 }
 
 // ─── EVENTI ──────────────────────────────────────────────────────────────────
