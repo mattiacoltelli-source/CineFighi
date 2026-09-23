@@ -11,9 +11,9 @@
 
 import {
   buildIndex, createNetwork, expand, collapse, hopsFrom, nodeType
-} from "./dna.js?v=83d6348";
-import { escapeHtml } from "./cine-core.js?v=83d6348";
-import { avatarHtml, haptic } from "./ui.js?v=83d6348";
+} from "./dna.js?v=1c91d26";
+import { escapeHtml } from "./cine-core.js?v=1c91d26";
+import { avatarHtml, haptic } from "./ui.js?v=1c91d26";
 
 // Quanti vicini apre un tap. Quattro invece di cinque: meno rami per tap
 // vuol dire nodi più grandi e una rete che resta leggibile su un telefono,
