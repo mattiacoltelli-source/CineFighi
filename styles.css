@@ -816,10 +816,19 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
   position:absolute; left:0; top:0; width:1px; height:1px;
   overflow:visible; pointer-events:none;
 }
-.dna-edge { stroke: var(--surface3); stroke-width:1.5; }
+/* Archi spessi 2.6px invece di 1.5: a schermo si leggono, e non costa nulla
+   — sono gli stessi <line>, con lo stesso numero di elementi e lo stesso
+   paint. Niente filtri glow, gradienti o animazioni sugli archi: quelli sì
+   che si sentirebbero su un telefono di fascia media.
+   I colori sono esattamente quelli di prima. */
+.dna-edge { stroke: var(--surface3); stroke-width:2.6; stroke-linecap:round; }
 .dna-edge--ama { stroke: rgba(56,189,248,.34); }
 .dna-edge--appartiene { stroke: rgba(255,157,77,.24); }
-.dna-edge--diretto { stroke: rgba(56,189,248,.2); stroke-dasharray:3 4; }
+.dna-edge--diretto { stroke: rgba(56,189,248,.2); stroke-dasharray:4 6; }
+
+/* Gli archi del nodo su cui è centrata la camera: stesso colore, solo un po'
+   più spessi, così si vede a colpo d'occhio a cosa è attaccato. */
+.dna-edge.is-focus { stroke-width:4; }
 .dna-nodes { position:absolute; left:0; top:0; width:0; height:0; }
 
 .dna-node {

@@ -204,7 +204,8 @@ function render() {
     .map(e => {
       const a = net.nodes.get(e.a);
       const b = net.nodes.get(e.b);
-      return `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" class="dna-edge dna-edge--${e.kind}"/>`;
+      const suFocus = e.a === focusId || e.b === focusId ? " is-focus" : "";
+      return `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" class="dna-edge dna-edge--${e.kind}${suFocus}"/>`;
     })
     .join("");
 
