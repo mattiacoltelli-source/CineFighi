@@ -921,6 +921,10 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 /* Gli archi del nodo su cui è centrata la camera: stesso colore, solo un po'
    più spessi, così si vede a colpo d'occhio a cosa è attaccato. */
 .dna-edge.is-focus { stroke-width:4; }
+/* L'arco che porta a un punto d'incontro: stesso trattamento del focus
+   (solo più spesso, stesso colore del tipo di arco) — è il tratto che
+   racconta l'incrocio fra i rami, non un colore in più da imparare. */
+.dna-edge.is-shared { stroke-width:4; }
 .dna-nodes { position:absolute; left:0; top:0; width:0; height:0; }
 
 .dna-node {
@@ -987,6 +991,17 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .dna-node.is-focus .avatar { box-shadow: 0 0 0 2px var(--cyan); }
 .dna-node.is-root .avatar { box-shadow: 0 0 0 2px var(--orange); }
 .dna-node.is-focus.is-root .avatar { box-shadow: 0 0 0 2px var(--cyan); }
+/* Punto d'incontro (modalità condivisa, 2-3 persone): lo stesso verde già
+   usato per "aperto" (il pallino qui sotto), ma come anello — riuso un
+   colore del sistema invece di introdurne uno nuovo. Stessa specificità
+   dell'anello di focus (tre classi), quindi vince chi sta dopo nel foglio:
+   qui sotto, di proposito — un nodo condiviso resta verde anche da attivo,
+   e il grassetto dell'etichetta (.is-focus .dna-node__label) basta comunque
+   a dire "è questo che stai guardando". Non può capitare sulla radice: è
+   sempre una persona, mai un punto d'incontro (vedi isMeetingPoint). */
+.dna-node.is-shared .dna-node__poster,
+.dna-node.is-shared .dna-node__genre,
+.dna-node.is-shared .dna-node__director { box-shadow: 0 0 0 2px var(--green); }
 .dna-node.is-open::after {
   content:""; position:absolute; top:-2px; right:2px;
   width:8px; height:8px; border-radius:50%; background: var(--green);
@@ -1005,6 +1020,10 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .dna-panel__head strong { flex:1; min-width:0; }
 .dna-panel__head strong { font-family: var(--font-display); font-size:15px; color: var(--text); }
 .dna-panel__line { font-size:13px; color: var(--text2); margin:2px 0; }
+/* Riga del punto d'incontro: peso e colore come il resto del pannello, solo
+   il testo in verde — niente pillola, niente sfondo, coerente con quanto è
+   sobrio tutto il resto di questo pannello. */
+.dna-panel__line--shared { color: var(--green); font-weight:600; }
 .dna-panel__scheda {
   flex-shrink:0; background:none; border:0; padding:4px 0 4px 8px; cursor:pointer;
   font-family: var(--font-display); font-weight:700; font-size:12px; color: var(--cyan);

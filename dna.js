@@ -64,14 +64,32 @@ export function nodeType(id) {
 // Una passata sola sulla libreria, poi tutto è lookup O(1). Con ~570 titoli
 // costa nulla, e va rifatta solo quando cambiano i voti.
 
+// Con esattamente 2 o 3 persone nell'indice, "quanti dei selezionati amano
+// questa cosa" è di per sé l'informazione interessante — il punto della
+// modalità condivisa (vedi la sezione "CANDIDATI CONDIVISI" più sotto). Con
+// il gruppo intero o con una persona sola quel numero non direbbe niente
+// (con 7 persone quasi tutto è amato "da qualcuno"), quindi resta un modo
+// di ordinare, non un concetto nuovo nella rete: si accende da solo quando
+// la selezione ha la taglia giusta, senza toccare gli altri casi.
+function isModalitaCondivisa(users) {
+  return !!(users && (users.length === 2 || users.length === 3));
+}
+
 export function buildIndex(db, users = null) {
   const known = users && users.length ? new Set(users) : null;
+  const condivisa = isModalitaCondivisa(users);
 
   const films = new Map();       // filmId -> { id, key, title, year, poster_path, media_type, director, genres, fans }
   const byPerson = new Map();    // nome    -> [{ id, w }]  film amati, con il voto come peso
   const byGenre = new Map();     // genere  -> [{ id, w }]  film del genere, con il n. di fan come peso
   const genrePop = new Map();    // genere  -> quanti film amati da almeno uno
   const byDirector = new Map();  // regista -> [{ id, w }]  suoi film amati
+  // Chi, fra le persone nell'indice, ama almeno un film di quel genere/
+  // regista — popolate solo per calcolare "quanti dei selezionati" in
+  // modalità condivisa (vedi sharedCountOf). Per un film basta fans.length,
+  // già disponibile: non serve una mappa a parte.
+  const genreFans = new Map();   // genere  -> Set(nome)
+  const directorFans = new Map(); // regista -> Set(nome)
 
   for (const t of db || []) {
     const genres = normalizeGenres(t.genre_names);
@@ -109,14 +127,25 @@ export function buildIndex(db, users = null) {
       if (!byGenre.has(g)) byGenre.set(g, []);
       byGenre.get(g).push({ id: key, w: fans.length });
       genrePop.set(g, (genrePop.get(g) || 0) + 1);
+      if (condivisa) {
+        if (!genreFans.has(g)) genreFans.set(g, new Set());
+        for (const f of fans) genreFans.get(g).add(f.name);
+      }
     }
     if (t.director) {
       if (!byDirector.has(t.director)) byDirector.set(t.director, []);
       byDirector.get(t.director).push({ id: key, w: fans.length });
+      if (condivisa) {
+        if (!directorFans.has(t.director)) directorFans.set(t.director, new Set());
+        for (const f of fans) directorFans.get(t.director).add(f.name);
+      }
     }
   }
 
-  const index = { films, byPerson, byGenre, genrePop, byDirector, directors: new Map(), personDirectors: new Map() };
+  const index = {
+    films, byPerson, byGenre, genrePop, byDirector, genreFans, directorFans,
+    directors: new Map(), personDirectors: new Map(), shared: condivisa
+  };
   // Solo i registi che superano la soglia diventano nodi: uno con un film solo
   // sarebbe un vicolo cieco, non un pezzo di DNA del gruppo.
   for (const d of directorScores(index)) index.directors.set(d.name, d);
@@ -124,6 +153,16 @@ export function buildIndex(db, users = null) {
   // I registi di ciascuna persona. Senza questo collegamento i registi
   // sarebbero quasi invisibili: solo 1 film amato su 4 e' di un regista
   // sopra soglia, quindi aprendo un film spesso non ne comparirebbe nessuno.
+  //
+  // In modalità condivisa la soglia scende a 1: con solo 2-3 persone nel
+  // conteggio, pretendere 2 film dello STESSO regista da ciascuno è tanto —
+  // verificato sui dati veri, con soglia 2 quasi tutte le 21 coppie del
+  // gruppo avevano comunque un regista in comune, ma abbassarla a 1 fa
+  // emergere il segnale ovunque invece che a fatica. Non è un secondo
+  // algoritmo: è lo stesso filtro, con un numero diverso a seconda di quante
+  // persone si stanno guardando — la soglia normale (2) resta intatta per
+  // Tutti / 1 persona / 4 o più.
+  const sogliaRegista = condivisa ? DIRECTOR_MIN_PER_PERSON_SHARED : DIRECTOR_MIN_PER_PERSON;
   for (const [name, entries] of byPerson) {
     const tally = new Map();
     for (const e of entries) {
@@ -131,7 +170,7 @@ export function buildIndex(db, users = null) {
       if (dir && index.directors.has(dir)) tally.set(dir, (tally.get(dir) || 0) + 1);
     }
     const suoi = [...tally.entries()]
-      .filter(([, n]) => n >= DIRECTOR_MIN_PER_PERSON)
+      .filter(([, n]) => n >= sogliaRegista)
       .map(([dir, n]) => ({ id: directorId(dir), n }))
       .sort((a, b) => b.n - a.n || a.id.localeCompare(b.id));
     if (suoi.length) index.personDirectors.set(name, suoi);
@@ -298,10 +337,14 @@ export function degree(net, id) {
 //   1. PONTE — il candidato è già nella rete (2 punti), oppure è nuovo ma ha
 //      almeno un altro vicino già nella rete (1 punto). Aprirlo chiude un
 //      anello: è esattamente ciò che si vuole vedere.
-//   2. VARIETÀ DI TIPO — a parità di ponte, si alterna il tipo, così un film
-//      non mostra cinque persone di fila prima di un genere.
-//   3. PESO — voto più alto / genere più diffuso.
-//   4. ID — tie-break finale, deterministico.
+//   2. CONDIVISIONE (solo in modalità condivisa, vedi sotto) — fra due
+//      candidati con lo stesso livello di ponte, va prima quello amato da
+//      più delle persone che si stanno guardando. Fuori da questa modalità
+//      vale sempre 0 per tutti: non cambia niente.
+//   3. VARIETÀ DI TIPO — a parità delle prime due, si alterna il tipo, così
+//      un film non mostra cinque persone di fila prima di un genere.
+//   4. PESO — voto più alto / genere più diffuso.
+//   5. ID — tie-break finale, deterministico.
 
 function bridgeScore(net, index, sourceId, candId) {
   if (net.nodes.has(candId)) return 2;
@@ -311,11 +354,36 @@ function bridgeScore(net, index, sourceId, candId) {
   return 0;
 }
 
+// ─── CANDIDATI CONDIVISI (2-3 persone selezionate) ───────────────────────────
+//
+// Quante delle persone nell'indice amano questa cosa. Con "Tutti" o con una
+// persona sola il numero non direbbe niente (quasi tutto è amato "da
+// qualcuno" su un gruppo di 7) — per questo conta solo quando
+// index.shared è vero, cioè quando buildIndex è stato costruito su
+// esattamente 2 o 3 persone (vedi isModalitaCondivisa).
+//
+// Un film lo sa già da solo (fans è già filtrato alle sole persone
+// nell'indice): non serve una mappa a parte. Genere e regista usano le
+// mappe costruite in buildIndex proprio per questo.
+export function sharedCountOf(index, id) {
+  const type = nodeType(id);
+  const key = id.slice(type.length + 1);
+  if (type === "film") return index.films.get(id)?.fans.length || 0;
+  if (type === "genere") return index.genreFans?.get(key)?.size || 0;
+  if (type === "regista") return index.directorFans?.get(key)?.size || 0;
+  return 0;
+}
+
 export function pickNeighbours(net, index, sourceId, limit = 5) {
   const cands = neighboursOf(index, sourceId)
     .filter(n => !net.linked.has(edgeKey(sourceId, n.id)))
-    .map(n => ({ ...n, bridge: bridgeScore(net, index, sourceId, n.id), type: nodeType(n.id) }))
-    .sort((a, b) => b.bridge - a.bridge || b.w - a.w || a.id.localeCompare(b.id));
+    .map(n => ({
+      ...n,
+      bridge: bridgeScore(net, index, sourceId, n.id),
+      shared: index.shared ? sharedCountOf(index, n.id) : 0,
+      type: nodeType(n.id)
+    }))
+    .sort((a, b) => b.bridge - a.bridge || b.shared - a.shared || b.w - a.w || a.id.localeCompare(b.id));
 
   const picked = [];
   const perType = new Map();
@@ -430,6 +498,10 @@ export const DIRECTOR_MIN_FILMS = 3;
 // Un film solo non dice niente sui gusti: un regista compare tra i TUOI
 // quando ne hai amati almeno due.
 export const DIRECTOR_MIN_PER_PERSON = 2;
+// Variante usata solo in modalità condivisa (buildIndex, 2-3 persone
+// selezionate): con un conteggio così piccolo un film solo di un regista
+// è già un indizio, vedi il commento in buildIndex.
+export const DIRECTOR_MIN_PER_PERSON_SHARED = 1;
 const DIRECTOR_PRIOR_WEIGHT = 5;
 const DIRECTOR_PRIOR_MEAN = 6.84;   // media di tutti i voti del gruppo
 
