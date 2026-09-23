@@ -946,7 +946,18 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .dna-edge.dna-h2 { opacity:.6; }
 .dna-edge.dna-h3 { opacity:.34; }
 .dna-edge.dna-h4 { opacity:.2; }
-.dna-node, .dna-edge { transition: opacity .2s ease-out; }
+/* ATTENZIONE alla shorthand: `button` più su dichiara
+   `transition: transform ...`, e scrivere qui solo `opacity` la
+   cancellerebbe. Vanno elencate entrambe. */
+.dna-node, .dna-edge { transition: opacity .2s ease-out, transform var(--t-fast) var(--ease); }
+
+/* Un nodo è un <button>, quindi prende anche `button:active { transform:
+   scale(.96) }`. Quella regola SOSTITUIREBBE il translate che lo posiziona:
+   durante la pressione il nodo salterebbe di decine di pixel e il tocco
+   andrebbe perso, perché il click viene consegnato dopo il rilascio, quando
+   sotto il dito non c'è più niente. Qui la pressione si somma al
+   posizionamento invece di rimpiazzarlo. */
+.dna-node:active { transform: translate(-50%, -50%) scale(.94); }
 .dna-node.is-focus .dna-node__label { color: var(--text); font-weight:700; }
 
 .dna-node__poster {
