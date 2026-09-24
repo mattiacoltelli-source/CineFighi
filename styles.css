@@ -691,11 +691,14 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
    maschera sotto è una seconda rete di sicurezza sullo stesso problema. */
 .user-picker__glow {
   position:absolute; left:0; right:0; top:0; height:300px; z-index:0; pointer-events:none;
+  /* Il primo strato (in cima, dipinge sopra gli altri due) sfuma verso lo
+     sfondo pieno a partire da metà altezza: niente mask-image, che su
+     browser/WebView mobili reali non sfuma sempre in modo affidabile come
+     su Chromium — questo è solo background, universale. */
   background:
+    linear-gradient(to bottom, transparent 0%, transparent 40%, var(--bg) 100%),
     radial-gradient(circle 210px at 24% 90px, rgba(56,189,248,.30), transparent),
     radial-gradient(circle 210px at 76% 120px, rgba(255,157,77,.22), transparent);
-  -webkit-mask-image: linear-gradient(to bottom, black 0%, black 45%, transparent 100%);
-  mask-image: linear-gradient(to bottom, black 0%, black 45%, transparent 100%);
 }
 .user-picker__icon { font-size:40px; text-align:center; margin-bottom:10px; }
 .user-picker__title { font-family: var(--font-display); font-size:24px; font-weight:900; text-align:center;
