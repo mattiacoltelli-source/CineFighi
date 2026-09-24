@@ -419,6 +419,20 @@ function isMeetingPoint(n) {
   return sharedCountOf(index, n.id) === selectedPeople.length;
 }
 
+// Quanto è amato un film, in due gradini (0 = niente, 1 = leggero, 2 =
+// forte): sul numero di fan che lo hanno votato 7+, sulla scala di un
+// gruppo di poche persone. Solo film — persone, generi e registi non hanno
+// questo effetto — e solo fuori dalla modalità condivisa: lì il segnale che
+// conta è già il verde di isMeetingPoint, e i due non devono mai accendersi
+// sullo stesso nodo.
+function lovedLevel(n) {
+  if (n.type !== "film" || index?.shared) return 0;
+  const fan = (n.meta.fans || []).length;
+  if (fan >= 5) return 2;
+  if (fan >= 3) return 1;
+  return 0;
+}
+
 function render() {
   const nodesEl = el("dnaNodes");
   const edgesEl = el("dnaEdges");
@@ -467,7 +481,10 @@ function render() {
       withLabel ? "" : "is-far",
       // Punto d'incontro: lo ama ognuna delle persone che stai guardando.
       // Solo in modalità condivisa — vedi isMeetingPoint.
-      isMeetingPoint(n) ? "is-shared" : ""
+      isMeetingPoint(n) ? "is-shared" : "",
+      // "Molto amato": vedi lovedLevel. Mai insieme a is-shared (si escludono
+      // a vicenda sulla modalità condivisa).
+      lovedLevel(n) ? `is-loved-${lovedLevel(n)}` : ""
     ].filter(Boolean).join(" ");
     return `<button type="button" class="${cls}" data-node="${escapeHtml(n.id)}"
       style="left:${n.x.toFixed(1)}px;top:${n.y.toFixed(1)}px"

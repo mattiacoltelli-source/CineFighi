@@ -101,3 +101,55 @@ test("toccare un nodo aggiorna sempre il pannello", async ({ page }) => {
   expect(dopo.attivo, "il nodo toccato non e' diventato quello attivo").toBe(altri[0]);
   expect(dopo.pannello, "il pannello e' rimasto vuoto").toBeGreaterThan(0);
 });
+
+async function selezionaPersone(page: import("@playwright/test").Page, nomi: string[]): Promise<void> {
+  await page.locator("#dnaPeopleBtn").click();
+  for (const nome of nomi) {
+    await page.locator(`#dnaPeopleList .dna-sheet__row[data-user="${nome}"]`).click();
+  }
+  await page.locator("#dnaPeopleDoneBtn").click();
+  await page.locator("#dnaNodes .dna-node").first().waitFor({ state: "visible", timeout: 30_000 });
+}
+
+// L'alone dorato dei "molto amati" (vedi lovedLevel in dna-view.js) e l'anello
+// verde dei punti d'incontro (isMeetingPoint) raccontano due cose diverse e
+// non devono mai accendersi sullo stesso nodo: il primo vale fuori dalla
+// modalita' condivisa, il secondo solo dentro (2-3 persone selezionate).
+test("l'alone dorato dei molto amati e l'anello verde dei punti d'incontro non compaiono mai insieme", async ({ page }) => {
+  const guasti = osserva(page);
+  const scritture = soloLettura(page);
+  await entra(page);
+  await vaiA(page, "tonight");
+  await page.locator("#dnaNodes .dna-node").first().waitFor({ state: "visible", timeout: 30_000 });
+
+  await page.locator("#dnaPeopleBtn").click();
+  const persone = await page.locator("#dnaPeopleList .dna-sheet__row[data-user]").evaluateAll(
+    els => els.map(e => e.getAttribute("data-user")).filter((u): u is string => !!u && u !== "*")
+  );
+  await page.locator("#dnaPeopleDoneBtn").click();
+  test.skip(persone.length < 4, "serve un gruppo di almeno 4 persone per verificare entrambe le modalita'");
+
+  // 2 persone: modalita' condivisa stretta. L'alone dorato non deve comparire.
+  await selezionaPersone(page, [persone[0], persone[1]]);
+  await esplora(page, 8);
+  const condivisa = await page.evaluate(() => ({
+    loved: document.querySelectorAll(".dna-node.is-loved-1, .dna-node.is-loved-2").length,
+  }));
+  expect(condivisa.loved, "l'alone dorato non deve comparire con 2 persone selezionate").toBe(0);
+
+  // 4 persone: fuori dalla modalita' condivisa. L'anello verde deve sparire,
+  // e in nessun momento i due segnali devono coincidere sullo stesso nodo.
+  await selezionaPersone(page, [persone[2], persone[3]]);
+  await esplora(page, 8);
+  const fuori = await page.evaluate(() => ({
+    shared: document.querySelectorAll(".dna-node.is-shared").length,
+    lovedEShared: document.querySelectorAll(
+      ".dna-node.is-loved-1.is-shared, .dna-node.is-loved-2.is-shared"
+    ).length,
+  }));
+  expect(fuori.shared, "l'anello verde non deve comparire con 4 persone selezionate").toBe(0);
+  expect(fuori.lovedEShared, "alone dorato e anello verde non devono mai comparire sullo stesso nodo").toBe(0);
+
+  expect(guasti, `guasti esplorando il DNA:\n${guasti.join("\n")}`).toEqual([]);
+  expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
+});
