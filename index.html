@@ -63,11 +63,14 @@
   <div id="userPickerOverlay" class="user-picker hidden">
     <div class="user-picker__card">
       <button id="userPickerClose" class="user-picker__close hidden">✕</button>
+      <div class="user-picker__glow" aria-hidden="true"></div>
       <div class="user-picker__icon">🎬</div>
       <h1 class="user-picker__title">CineFighi</h1>
       <p class="user-picker__sub">Chi sei tu?</p>
 
-      <div id="userPickerList" class="user-picker__list"></div>
+      <div class="user-picker__list-wrap">
+        <div id="userPickerList" class="user-picker__list"></div>
+      </div>
 
       <p id="userPickerFullNote" class="user-picker__note hidden">
         Gruppo al completo (15/15). Seleziona un nome esistente.
@@ -76,7 +79,13 @@
       <div id="userPickerAddRow" class="user-picker__add-row">
         <div class="user-picker__divider"><span>oppure</span></div>
         <div class="user-picker__add">
-          <input id="userPickerInput" type="text" placeholder="Scrivi il tuo nome" maxlength="24" />
+          <div class="user-picker__input-wrap">
+            <svg class="user-picker__input-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="2"/>
+              <path d="M4 20c1.6-4 4.8-6 8-6s6.4 2 8 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            <input id="userPickerInput" type="text" placeholder="Scrivi il tuo nome" maxlength="24" />
+          </div>
           <button id="userPickerAddBtn" class="btn">Entra</button>
         </div>
       </div>

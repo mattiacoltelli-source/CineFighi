@@ -15,9 +15,6 @@ export function getCurrentUser() {
 export function setCurrentUser(name) {
   try { localStorage.setItem(CURRENT_USER_KEY, name); } catch {}
 }
-export function clearCurrentUser() {
-  try { localStorage.removeItem(CURRENT_USER_KEY); } catch {}
-}
 
 // ─── "VISTO L'ULTIMA VOLTA" (solo sul dispositivo) ───────────────────────────
 // Usato solo per marcare in modo discreto i titoli aggiunti da qualcun altro

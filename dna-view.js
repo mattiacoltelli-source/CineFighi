@@ -10,7 +10,7 @@
 // soprattutto non fa ballare i nodi già piazzati ad ogni apertura.
 
 import {
-  buildIndex, createNetwork, expand, collapse, hopsFrom, nodeType, sharedCountOf, LIKE_THRESHOLD
+  buildIndex, createNetwork, expand, collapse, hopsFrom, sharedCountOf, LIKE_THRESHOLD
 } from "./dna.js?v=048b3a4";
 import { escapeHtml } from "./cine-core.js?v=048b3a4";
 import { avatarHtml, haptic } from "./ui.js?v=048b3a4";

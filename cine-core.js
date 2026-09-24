@@ -14,15 +14,6 @@ const GENRE_MAP = {
   10766: "Soap", 10767: "Talk", 10768: "War & Politics"
 };
 
-export const GENRE_NAME_TO_ID = {
-  "Azione": 28, "Avventura": 12, "Animazione": 16, "Commedia": 35,
-  "Crime": 80, "Documentario": 99, "Drama": 18, "Dramma": 18,
-  "Famiglia": 10751, "Fantasy": 14, "Storia": 36, "Horror": 27,
-  "Musica": 10402, "Mistero": 9648, "Romance": 10749, "Fantascienza": 878,
-  "Thriller": 53, "Guerra": 10752, "Western": 37,
-  "Azione & Avventura": 10759, "Sci-Fi & Fantasy": 10765
-};
-
 export function escapeHtml(str) {
   return String(str)
     .replaceAll("&", "&amp;")
@@ -82,28 +73,8 @@ export function normalizedItem(item) {
   };
 }
 
-export function uniqueKey(item) { return `${item.media_type}_${item.id}`; }
 export function mediaLabel(item) { return item.media_type === "movie" ? "Film" : "Serie TV"; }
 export function mediaBadgeClass(item) { return item.media_type === "movie" ? "badge-film" : "badge-series"; }
-
-export function decadeOf(year) {
-  if (!year || year === "—" || isNaN(Number(year))) return "Sconosciuta";
-  return `${Math.floor(Number(year) / 10) * 10}s`;
-}
-
-export function rawNumberToFixed(value, digits = 1, fallback = "n.d.") {
-  const n = Number(value);
-  return Number.isFinite(n) && n > 0 ? n.toFixed(digits) : fallback;
-}
-
-export function buildDateRange(startYear, endYear, type) {
-  if (!startYear || !endYear) return "";
-  return type === "movie"
-    ? `&primary_release_date.gte=${startYear}-01-01&primary_release_date.lte=${endYear}-12-31`
-    : `&first_air_date.gte=${startYear}-01-01&first_air_date.lte=${endYear}-12-31`;
-}
-
-export function randomPage(max = 5) { return Math.floor(Math.random() * max) + 1; }
 
 // Calcola la media di gruppo di un titolo a partire dal suo oggetto voti
 // votesObj = { "Mattia": { vote: 8, comment: "..." }, "Luca": { vote: 6.5 } }
