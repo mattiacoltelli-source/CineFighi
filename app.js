@@ -33,6 +33,14 @@ let db = [];               // libreria completa (titoli + voti)
 let libraryStatus = "all"; // all | watchlist | seen  (impostato dai "Vedi tutto")
 let libraryFilter = "all"; // all | movie | tv
 let libraryGenre = "all";
+let libraryScope = "group"; // group | me — "Io" tiene solo i titoli che ho votato
+let librarySort = "recenti"; // recenti | voto-desc | voto-asc
+// Le etichette sono anche l'ordine del giro: ogni tocco passa alla successiva.
+const LIBRARY_SORTS = [
+  { id: "recenti", label: "Recenti" },
+  { id: "voto-desc", label: "Voto \u2193" },
+  { id: "voto-asc", label: "Voto \u2191" },
+];
 let watchlistMode = "me";  // me | group (Home)
 let statsMode = "me";   // group | me
 let reportMode = "io"; // gruppo | io
@@ -543,6 +551,8 @@ function openLibrarySection(status, mediaFilter) {
   libraryStatus = status;
   libraryFilter = mediaFilter;
   libraryGenre = "all";
+  libraryScope = "group";
+  librarySort = "recenti";
 
   const titles = { all: "Libreria", watchlist: "Watchlist", seen: "Titoli visti" };
   document.getElementById("libraryTitle").textContent = titles[status] || "Libreria";
@@ -551,11 +561,41 @@ function openLibrarySection(status, mediaFilter) {
   goToScreen("library");
 }
 
+// Il voto su cui si ordina e' quello che la riga sta mostrando: il mio in
+// modalita' "Io", la media del gruppo in "Gruppo". Nessun controllo in piu'
+// da spiegare, e l'ordine non contraddice mai il numero che si legge.
+function libraryVoteOf(item) {
+  if (libraryScope === "me") return Number(item.votes?.[currentUser]?.vote ?? NaN);
+  const media = average(item.votes);
+  return media === null ? NaN : media;
+}
+
+function sortLibraryItems(items) {
+  if (librarySort === "recenti") return items;   // db e' gia' per created_at
+  const segno = librarySort === "voto-desc" ? -1 : 1;
+  // Copia: con tutti i filtri su "tutti" items E' db, e ordinarlo sul posto
+  // cambierebbe l'ordine della libreria per tutto il resto dell'app.
+  return [...items].sort((a, b) => {
+    const va = libraryVoteOf(a);
+    const vb = libraryVoteOf(b);
+    // Chi non ha voto resta in fondo in entrambi i versi: un elenco ordinato
+    // per voto che si apre sui titoli senza voto non sta ordinando niente.
+    if (!Number.isFinite(va) && !Number.isFinite(vb)) return 0;
+    if (!Number.isFinite(va)) return 1;
+    if (!Number.isFinite(vb)) return -1;
+    return segno * (va - vb) || a.title.localeCompare(b.title, "it");
+  });
+}
+
 function renderLibraryScreen() {
   let items = db;
   if (libraryStatus !== "all") items = items.filter(x => x.status === libraryStatus);
   if (libraryFilter === "movie") items = items.filter(x => x.media_type === "movie");
   if (libraryFilter === "tv") items = items.filter(x => x.media_type === "tv");
+
+  // "Io" prima dei generi: cosi' le pastiglie mostrano solo i generi in cui ho
+  // davvero votato qualcosa, invece di offrirne di gia' vuoti.
+  if (libraryScope === "me") items = items.filter(x => x.votes && x.votes[currentUser]);
 
   const genreSet = new Set();
   items.forEach(x => (x.genre_names || []).forEach(g => genreSet.add(g)));
@@ -565,9 +605,26 @@ function renderLibraryScreen() {
 
   if (libraryGenre !== "all") items = items.filter(x => (x.genre_names || []).includes(libraryGenre));
 
+  items = sortLibraryItems(items);
+
   document.querySelectorAll(".filter-pill[data-filter]").forEach(btn => {
     btn.classList.toggle("active", btn.dataset.filter === libraryFilter);
   });
+  document.querySelectorAll("#libraryScopeToggle .io-gruppo-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.mode === libraryScope);
+  });
+  const sortBtn = document.getElementById("librarySortBtn");
+  if (sortBtn) {
+    sortBtn.textContent = LIBRARY_SORTS.find(o => o.id === librarySort).label;
+    sortBtn.classList.toggle("active", librarySort !== "recenti");
+  }
+  const countEl = document.getElementById("libraryCount");
+  if (countEl) {
+    const n = items.length;
+    countEl.textContent = libraryScope === "me"
+      ? `${n} ${n === 1 ? "titolo che hai votato" : "titoli che hai votato"}`
+      : `${n} ${n === 1 ? "titolo" : "titoli"}`;
+  }
 
   const listEl = document.getElementById("libraryList");
   const emptyEl = document.getElementById("libraryEmpty");
@@ -591,7 +648,8 @@ function renderLibraryScreen() {
 function renderNextLibraryPage() {
   const next = libraryFilteredItems.slice(libraryRenderedCount, libraryRenderedCount + LIBRARY_PAGE_SIZE);
   if (!next.length) return;
-  document.getElementById("libraryList").insertAdjacentHTML("beforeend", renderLibraryList(next));
+  document.getElementById("libraryList")
+    .insertAdjacentHTML("beforeend", renderLibraryList(next, libraryScope === "me" ? currentUser : null));
   libraryRenderedCount += next.length;
 }
 
@@ -1218,6 +1276,19 @@ function bindGlobalEvents() {
   document.querySelectorAll(".filter-pill[data-filter]").forEach(btn => {
     btn.addEventListener("click", () => { libraryFilter = btn.dataset.filter; renderLibraryScreen(); });
   });
+  document.getElementById("libraryScopeToggle").addEventListener("click", e => {
+    const btn = e.target.closest(".io-gruppo-btn");
+    if (!btn || btn.dataset.mode === libraryScope) return;
+    libraryScope = btn.dataset.mode;
+    renderLibraryScreen();
+  });
+
+  document.getElementById("librarySortBtn").addEventListener("click", () => {
+    const i = LIBRARY_SORTS.findIndex(o => o.id === librarySort);
+    librarySort = LIBRARY_SORTS[(i + 1) % LIBRARY_SORTS.length].id;
+    renderLibraryScreen();
+  });
+
   document.getElementById("libraryGenreFilters").addEventListener("click", e => {
     const btn = e.target.closest("[data-genre-filter]");
     if (btn) { libraryGenre = btn.dataset.genreFilter; renderLibraryScreen(); }

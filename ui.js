@@ -219,10 +219,15 @@ export function renderSearchResults(items, libraryMap, currentUser) {
 
 // ─── LIBRARY LIST (schermata raggiunta con "Vedi tutto") ─────────────────────
 
-export function renderLibraryList(items) {
+// mioNome valorizzato = modalità "Io" della libreria: accanto (e prima) della
+// media del gruppo compare il voto di quella persona. In modalità "Gruppo"
+// resta null e la riga è identica a come è sempre stata.
+export function renderLibraryList(items, mioNome = null) {
   return items.map(item => {
     const avg = average(item.votes);
     const count = voteCount(item.votes);
+    const mio = mioNome ? Number(item.votes?.[mioNome]?.vote) : NaN;
+    const hoVotato = Number.isFinite(mio);
     return `
       <div class="list-item open-detail" data-id="${item.id}">
         <div class="list-item__thumb" style="background-image:url('${posterUrl(item.poster_path)}')">
@@ -234,7 +239,8 @@ export function renderLibraryList(items) {
           <div class="chip-row">
             ${item.status === "watchlist" ? `<span class="chip chip--watchlist">♡ In watchlist</span>` : ""}
             ${(item.genre_names || []).map(g => `<span class="chip">${escapeHtml(g)}</span>`).join("")}
-            ${avg !== null ? `<span class="chip chip--vote">★ ${avg.toFixed(1)} (${count})</span>` : ""}
+            ${hoVotato ? `<span class="chip chip--mine">Tu ${mio.toFixed(1)}</span>` : ""}
+            ${avg !== null ? `<span class="chip chip--vote">${hoVotato ? `gruppo ${avg.toFixed(1)} (${count})` : `★ ${avg.toFixed(1)} (${count})`}</span>` : ""}
             ${item.director ? `<span class="chip">🎬 ${escapeHtml(item.director)}</span>` : ""}
           </div>
         </div>

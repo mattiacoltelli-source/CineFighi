@@ -147,12 +147,21 @@
     <section id="screen-library" class="hidden">
       <button id="libraryBackBtn" class="detail-back-btn">← Torna alla home</button>
       <h2 id="libraryTitle" class="section__title" style="margin-bottom:14px;">Libreria</h2>
+      <div class="library-controls">
+        <div class="io-gruppo-toggle" id="libraryScopeToggle">
+          <div class="io-gruppo-toggle__thumb"></div>
+          <button class="io-gruppo-btn" type="button" data-mode="me">Io</button>
+          <button class="io-gruppo-btn active" type="button" data-mode="group">Gruppo</button>
+        </div>
+        <button id="librarySortBtn" type="button" class="filter-pill">Recenti</button>
+      </div>
       <div class="filter-bar">
         <button class="filter-pill active" data-filter="all">Tutti</button>
         <button class="filter-pill" data-filter="movie">Film</button>
         <button class="filter-pill" data-filter="tv">Serie TV</button>
       </div>
       <div id="libraryGenreFilters" class="filter-bar hidden"></div>
+      <p id="libraryCount" class="library-count"></p>
       <div id="libraryList" class="list"></div>
       <div id="libraryLoadMoreSentinel" aria-hidden="true"></div>
       <div id="libraryEmpty" class="empty-state hidden">Nessun titolo con questo filtro.</div>
