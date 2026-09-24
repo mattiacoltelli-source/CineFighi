@@ -265,15 +265,33 @@ async function renderUserPickerList() {
     return;
   }
   const list = document.getElementById("userPickerList");
-  list.innerHTML = users.map(u => `
-    <button class="user-pick-btn" data-user="${escapeHtml(u)}">
-      ${avatarHtml(u, 32)}<span>${escapeHtml(u)}</span>
+  // Chi ha già scelto un profilo su questo stesso dispositivo (currentUser,
+  // letto da getCurrentUser() in init()) trova la propria riga già
+  // evidenziata: il caso comune è la stessa persona che riapre l'app, non
+  // qualcuno che sceglie tra 15 nomi ogni volta da zero.
+  list.innerHTML = users.map(u => {
+    const recent = u === currentUser;
+    return `
+    <button class="user-pick-btn${recent ? " user-pick-btn--recent" : ""}" data-user="${escapeHtml(u)}">
+      ${avatarHtml(u, 32)}
+      <span class="user-pick-btn__body">
+        <span>${escapeHtml(u)}</span>
+        ${recent ? `<span class="user-pick-btn__badge">Ultimo utilizzato</span>` : ""}
+      </span>
+      <span class="user-pick-btn__chevron" aria-hidden="true">›</span>
     </button>
-  `).join("");
+  `;
+  }).join("");
 
   const full = users.length >= MAX_USERS;
   document.getElementById("userPickerFullNote").classList.toggle("hidden", !full);
   document.getElementById("userPickerAddRow").classList.toggle("hidden", full);
+
+  // La sfumatura in fondo alla lista ha senso solo quando c'è davvero
+  // altro da scorrere: con pochi nomi (lista non scrollabile) sarebbe solo
+  // un'ombra ingiustificata sotto l'ultima riga, perfettamente visibile.
+  const listWrap = list.closest(".user-picker__list-wrap");
+  listWrap?.classList.toggle("user-picker__list-wrap--fade", list.scrollHeight > list.clientHeight + 1);
 }
 
 // ─── CONFERMA AZIONI PERICOLOSE (es. rimuovere un titolo) ────────────────────
