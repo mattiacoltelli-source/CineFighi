@@ -273,11 +273,7 @@ async function renderUserPickerList() {
     const recent = u === currentUser;
     return `
     <button class="user-pick-btn${recent ? " user-pick-btn--recent" : ""}" data-user="${escapeHtml(u)}">
-      ${avatarHtml(u, 32)}
-      <span class="user-pick-btn__body">
-        <span>${escapeHtml(u)}</span>
-        ${recent ? `<span class="user-pick-btn__badge">Ultimo utilizzato</span>` : ""}
-      </span>
+      ${avatarHtml(u, 32)}<span>${escapeHtml(u)}</span>
       <span class="user-pick-btn__chevron" aria-hidden="true">›</span>
     </button>
   `;
