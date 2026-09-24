@@ -26,12 +26,42 @@ on:
   schedule:
     - cron: "0 7 * * *"   # ogni mattina alle 7 UTC
   workflow_dispatch:       # per lanciarlo a mano dalla pagina Actions
+    inputs:
+      prova_telegram:
+        description: "Manda solo un messaggio di prova su Telegram (non esegue i test)"
+        type: boolean
+        default: false
 
 jobs:
+  prova-telegram:
+    # Un allarme mai provato non è un allarme: questo job manda un messaggio
+    # vero, subito, senza aspettare che qualcosa si rompa davvero — la catena
+    # intera (secret -> Telegram -> la tua chat) va verificata una volta, non
+    # data per buona solo perché i secret esistono. Si avvia solo lanciando
+    # il workflow a mano dalla pagina Actions con la spunta attiva.
+    if: github.event_name == 'workflow_dispatch' && inputs.prova_telegram
+    runs-on: ubuntu-latest
+    steps:
+      - name: Manda il messaggio di prova
+        env:
+          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          if [ -z "$TG_TOKEN" ] || [ -z "$TG_CHAT" ]; then
+            echo "::error::Mancano i secret TELEGRAM_BOT_TOKEN e/o TELEGRAM_CHAT_ID (Settings -> Secrets and variables -> Actions)."
+            exit 1
+          fi
+          RISPOSTA=$(curl -sS -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TG_CHAT}" \
+            --data-urlencode "text=CineFighi: messaggio di prova. Se lo leggi, l'allarme funziona.")
+          echo "$RISPOSTA"
+          echo "$RISPOSTA" | grep -q '"ok":true' || { echo "::error::Telegram ha rifiutato il messaggio: controlla token e chat id."; exit 1; }
+
   codice:
     # Il commit automatico del bump ("[skip ci]", autore github-actions[bot])
     # non deve far ripartire niente: stesso controllo di bump-version.yml.
-    if: github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]')
+    # Anche una prova Telegram non deve far girare i test: e' un job a parte.
+    if: (github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]')) && !(github.event_name == 'workflow_dispatch' && inputs.prova_telegram)
     runs-on: ubuntu-latest
     env:
       TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -74,8 +104,9 @@ jobs:
 
   sito-vero:
     # Solo il giro giornaliero e l'avvio manuale: ad ogni push non avrebbe
-    # senso, il sito pubblicato e' ancora quello di prima.
-    if: github.event_name != 'push'
+    # senso, il sito pubblicato e' ancora quello di prima. Una prova Telegram
+    # e' un job a parte e non deve far girare anche questo.
+    if: github.event_name != 'push' && !(github.event_name == 'workflow_dispatch' && inputs.prova_telegram)
     runs-on: ubuntu-latest
     env:
       TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
