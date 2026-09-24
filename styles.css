@@ -1065,9 +1065,17 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
    e il grassetto dell'etichetta (.is-focus .dna-node__label) basta comunque
    a dire "è questo che stai guardando". Non può capitare sulla radice: è
    sempre una persona, mai un punto d'incontro (vedi isMeetingPoint). */
-.dna-node.is-shared .dna-node__poster,
 .dna-node.is-shared .dna-node__genre,
 .dna-node.is-shared .dna-node__director { box-shadow: 0 0 0 2px var(--green); }
+/* Il film è già il segnale più forte in modalità condivisa: lo ama
+   ognuna delle persone che stai guardando, quindi cresce come farebbe un
+   "molto amato" di livello forte (stesso 70px di is-loved-2) — non solo
+   l'anello. Genere e regista restano alla loro taglia: farli crescere
+   romperebbe la gerarchia persona/film 62px vs aggregazioni 44px. */
+.dna-node.is-shared .dna-node__poster {
+  width:70px; height:70px;
+  box-shadow: 0 0 0 2px var(--green);
+}
 
 /* "Molto amato": un film che in tanti hanno votato 7+ cresce e si accende di
    un alone dorato, in due gradini secondo quanti fan ha (vedi lovedLevel in

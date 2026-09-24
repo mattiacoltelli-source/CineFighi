@@ -1,11 +1,11 @@
 import { test, expect } from "@playwright/test";
 import { entra, soloLettura } from "./helpers";
 
-// La vecchia suite in qa-agent copriva questo scenario
-// (apps/cinefighi/tests/chaos/tmdb-down.spec.ts), ma e' sospesa per CineFighi
-// dal 2026-09-23 e non gira piu' in automatico (vedi qa-agent/README.md).
-// Lo portiamo qui, nella suite di guardia di questo repo, che e' quella
-// davvero attiva ad ogni push.
+// La vecchia suite in qa-agent copriva questo scenario, ma quel repo di
+// test separato non testa piu' CineFighi in nessuna forma (rimozione
+// completa dal 2026-09-24, vedi il suo README). Lo portiamo qui, nella
+// suite di guardia di questo repo, che e' quella davvero attiva ad ogni
+// push.
 //
 // doSearch() (app.js) ha gia' un try/catch dedicato a TMDB irraggiungibile:
 // qui verifichiamo che funzioni davvero, non solo che esista nel codice.

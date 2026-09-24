@@ -4,8 +4,9 @@ import { defineConfig, devices } from "@playwright/test";
 // scrive niente sul database condiviso del gruppo — carica l'app esattamente
 // come farebbe una persona che la apre e la guarda. E' il motivo per cui puo'
 // girare in automatico su dati veri senza le cautele che avevano portato a
-// sospendere la vecchia suite in qa-agent (quella, prima di ogni run, creava
-// un utente "_QA_Agent_" dentro la libreria del gruppo).
+// eliminare la vecchia suite in qa-agent (quella, prima di ogni run, creava
+// un utente "_QA_Agent_" dentro la libreria del gruppo) — quel repo non
+// testa piu' CineFighi in nessuna forma, vedi il suo README.
 //
 // Sta dentro questo repo e non in qa-agent apposta: cosi' quando l'app cambia,
 // il test si aggiorna nello stesso commit della modifica invece di restare

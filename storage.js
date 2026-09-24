@@ -87,8 +87,9 @@ export async function addUser(rawName) {
 // Niente deleteUser lato client: dal 2026-09-18 "users" non ha più una
 // policy RLS DELETE pubblica (chiusa dopo un incidente reale), quindi un
 // DELETE con la chiave anon/publishable non dà errore ma non cancella
-// nulla. Rimuovere un utente ora richiede la service role key (vedi
-// scripts/cleanup-write-residue.mjs nel repo qa-agent).
+// nulla. Rimuovere un utente ora richiede la service role key, a mano dalla
+// dashboard Supabase — qa-agent non copre più CineFighi in nessuna forma
+// (vedi il suo README), quindi non c'è più uno script dedicato per questo.
 
 // ─── LIBRERIA (titoli + voti, uniti in un unico oggetto comodo da usare) ─────
 // Ogni titolo torna con: { ...campi, votes: { "Mattia": { vote, comment }, ... } }
