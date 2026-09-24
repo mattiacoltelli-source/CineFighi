@@ -247,7 +247,6 @@ function openUserPicker(blocking) {
   const overlay = document.getElementById("userPickerOverlay");
   overlay.classList.remove("hidden");
   overlay.dataset.blocking = blocking ? "1" : "0";
-  document.getElementById("userPickerClose").classList.toggle("hidden", !!blocking);
   renderUserPickerList();
 }
 
@@ -1178,7 +1177,13 @@ async function handleRemove() {
 
 function bindGlobalEvents() {
   document.getElementById("userChip").addEventListener("click", () => openUserPicker(false));
-  document.getElementById("userPickerClose").addEventListener("click", closeUserPicker);
+  // Niente più bottone "✕" dedicato: un tap sullo sfondo scuro (fuori dalla
+  // card) chiude, come un qualunque foglio/overlay — ma solo quando il
+  // picker non è bloccante, altrimenti la primissima scelta profilo
+  // diventerebbe annullabile senza aver scelto nessuno.
+  document.getElementById("userPickerOverlay").addEventListener("click", e => {
+    if (e.target.id === "userPickerOverlay" && e.currentTarget.dataset.blocking !== "1") closeUserPicker();
+  });
   document.getElementById("userPickerAddBtn").addEventListener("click", handleAddUser);
   document.getElementById("userPickerInput").addEventListener("keydown", e => {
     if (e.key === "Enter") handleAddUser();
