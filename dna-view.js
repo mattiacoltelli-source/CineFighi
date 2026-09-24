@@ -15,21 +15,38 @@ import {
 import { escapeHtml } from "./cine-core.js?v=43f5be8";
 import { avatarHtml, haptic } from "./ui.js?v=43f5be8";
 
-// Quanti vicini apre un tap. Quattro invece di cinque: meno rami per tap
-// vuol dire nodi più grandi e una rete che resta leggibile su un telefono,
-// e il pannello qui sotto racconta comunque tutto quello che un nodo in più
-// avrebbe mostrato.
-const MAX_NEIGHBOURS = 4;
+// Quanti vicini apre un tap, e a che distanza dal genitore. Il tetto e' sempre
+// stato una questione di spazio, non di gusto: con cinque figli su un ventaglio
+// di 180 gradi gli adiacenti distano 2*R*sin(22.5 gradi), che sotto i 123px
+// violerebbe MIN_GAP — e a quel raggio il ventaglio chiede ~340px di riquadro
+// per non uscire dall'inquadratura. Dove quello spazio c'e' (riquadro
+// dell'esplorazione su un telefono normale) i rami sono cinque, dove non c'e'
+// restano quattro, com'era prima. Il pannello qui sotto racconta comunque tutto
+// quello che un nodo in piu' avrebbe mostrato.
+const NEIGHBOURS_WIDE = 5;
+const NEIGHBOURS_NARROW = 4;
+const STAGE_FOR_WIDE = 340;   // altezza del riquadro che serve al ventaglio da 5
+
+function ramiPerTap() {
+  return (el("dnaStage")?.clientHeight || 0) >= STAGE_FOR_WIDE ? NEIGHBOURS_WIDE : NEIGHBOURS_NARROW;
+}
+function raggio() {
+  return ramiPerTap() === NEIGHBOURS_WIDE ? 126 : 112;
+}
 
 // Budget DOM: oltre questi limiti (misurati DALLA camera, non dalla radice,
-// altrimenti esplorando in profondità sparirebbe tutto) i nodi lontani
-// perdono prima l'etichetta e poi escono dal DOM. Restano comunque in memoria
-// nella rete: tornando indietro ricompaiono identici, stesse posizioni.
+// altrimenti esplorando in profondità sparirebbe tutto) i nodi lontani escono
+// dal DOM. Restano comunque in memoria nella rete: tornando indietro
+// ricompaiono identici, stesse posizioni.
+// L'etichetta ora arriva fin dove arriva il DOM: un nodo a quattro salti era
+// un pallino anonimo, e col riquadro grande il nome ci sta. Resta la sfumatura
+// per profondità (depthClass) a dire quanto è lontano. Lo stadio intermedio
+// "nodo senza etichetta" (.is-far) non si verifica con questi due valori
+// uguali, ma il meccanismo resta valido se il budget DOM si allarga.
 const MAX_DOM_NODES = 32;
-const LABEL_MAX_HOPS = 3;
+const LABEL_MAX_HOPS = 4;
 const DOM_MAX_HOPS = 4;
 
-const RADIUS = 112;         // distanza figlio-genitore
 const MIN_GAP = 94;         // distanza minima tra due nodi qualsiasi (nodo 62px + etichetta)
 const PLACE_TRIES = 24;
 
@@ -310,12 +327,12 @@ function tooClose(x, y, ignoreId) {
 function place(parent, angle) {
   for (let i = 0; i < PLACE_TRIES; i++) {
     const step = Math.ceil(i / 2) * 0.26 * (i % 2 ? 1 : -1);
-    const r = RADIUS + Math.floor(i / 8) * 34;
+    const r = raggio() + Math.floor(i / 8) * 34;
     const x = parent.x + Math.cos(angle + step) * r;
     const y = parent.y + Math.sin(angle + step) * r;
     if (!tooClose(x, y, parent.id)) return { x, y };
   }
-  const r = RADIUS + PLACE_TRIES * 3;
+  const r = raggio() + PLACE_TRIES * 3;
   return { x: parent.x + Math.cos(angle) * r, y: parent.y + Math.sin(angle) * r };
 }
 
@@ -342,7 +359,7 @@ function layoutChildren(parentId, childIds) {
 // ─── APERTURA / CHIUSURA ─────────────────────────────────────────────────────
 
 function expandNode(id, focus = true) {
-  const added = expand(net, index, id, MAX_NEIGHBOURS);
+  const added = expand(net, index, id, ramiPerTap());
   layoutChildren(id, added);
   if (focus) focusId = id;
   return added;
