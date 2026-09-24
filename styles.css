@@ -683,15 +683,19 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 /* USER PICKER OVERLAY */
 .user-picker { position:fixed; inset:0; background: var(--bg); z-index:200; display:flex; align-items:center; justify-content:center; padding:24px; }
 .user-picker__card { width:100%; max-width:380px; position:relative; z-index:1; }
-.user-picker__close { position:absolute; top:-8px; right:-4px; background:none; color: var(--text3); font-size:18px; padding:8px; z-index:1; }
 /* A tutta larghezza dello schermo (non della card, che su telefono è quasi
    la stessa cosa ma su schermi larghi sarebbe rimasto stretto e ritagliato):
-   figlio diretto di .user-picker, non di .user-picker__card. */
+   figlio diretto di .user-picker, non di .user-picker__card. Il raggio in
+   px (non in %) converge davvero a zero al bordo invece di lasciare un
+   residuo di colore che poi si taglia di netto contro lo sfondo — la
+   maschera sotto è una seconda rete di sicurezza sullo stesso problema. */
 .user-picker__glow {
   position:absolute; left:0; right:0; top:0; height:300px; z-index:0; pointer-events:none;
   background:
-    radial-gradient(circle at 24% 30%, rgba(56,189,248,.30), transparent 55%),
-    radial-gradient(circle at 76% 40%, rgba(255,157,77,.22), transparent 55%);
+    radial-gradient(circle 210px at 24% 90px, rgba(56,189,248,.30), transparent),
+    radial-gradient(circle 210px at 76% 120px, rgba(255,157,77,.22), transparent);
+  -webkit-mask-image: linear-gradient(to bottom, black 0%, black 45%, transparent 100%);
+  mask-image: linear-gradient(to bottom, black 0%, black 45%, transparent 100%);
 }
 .user-picker__icon { font-size:40px; text-align:center; margin-bottom:10px; }
 .user-picker__title { font-family: var(--font-display); font-size:24px; font-weight:900; text-align:center;
