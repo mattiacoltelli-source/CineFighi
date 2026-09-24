@@ -121,6 +121,16 @@ export function showDna({ db, users, currentUser }) {
   if (!stage) return;
   ctx = { db, users, currentUser };
 
+  // La spiegazione estesa (vedi bindIntroToggle) non resta aperta da una
+  // visita alla schermata all'altra: chi l'ha già letta non se la ritrova
+  // ancora lì la volta dopo, occupando spazio per niente.
+  const introToggle = el("dnaIntroToggle");
+  const introFull = el("dnaIntroFull");
+  if (introToggle && introFull) {
+    introToggle.setAttribute("aria-expanded", "false");
+    introFull.hidden = true;
+  }
+
   if (!db || !db.length) {
     renderMessage("Sto caricando la libreria…");
     return;
@@ -606,6 +616,7 @@ export function initDnaView() {
 
   bindPan();
   bindPeople();
+  bindIntroToggle();
 
   const nodesEl = el("dnaNodes");
   if (nodesEl) {
@@ -713,6 +724,21 @@ function bindPeople() {
     // quindi showDna ripassa da buildIndex (vedi librarySignature).
     resetDna();
     showDna(ctx);
+  });
+}
+
+// La spiegazione estesa non sparisce, va solo a un tap di distanza: stato
+// solo in memoria (nessun localStorage), si richiude ad ogni nuovo ingresso
+// nella schermata — chi la vuole rileggere la riapre, senza che l'app debba
+// ricordarselo per sempre su un dettaglio così minore.
+function bindIntroToggle() {
+  const toggle = el("dnaIntroToggle");
+  const full = el("dnaIntroFull");
+  if (!toggle || !full) return;
+  toggle.addEventListener("click", () => {
+    const aperta = toggle.getAttribute("aria-expanded") === "true";
+    toggle.setAttribute("aria-expanded", aperta ? "false" : "true");
+    full.hidden = aperta;
   });
 }
 

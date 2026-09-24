@@ -850,7 +850,21 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
   background: var(--surface2); border:1px solid var(--surface3);
   color: var(--text3); font-size:13px; line-height:1;
 }
-.dna__intro { font-size:12.5px; color: var(--text3); margin-bottom:10px; line-height:1.4; }
+/* Compressa a una riga sola (Proposta A: lo spazio risparmiato va al
+   riquadro sotto). Resta un pulsante vero, non un div con onclick — la
+   spiegazione completa non sparisce, va solo a un tap di distanza invece
+   di stare sempre lì per chi la pagina la conosce già a memoria. */
+.dna-intro {
+  display:flex; align-items:center; gap:6px; width:100%;
+  margin:0 0 4px; padding:7px 0; border:0; background:none; cursor:pointer;
+  font-family: var(--font-body); font-size:12.5px; color: var(--text3); line-height:1.2; text-align:left;
+  -webkit-tap-highlight-color: transparent;
+}
+.dna-intro span:first-child { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dna-intro__icon { flex-shrink:0; font-size:13px; opacity:.65; }
+.dna-intro[aria-expanded="true"] .dna-intro__icon { opacity:1; color: var(--cyan2); }
+.dna-intro__full { font-size:12.5px; color: var(--text3); line-height:1.4; margin:-2px 0 8px; }
+.dna-intro__full[hidden] { display:none; }
 /* Solo in modalità condivisa, 2 o 3 persone (vedi dna.js::isModalitaCondivisa):
    quanti titoli avete amato tutti i selezionati. Fuori dalla pastiglia apposta —
    coi nomi più lunghi del gruppo lì dentro non c'è spazio per aggiungere altro
@@ -863,7 +877,7 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
    l'informazione (chi ha votato cosa) e deve stare nella stessa schermata,
    senza obbligare a scorrere per leggerlo. */
 .dna-stage {
-  position:relative; height:44vh; min-height:260px; max-height:390px;
+  position:relative; height:46vh; min-height:270px; max-height:410px;
   border-radius:16px; background: var(--surface); border:1px solid var(--surface3);
   overflow:hidden;
   /* Il gesto dentro il riquadro è nostro (vedi il trascinamento in
@@ -878,13 +892,14 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
    barra di navigazione. Lì il riquadro della rete cede un po' di spazio:
    l'informazione sta tutta a schermo senza scorrere, che è quello che conta. */
 @media (max-height: 780px) {
-  .dna-stage { height:38vh; min-height:220px; }
+  .dna-stage { height:40vh; min-height:230px; }
 }
 /* Telefoni davvero piccoli: il riquadro cede ancora, e le pastiglie dei
    votanti si stringono. Qui lo spazio non basta per essere generosi. */
 @media (max-height: 680px) {
-  .dna-stage { height:32vh; min-height:180px; }
-  .dna__intro { font-size:12px; margin-bottom:8px; }
+  .dna-stage { height:34vh; min-height:190px; }
+  .dna-intro { font-size:12px; padding:5px 0; }
+  .dna-intro__full { font-size:12px; }
   .dna-panel { margin-top:9px; min-height:0; }
   .dna-fans { gap:5px; }
   .dna-fan { padding:2px 8px 2px 3px; }

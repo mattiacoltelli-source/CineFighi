@@ -217,7 +217,11 @@
         </button>
         <button id="dnaResetBtn" type="button" class="btn-link-quiet dna-reset-btn">Ricomincia</button>
       </div>
-      <p class="dna__intro">Dove due rami si ritrovano sullo stesso film, genere o regista, quello è DNA in comune. Trascina per spostarti.</p>
+      <button type="button" id="dnaIntroToggle" class="dna-intro" aria-expanded="false" aria-controls="dnaIntroFull">
+        <span>DNA in comune tra film, generi e registi.</span>
+        <span class="dna-intro__icon" aria-hidden="true">ⓘ</span>
+      </button>
+      <p id="dnaIntroFull" class="dna-intro__full" hidden>Dove due rami si ritrovano sullo stesso film, genere o regista, quello è DNA in comune. Trascina per spostarti.</p>
       <p id="dnaAffinity" class="dna-affinity"></p>
 
       <div id="dnaStage" class="dna-stage">
