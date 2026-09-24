@@ -1,10 +1,10 @@
 import { test, expect } from "@playwright/test";
 import { soloLettura } from "./helpers";
 
-// Stesso discorso di tmdb-down.spec.ts: portato qui da qa-agent, sospeso per
-// CineFighi dal 2026-09-23 (vedi qa-agent/README.md). Non possiamo riusare
-// entra(): presuppone che il selettore utenti abbia gia' una lista, che con
-// Supabase giu' non arriva mai.
+// Stesso discorso di tmdb-down.spec.ts: portato qui da qa-agent (rimozione
+// completa di CineFighi da quel repo dal 2026-09-24, vedi il suo README).
+// Non possiamo riusare entra(): presuppone che il selettore utenti abbia
+// gia' una lista, che con Supabase giu' non arriva mai.
 //
 // init() (app.js) ha gia' un try/catch dedicato sia su fetchUsers che su
 // fetchLibrary, apposta perche' un errore di rete non svuotasse in silenzio
