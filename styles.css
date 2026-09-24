@@ -688,15 +688,21 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
    figlio diretto di .user-picker, non di .user-picker__card. */
 .user-picker__glow {
   position:absolute; left:0; right:0; top:0; height:300px; z-index:0; pointer-events:none;
-  /* Il primo strato (in cima, dipinge sopra gli altri due) sfuma verso lo
-     sfondo pieno su TUTTA l'altezza, non solo l'ultimo pezzo: un cambio di
-     colore più lento per pixel è la differenza tra un fondo uniforme e un
-     "banding" visibile (gradiente scuro a bassa opacità, tipico su GPU
-     Android) — non riproducibile qui, solo su schermo vero. */
+  /* Nero pieno sia in cima (copre tutta la status bar) sia in fondo (prima
+     della lista): il colore non tocca mai un bordo, resta in una fascia
+     sospesa in mezzo. Non solo più "carino" — è anche la mitigazione vera
+     per il banding notato su schermo reale (Android, gradiente scuro a
+     bassa opacità): un fondo che parte già colorato esattamente al bordo
+     dello schermo è dove il taglio si vedeva di più. Non riproducibile qui,
+     va riverificato sul telefono. */
   background:
-    linear-gradient(to bottom, transparent 0%, transparent 15%, var(--bg) 100%),
-    radial-gradient(circle 210px at 24% 90px, rgba(56,189,248,.30), transparent),
-    radial-gradient(circle 210px at 76% 120px, rgba(255,157,77,.22), transparent);
+    linear-gradient(to bottom,
+      var(--bg) 0%, var(--bg) 8%,
+      transparent 38%,
+      transparent 60%,
+      var(--bg) 92%, var(--bg) 100%),
+    radial-gradient(circle 200px at 22% 130px, rgba(56,189,248,.26), transparent),
+    radial-gradient(circle 200px at 78% 160px, rgba(255,157,77,.19), transparent);
 }
 .user-picker__icon { font-size:40px; text-align:center; margin-bottom:10px; }
 .user-picker__title { font-family: var(--font-display); font-size:24px; font-weight:900; text-align:center;
