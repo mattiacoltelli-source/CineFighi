@@ -795,6 +795,23 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
    rispetto a quel punto, anche con coordinate negative. Muovere la camera è
    quindi una sola translate sul canvas, non un riposizionamento dei nodi —
    una transizione sola, che il telefono anima sul compositor. */
+/* Modalità esplorazione. Finché la rete è chiusa (un nodo solo) questa
+   schermata è identica a tutte le altre: logo in alto, riga di spiegazione,
+   niente di strano. Appena apri qualcosa — cioè appena la stai usando
+   davvero — la pagina si fa da parte e quello spazio diventa riquadro: il
+   logo è ridondante (il titolo sta due righe sotto) e la riga di aiuto
+   l'hai già letta. Il chip del profilo resta sempre: è l'unico modo per
+   cambiare utente.
+   La classe la mette render() in dna-view.js sulla stessa condizione della
+   riga "tocca il tuo nodo"; il :has() la rende innocua se per qualche
+   motivo sopravvive fuori da qui. */
+.app.dna-esplorazione:has(#screen-tonight:not(.hidden)) .topbar {
+  padding: calc(8px + env(safe-area-inset-top)) 0 6px;
+}
+.app.dna-esplorazione:has(#screen-tonight:not(.hidden)) .topbar__title,
+.app.dna-esplorazione:has(#screen-tonight:not(.hidden)) .topbar__sub,
+.app.dna-esplorazione:has(#screen-tonight:not(.hidden)) .dna-intro { display:none; }
+
 .dna-head { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
 .dna-head .section__title { margin-bottom:0; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .dna-reset-btn { flex-shrink:0; font-size:12px; }
@@ -884,8 +901,18 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
      dna-view.js): senza questo il browser proverebbe comunque a scrollare la
      pagina a metà trascinamento e il movimento risulterebbe a scatti. */
   touch-action:none; cursor:grab;
+  /* L'ingrandimento entrando in esplorazione dura quanto la ricentratura
+     della camera (.dna-canvas): così il riquadro che si apre e i nodi che si
+     dispongono sono un movimento solo, non due scollati. */
+  transition: height var(--t-mid) ease-out;
 }
 .dna-stage.is-panning { cursor:grabbing; }
+/* In esplorazione il riquadro incassa lo spazio lasciato da testata e riga
+   di aiuto. I valori restano tarati sul vincolo di sempre: il pannello qui
+   sotto non finisce mai dietro la barra di navigazione. */
+.app.dna-esplorazione:has(#screen-tonight:not(.hidden)) .dna-stage {
+  height:55vh; min-height:320px; max-height:510px;
+}
 
 /* Su uno schermo corto il pannello sotto può diventare alto — con un titolo
    amato da sette persone sono tre righe di nomi — e finirebbe dietro alla
@@ -893,11 +920,13 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
    l'informazione sta tutta a schermo senza scorrere, che è quello che conta. */
 @media (max-height: 780px) {
   .dna-stage { height:40vh; min-height:230px; }
+  .app.dna-esplorazione:has(#screen-tonight:not(.hidden)) .dna-stage { height:49vh; min-height:285px; }
 }
 /* Telefoni davvero piccoli: il riquadro cede ancora, e le pastiglie dei
    votanti si stringono. Qui lo spazio non basta per essere generosi. */
 @media (max-height: 680px) {
   .dna-stage { height:34vh; min-height:190px; }
+  .app.dna-esplorazione:has(#screen-tonight:not(.hidden)) .dna-stage { height:44vh; min-height:255px; }
   .dna-intro { font-size:12px; padding:5px 0; }
   .dna-intro__full { font-size:12px; }
   .dna-panel { margin-top:9px; min-height:0; }

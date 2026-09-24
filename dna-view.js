@@ -465,7 +465,15 @@ function render() {
 
   // Con un nodo solo il riquadro sarebbe una scatola quasi vuota: finche' non
   // si apre niente, una riga dice cosa fare. Sparisce al primo tocco.
-  el("dnaStartHint")?.classList.toggle("hidden", net.nodes.size > 1);
+  const esplorando = net.nodes.size > 1;
+  el("dnaStartHint")?.classList.toggle("hidden", esplorando);
+
+  // Stessa condizione, altro effetto: appena la rete si apre la pagina si fa
+  // da parte e quello spazio diventa riquadro (vedi .dna-esplorazione in
+  // styles.css). Non è uno stato in più da tenere sincronizzato — "sto
+  // esplorando" è già scritto nella rete: chiudi tutto, o premi Ricomincia,
+  // e la schermata torna identica a tutte le altre.
+  el("app")?.classList.toggle("dna-esplorazione", esplorando);
 
   renderPanel(net.nodes.get(focusId));
 }
