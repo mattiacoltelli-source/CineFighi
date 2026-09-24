@@ -1,0 +1,110 @@
+name: Guardiano
+
+# Suite di guardia in SOLA LETTURA (vedi playwright.config.ts): carica l'app
+# come farebbe una persona qualunque e controlla che regga. Non crea utenti,
+# non vota, non scrive niente sul database condiviso del gruppo.
+#
+# Due lavori diversi perche' rispondono a due domande diverse:
+#
+#   codice     - ad ogni push: il runner serve QUESTO commit da un server
+#                statico locale e lo prova. Verifica la modifica appena
+#                fatta, subito, senza aspettare che GitHub Pages abbia
+#                pubblicato (altrimenti si proverebbe la versione vecchia).
+#
+#   sito-vero  - una volta al giorno: prova il sito pubblicato davvero.
+#                Serve a sapere se qualcosa si e' rotto DA SOLO — un deploy
+#                storto, Supabase giu' — anche in giorni in cui nessuno ha
+#                toccato il codice.
+#
+# Se qualcosa fallisce arriva un messaggio su Telegram. Finche' i due secret
+# non esistono, i test girano lo stesso e il passo di notifica viene saltato
+# senza far fallire nulla.
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 7 * * *"   # ogni mattina alle 7 UTC
+  workflow_dispatch:       # per lanciarlo a mano dalla pagina Actions
+
+jobs:
+  codice:
+    # Il commit automatico del bump ("[skip ci]", autore github-actions[bot])
+    # non deve far ripartire niente: stesso controllo di bump-version.yml.
+    if: github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]')
+    runs-on: ubuntu-latest
+    env:
+      TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install
+      - run: npx playwright install --with-deps chromium
+      - name: Servi questo commit su una porta locale
+        run: |
+          python3 -m http.server 8123 &
+          for i in $(seq 1 20); do
+            curl -sf -o /dev/null http://localhost:8123/index.html && break
+            sleep 1
+          done
+      - name: Prova il codice appena pushato
+        run: npx playwright test
+        env:
+          CINEFIGHI_URL: http://localhost:8123/
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: esito-codice
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 7
+      - name: Avvisa su Telegram
+        if: failure() && env.TG_TOKEN != ''
+        run: |
+          RUN="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          MSG="CineFighi: l'ultima modifica ha rotto qualcosa (commit ${GITHUB_SHA:0:7}). Dettagli: $RUN"
+          curl -sS -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TG_CHAT}" \
+            --data-urlencode "disable_web_page_preview=true" \
+            --data-urlencode "text=$MSG"
+
+  sito-vero:
+    # Solo il giro giornaliero e l'avvio manuale: ad ogni push non avrebbe
+    # senso, il sito pubblicato e' ancora quello di prima.
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    env:
+      TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install
+      - run: npx playwright install --with-deps chromium
+      - name: Prova il sito pubblicato
+        run: npx playwright test
+        env:
+          CINEFIGHI_URL: https://mattiacoltelli-source.github.io/CineFighi/
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: esito-sito-vero
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 7
+      - name: Avvisa su Telegram
+        if: failure() && env.TG_TOKEN != ''
+        run: |
+          RUN="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          MSG="CineFighi: il sito pubblicato non sta bene (controllo giornaliero). Puo' essere un deploy storto o il backend giu'. Dettagli: $RUN"
+          curl -sS -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TG_CHAT}" \
+            --data-urlencode "disable_web_page_preview=true" \
+            --data-urlencode "text=$MSG"

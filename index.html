@@ -23,8 +23,15 @@
        diretto. Il bundle qui sotto non dipende da quel meccanismo. -->
   <script src="https://browser.sentry-cdn.com/10.75.0/bundle.min.js" crossorigin="anonymous"></script>
   <script>
-    if (window.Sentry) {
-      Sentry.init({ dsn: "https://4ef84fcbc8dfc06cb854ce648c817467@o4511991055450112.ingest.de.sentry.io/4511991085334608" });
+    // Solo il sito vero manda errori. Senza questo filtro finiscono qui dentro
+    // anche i test automatici e le prove in locale (server statico su
+    // localhost, Chromium headless): e' gia' successo, e su un progetto usato
+    // da sette persone e' cosi' che un errore vero si perde nel rumore.
+    if (window.Sentry && location.hostname.endsWith("github.io")) {
+      Sentry.init({
+        dsn: "https://4ef84fcbc8dfc06cb854ce648c817467@o4511991055450112.ingest.de.sentry.io/4511991085334608",
+        environment: "production",
+      });
     }
   </script>
 </head>

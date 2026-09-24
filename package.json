@@ -1,0 +1,11 @@
+{
+  "name": "cinefighi",
+  "private": true,
+  "description": "App statica: nessuna dipendenza a runtime. Questo file esiste solo per la suite di guardia (Playwright), che non viene mai servita ai telefoni.",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.0"
+  }
+}
