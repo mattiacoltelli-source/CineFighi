@@ -27,6 +27,7 @@
   --green-dim: rgba(62,201,122,.14);
   --red: #ff5f5f;
   --red-dim: rgba(255,95,95,.14);
+  --gold: #ffd166;
 
   --radius-sm: 10px;
   --radius-md: 16px;
@@ -1031,17 +1032,20 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
   background-size:cover; background-position:center; background-color: var(--surface2);
   border:1px solid var(--surface3); font-size:20px;
 }
+/* Genere e regista sono aggregazioni, non il dato concreto: più piccoli di
+   persona e film (che restano a 56px), danno respiro alla rete invece di
+   pesare quanto un titolo o una persona vera. */
 .dna-node__genre {
-  width:56px; height:56px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+  width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center;
   background: var(--surface2); border:1px solid rgba(255,157,77,.35);
-  font-family: var(--font-display); font-weight:800; font-size:13px; color: var(--orange);
+  font-family: var(--font-display); font-weight:800; font-size:11px; color: var(--orange);
 }
 /* Il regista si distingue dal genere per forma e colore: quadrato smussato e
    ciano, dove il genere è tondo e arancione. */
 .dna-node__director {
-  width:56px; height:56px; border-radius:16px; display:flex; align-items:center; justify-content:center;
+  width:44px; height:44px; border-radius:13px; display:flex; align-items:center; justify-content:center;
   background: var(--surface2); border:1px solid rgba(56,189,248,.4);
-  font-family: var(--font-display); font-weight:800; font-size:14px; color: var(--cyan);
+  font-family: var(--font-display); font-weight:800; font-size:12px; color: var(--cyan);
 }
 .dna-node .avatar { border:2px solid var(--surface); }
 
@@ -1064,6 +1068,20 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .dna-node.is-shared .dna-node__poster,
 .dna-node.is-shared .dna-node__genre,
 .dna-node.is-shared .dna-node__director { box-shadow: 0 0 0 2px var(--green); }
+
+/* "Molto amato": un film che in tanti hanno votato 7+ cresce e si accende di
+   un alone dorato, in due gradini secondo quanti fan ha (vedi lovedLevel in
+   dna-view.js). Solo film, e solo fuori dalla modalità condivisa — lì il
+   segnale che conta è già il verde di is-shared qui sopra, e i due non
+   possono mai capitare sullo stesso nodo (lovedLevel lo esclude a monte). */
+.dna-node.is-loved-1 .dna-node__poster {
+  width:62px; height:62px;
+  box-shadow: 0 0 0 2px rgba(255,209,102,.5), 0 0 14px 3px rgba(255,209,102,.3);
+}
+.dna-node.is-loved-2 .dna-node__poster {
+  width:70px; height:70px;
+  box-shadow: 0 0 0 3px var(--gold), 0 0 22px 6px rgba(255,209,102,.5);
+}
 .dna-node.is-open::after {
   content:""; position:absolute; top:-2px; right:2px;
   width:8px; height:8px; border-radius:50%; background: var(--green);
