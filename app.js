@@ -475,6 +475,21 @@ async function addItemFromCache(containerId, tmdbId, type, status) {
     : await addTitle(fullItem, status, currentUser);
 
   if (!res.ok) {
+    // "Duplicato" su ✓ Visto vuol dire che il titolo è già in libreria (es.
+    // in watchlist di qualcun altro) — non un vero errore per chi ha
+    // toccato il pulsante: senza questo, restava bloccato su un toast e
+    // senza nessun modo di raggiungere la scheda per votare (il link
+    // "Scheda →" compare solo per i titoli non ancora in libreria).
+    if (res.reason === "duplicate" && status !== "watchlist") {
+      const existing = db.find(x => x.tmdb_id === item.id && x.media_type === type);
+      if (existing) {
+        if (existing.status !== "seen") {
+          const statusRes = await updateTitleStatus(existing.id, "seen");
+          if (statusRes.ok) { existing.status = "seen"; existing.seen_at = new Date().toISOString(); }
+        }
+        return existing.id;
+      }
+    }
     const msg = res.reason === "already_seen" ? "Il gruppo l'ha già segnato come visto"
       : res.reason === "duplicate" ? "Già in libreria" : "Errore, riprova";
     showToast(msg, "error");
@@ -1038,11 +1053,25 @@ async function promotePreviewItem(status) {
   }
 
   const res = await addTitle(previewItem, status, currentUser);
-  if (!res.ok && res.reason !== "duplicate") return null;
-  if (res.ok) db.unshift({ ...res.title, votes: {} });
-  return res.ok
-    ? res.title.id
-    : (db.find(x => x.tmdb_id === previewItem.id && x.media_type === previewItem.media_type)?.id ?? null);
+  if (res.ok) {
+    db.unshift({ ...res.title, votes: {} });
+    return res.title.id;
+  }
+  if (res.reason !== "duplicate") return null;
+
+  // Duplicato: qualcun altro l'ha già aggiunto (di solito in watchlist) nel
+  // frattempo. Non è un errore vero — ci limitiamo ad aggiornarne lo stato
+  // se serve, stessa cosa che fa il percorso gemello non-preview in
+  // handleSaveVote più sotto quando un voto arriva su un titolo ancora in
+  // watchlist. Senza questo, un voto su un titolo "rubato" da un altro
+  // resterebbe salvato ma il titolo continuerebbe a risultare "watchlist".
+  const existing = db.find(x => x.tmdb_id === previewItem.id && x.media_type === previewItem.media_type);
+  if (!existing) return null;
+  if (status === "seen" && existing.status !== "seen") {
+    const statusRes = await updateTitleStatus(existing.id, "seen");
+    if (statusRes.ok) { existing.status = "seen"; existing.seen_at = new Date().toISOString(); }
+  }
+  return existing.id;
 }
 
 async function handleSaveVote() {

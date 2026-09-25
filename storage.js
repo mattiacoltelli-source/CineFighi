@@ -200,7 +200,16 @@ export async function addToWatchlist(item, userName) {
 
   if (!insertErr) {
     const { error: waErr } = await supabase.from("watchlist_adds").insert({ title_id: inserted.id, user_name: userName });
-    if (waErr) console.error("addToWatchlist/watchlist_adds:", waErr);
+    // Se questo insert fallisce, il titolo esiste ma nessuno risulta averlo
+    // in watchlist — riportare ok:true qui mentirebbe al chiamante (che
+    // segnerebbe l'utente come "unito" anche lato client), e più avanti
+    // removeFromWatchlist, non trovando nessuna riga da cancellare, finirebbe
+    // per cancellare l'intero titolo condiviso convinto che non lo volesse
+    // più nessuno.
+    if (waErr) {
+      console.error("addToWatchlist/watchlist_adds:", waErr);
+      return { ok: false, reason: "error" };
+    }
     return { ok: true, title: { ...inserted, watchlist_by: [userName] } };
   }
 
