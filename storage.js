@@ -2,7 +2,7 @@
 // Ogni funzione che legge o scrive dati "veri" (utenti, titoli, voti) passa
 // da qui. Il resto dell'app non parla mai direttamente con Supabase.
 
-import { supabase } from "./supabase.js?v=25fd3a8";
+import { supabase } from "./supabase.js?v=b7f540b";
 
 const CURRENT_USER_KEY = "cinefighiCurrentUser";
 export const MAX_USERS = 15;
