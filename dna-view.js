@@ -323,8 +323,9 @@ function openFullNetworkView() {
   const edgesEl = el("dnaFullEdges");
   const nodesEl = el("dnaFullNodes");
   const overlay = el("dnaFullView");
+  const scrollBox = overlay?.querySelector(".dna-full-view__scroll");
   const who = el("dnaFullViewWho");
-  if (!canvas || !edgesEl || !nodesEl || !overlay) return;
+  if (!canvas || !edgesEl || !nodesEl || !overlay || !scrollBox) return;
 
   const placed = [...net.nodes.values()].filter(n => n.x !== null);
   if (!placed.length) return;
@@ -334,20 +335,42 @@ function openFullNetworkView() {
     minX = Math.min(minX, n.x); maxX = Math.max(maxX, n.x);
     minY = Math.min(minY, n.y); maxY = Math.max(maxY, n.y);
   }
-  // Stesso trucco della camera vera (applyCamera): un solo transform sul
-  // contenitore sposta tutta la rete, i nodi dentro restano con le loro
-  // coordinate originali (n.x/n.y) — qui basta spostarla una volta, non ad
-  // ogni tocco, perché la vista non segue nessun fuoco.
-  canvas.style.width = `${maxX - minX + FULL_VIEW_PAD * 2}px`;
-  canvas.style.height = `${maxY - minY + FULL_VIEW_PAD * 2}px`;
-  canvas.style.transform = `translate(${FULL_VIEW_PAD - minX}px, ${FULL_VIEW_PAD - minY}px)`;
+  const contentW = maxX - minX + FULL_VIEW_PAD * 2;
+  const contentH = maxY - minY + FULL_VIEW_PAD * 2;
 
   const hops = hopsFrom(net, focusId);
   edgesEl.innerHTML = net.edges.map(e => edgeLine(e, hops)).join("");
   nodesEl.innerHTML = placed.map(n => nodeButton(n, hops)).join("");
   if (who) who.textContent = peopleLabel();
 
+  // L'overlay va mostrato PRIMA di leggere le dimensioni del riquadro
+  // scorrevole: nascosto misurerebbe 0.
   overlay.classList.remove("hidden");
+
+  // Sullo schermo normale la camera sta sempre vicina (un riquadro piccolo,
+  // 1-2 salti attorno al fuoco): non "fa stare tutto", RITAGLIA — ed è
+  // proprio per questo che sembra sempre piena. Qui si replica lo stesso
+  // principio invece di quello opposto ("fai stare tutto senza scorrere",
+  // che con una rete a ventaglio più larga che alta in un riquadro stretto
+  // e alto lascerebbe comunque vuoto sopra e sotto): si ingrandisce fino a
+  // riempire la dimensione più generosa del riquadro, anche se l'altra
+  // dimensione poi richiede di scorrere — esattamente il "Scorri per
+  // vederla tutta" già scritto sopra. Non si rimpicciolisce MAI sotto scala
+  // 1 una rete già più grande dello schermo: lì le locandine resterebbero
+  // leggibili solo scorrendo, mai rimpicciolite fino a diventare illeggibili
+  // (vedi CSS .dna-full-canvas).
+  const scaleToFill = Math.max(scrollBox.clientWidth / contentW, scrollBox.clientHeight / contentH);
+  const scale = Math.min(Math.max(1, scaleToFill), 2.5);
+
+  // Stesso trucco della camera vera (applyCamera): un solo transform sul
+  // contenitore sposta e scala tutta la rete, i nodi dentro restano con le
+  // loro coordinate originali (n.x/n.y) — qui basta farlo una volta, non ad
+  // ogni tocco, perché la vista non segue nessun fuoco. Il margine (PAD)
+  // resta in pixel di schermo, non scalato: uno spazio attorno alla rete
+  // costante a qualunque zoom, invece di crescere con lo zoom.
+  canvas.style.width = `${contentW}px`;
+  canvas.style.height = `${contentH}px`;
+  canvas.style.transform = `translate(${FULL_VIEW_PAD - minX * scale}px, ${FULL_VIEW_PAD - minY * scale}px) scale(${scale})`;
 }
 
 function closeFullNetworkView() {
