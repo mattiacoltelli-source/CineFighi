@@ -384,6 +384,24 @@ function drawCoverImage(c, img, x, y, w, h) {
   c.drawImage(img, sx, sy, sw, sh, x, y, w, h);
 }
 
+// Stessa sfumatura per profondità della rete vera (depthClass/dna-h* in
+// styles.css): chi è lontano dal nodo attivo si spegne, non sparisce.
+const EXPORT_HOP_OPACITY = [1, 1, .6, .34, .2];
+
+// Tronca con un'ellissi quando il testo supera la larghezza massima — stesso
+// criterio del text-overflow:ellipsis reale (.dna-node__label), qui rifatto
+// a mano perché il canvas non tronca il testo da solo.
+function fitLabel(c, text, maxWidth) {
+  if (c.measureText(text).width <= maxWidth) return text;
+  let lo = 0, hi = text.length;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (c.measureText(text.slice(0, mid) + "…").width <= maxWidth) lo = mid;
+    else hi = mid - 1;
+  }
+  return text.slice(0, lo) + "…";
+}
+
 function roundRect(c, x, y, w, h, r) {
   c.beginPath();
   c.moveTo(x + r, y);
@@ -535,17 +553,24 @@ async function exportNetworkImage() {
       }
       const spanX = Math.max(maxX - minX, 1), spanY = Math.max(maxY - minY, 1);
       // Il margine tiene conto della metà del nodo più grande (70px, vedi
-      // exportNodeSize) alla scala massima: senza, le locandine dei nodi sui
-      // bordi finirebbero tagliate dal ritaglio del riquadro qui sotto. Il
-      // tetto evita solo il caso patologico (nodi quasi allineati, spanX o
-      // spanY vicino a 0): senza, una rete appena sopra soglia riempirebbe
-      // il riquadro con pochi nodi enormi al centro.
-      const margin = 110;
+      // exportNodeSize) alla scala massima più lo spazio dell'etichetta sotto:
+      // senza, le locandine e le scritte dei nodi sui bordi finirebbero
+      // tagliate dal ritaglio del riquadro qui sotto. Il tetto evita solo il
+      // caso patologico (nodi quasi allineati, spanX o spanY vicino a 0):
+      // senza, una rete appena sopra soglia riempirebbe il riquadro con
+      // pochi nodi enormi al centro.
+      const margin = 130;
       const scale = Math.min((netBox.w - margin * 2) / spanX, (netBox.h - margin * 2) / spanY, 2.2);
       const cx = netBox.x + netBox.w / 2, cy = netBox.y + netBox.h / 2;
       const midX = (minX + maxX) / 2, midY = (minY + maxY) / 2;
       const toX = (x) => cx + (x - midX) * scale;
       const toY = (y) => cy + (y - midY) * scale;
+
+      // Stessa sfumatura per profondità della rete vera: calcolata dal nodo
+      // attivo di questa sessione (focusId), non da uno stato inventato per
+      // l'esportazione.
+      const hops = hopsFrom(net, focusId);
+      const opacityOf = (id) => EXPORT_HOP_OPACITY[Math.min(hops.get(id) ?? 0, 4)];
 
       c.save();
       roundRect(c, netBox.x, netBox.y, netBox.w, netBox.h, 20);
@@ -561,15 +586,30 @@ async function exportNetworkImage() {
           : EXPORT_COLORS.edgeDiretto;
         c.lineWidth = shared ? 3.4 : 2.2;
         c.setLineDash(e.kind === "diretto" ? [5, 7] : []);
+        c.globalAlpha = Math.max(opacityOf(e.a), opacityOf(e.b));
         c.beginPath();
         c.moveTo(toX(a.x), toY(a.y)); c.lineTo(toX(b.x), toY(b.y));
         c.stroke();
       }
       c.setLineDash([]);
+      c.globalAlpha = 1;
 
       for (const n of placed) {
-        drawExportNode(c, n, toX(n.x), toY(n.y), exportNodeSize(n) * scale, posters);
+        const size = exportNodeSize(n) * scale;
+        const x = toX(n.x), y = toY(n.y);
+        c.globalAlpha = opacityOf(n.id);
+        drawExportNode(c, n, x, y, size, posters);
+
+        // L'etichetta sotto al nodo: stessa distinzione della rete vera fra
+        // il nodo attivo (bianco, grassetto) e tutti gli altri (grigio).
+        const isFocus = n.id === focusId;
+        c.font = `${isFocus ? "700" : "400"} ${Math.max(9, Math.round(11 * scale))}px Inter, system-ui, sans-serif`;
+        c.fillStyle = isFocus ? EXPORT_COLORS.text : EXPORT_COLORS.text2;
+        c.textAlign = "center"; c.textBaseline = "top";
+        c.fillText(fitLabel(c, n.label, 88 * scale), x, y + size / 2 + 5 * scale);
+        c.textAlign = "left"; c.textBaseline = "alphabetic";
       }
+      c.globalAlpha = 1;
       c.restore();
     }
 
