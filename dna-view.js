@@ -331,6 +331,109 @@ let fullViewFit = false;
 // solo il transform invece di ricostruire tutti i nodi.
 let fullViewGeom = null;
 
+// ─── I NUMERI SOTTO LA RETE ───────────────────────────────────────────────
+// Quattro-cinque righe che raccontano LE PERSONE SCELTE, non il disegno qui
+// sopra: sono calcolate su tutta la loro libreria, non sui nodi aperti a
+// mano (quelli cambiano ad ogni tocco, e con poche espansioni darebbero
+// numeri senza senso — "regista preferito" su tre film non vuol dire
+// niente). Per questo sopra le righe c'è scritto di chi sono: in uno
+// screenshot, senza quella riga, si leggerebbero come didascalia del
+// disegno. Tutto da `index`, già in memoria: zero chiamate, zero AI.
+
+// Sotto questo numero di titoli un genere non fa media: un singolo 10 lo
+// porterebbe in cima. È la stessa preoccupazione — e lo stesso numero — del
+// minimo che dna.js chiede a un regista per diventare un nodo.
+const STAT_MIN_TITOLI = 3;
+
+const mediaVoti = (voti) => voti.reduce((s, v) => s + v, 0) / voti.length;
+const unaCifra = (n) => n.toFixed(1).replace(".", ",");
+
+function fullViewStats() {
+  if (!index) return [];
+  const films = [...index.films.values()];
+  if (!films.length) return [];
+
+  const n = selectedPeople?.length || 0;
+  const condivisa = n === 2 || n === 3;
+  const righe = [];
+
+  // "In comune" esiste solo guardando 2 o 3 persone: con una sola, o con
+  // tutto il gruppo, non c'è un'intersezione da raccontare (vedi
+  // isModalitaCondivisa in dna.js). Lì queste due righe semplicemente non
+  // compaiono, invece di mostrare un trattino.
+  if (condivisa) {
+    const insieme = films.filter(f => f.fans.length === n);
+    if (insieme.length) {
+      righe.push({
+        label: n === 2 ? "Amati da entrambi" : "Amati da tutti e tre",
+        value: `${insieme.length} ${insieme.length === 1 ? "titolo" : "titoli"}`
+      });
+      const conta = new Map();
+      for (const f of insieme) for (const g of f.genres) conta.set(g, (conta.get(g) || 0) + 1);
+      const top = [...conta.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0];
+      if (top) righe.push({ label: "Genere in comune", value: `${top[0]} (${top[1]} ${top[1] === 1 ? "titolo" : "titoli"})` });
+    }
+  }
+
+  // Genere preferito: la media dei voti dei film di quel genere. L'indice
+  // contiene solo titoli amati (7+), quindi non è "quanto vi piace il
+  // genere in assoluto" ma "fra quelli che amate, quale premiate di più".
+  const perGenere = new Map();
+  for (const f of films) {
+    for (const g of f.genres) {
+      if (!perGenere.has(g)) perGenere.set(g, { titoli: 0, voti: [] });
+      const dati = perGenere.get(g);
+      dati.titoli++;
+      for (const fan of f.fans) dati.voti.push(fan.vote);
+    }
+  }
+  const genere = [...perGenere.entries()]
+    .filter(([, d]) => d.titoli >= STAT_MIN_TITOLI)
+    .map(([nome, d]) => ({ nome, avg: mediaVoti(d.voti) }))
+    .sort((a, b) => b.avg - a.avg || a.nome.localeCompare(b.nome))[0];
+  if (genere) righe.push({ label: "Genere preferito", value: `${genere.nome} (media ${unaCifra(genere.avg)})` });
+
+  // Regista preferito: index.directors è già ordinato per punteggio (media
+  // ritirata verso quella del gruppo più un bonus per quante persone lo
+  // amano, vedi directorScores). Il punteggio decide chi vince, ma a schermo
+  // si mostra la media vera: un punteggio non direbbe niente a nessuno.
+  const regista = index.directors.values().next().value;
+  if (regista) {
+    const voti = (index.byDirector.get(regista.name) || [])
+      .flatMap(e => (index.films.get(e.id)?.fans || []).map(f => f.vote));
+    if (voti.length) {
+      righe.push({
+        label: "Regista preferito",
+        value: `${regista.name} (${regista.films} film, media ${unaCifra(mediaVoti(voti))})`
+      });
+    }
+  }
+
+  // Voto più alto: con due persone i 10 pieni sono parecchi, quindi a parità
+  // vince chi l'ha amato in più persone e poi l'ordine alfabetico — mai un
+  // pareggio risolto a caso, come ovunque in questa schermata.
+  const film = films
+    .map(f => ({ f, avg: mediaVoti(f.fans.map(x => x.vote)) }))
+    .sort((a, b) => b.avg - a.avg || b.f.fans.length - a.f.fans.length || a.f.title.localeCompare(b.f.title))[0];
+  if (film) righe.push({ label: "Voto più alto", value: `${film.f.title} (${unaCifra(film.avg)})` });
+
+  return righe;
+}
+
+function renderFullViewStats() {
+  const box = el("dnaFullViewStats");
+  if (!box) return;
+  const righe = fullViewStats();
+  if (!righe.length) { box.innerHTML = ""; return; }
+  const titolo = selectedPeople ? `Il DNA di ${peopleLabel()}` : "Il DNA del gruppo";
+  box.innerHTML = `
+    <div class="dna-full-stats__title">${escapeHtml(titolo)}</div>
+    ${righe.map(r => `
+      <div class="dna-full-stats__row">
+        <span>${escapeHtml(r.label)}</span><strong>${escapeHtml(r.value)}</strong>
+      </div>`).join("")}`;
+}
+
 function updateViewAllButton() {
   const btn = el("dnaViewAllBtn");
   if (!btn) return;
@@ -425,6 +528,9 @@ function openFullNetworkView() {
   edgesEl.innerHTML = net.edges.map(e => edgeLine(e, hops)).join("");
   nodesEl.innerHTML = placed.map(n => nodeButton(n, hops)).join("");
   if (who) who.textContent = peopleLabel();
+  // Prima le righe dei numeri, poi la misura: sono loro a decidere quanta
+  // altezza resta alla rete, e in "Adatta" quell'altezza è la scala.
+  renderFullViewStats();
 
   // L'overlay va mostrato PRIMA di misurare il riquadro scorrevole: nascosto
   // misurerebbe 0.
