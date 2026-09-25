@@ -705,7 +705,13 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
     radial-gradient(circle 200px at 78% 160px, rgba(255,157,77,.19), transparent);
 }
 .user-picker__icon { font-size:40px; text-align:center; margin-bottom:10px; }
-.user-picker__title { font-family: var(--font-display); font-size:24px; font-weight:900; text-align:center;
+/* width:fit-content (non text-align:center da solo) fa combaciare il blocco
+   del gradiente con le lettere vere: senza, il blocco resta largo quanto
+   .user-picker__card (fino a 380px) e il testo centrato ne campiona solo
+   una fetta di mezzo, senza mai arrivare al vero arancio al 100% — il
+   risultato è un marroncino spento che sembra sfumare verso il grigio. */
+.user-picker__title { font-family: var(--font-display); font-size:24px; font-weight:900;
+  width:fit-content; margin:0 auto;
   background: linear-gradient(90deg, var(--cyan) 15%, var(--orange) 100%); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
 .user-picker__sub { text-align:center; color: var(--text3); font-size:14px; margin: 6px 0 22px; }
 .user-picker__list-wrap { position:relative; margin-bottom:16px; }
