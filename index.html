@@ -418,11 +418,22 @@
       </div>
       <button id="dnaFullViewCloseBtn" type="button" class="btn-link-quiet">Chiudi ✕</button>
     </div>
-    <p class="dna-full-view__hint">Scorri per vederla tutta, poi fai uno screenshot.</p>
+    <div class="dna-full-view__bar">
+      <div class="genre-view-toggle" id="dnaFullViewZoom" role="group" aria-label="Come guardare la rete">
+        <button type="button" class="genre-view-btn active" data-zoom="fill" aria-pressed="true">Ingrandita</button>
+        <button type="button" class="genre-view-btn" data-zoom="fit" aria-pressed="false">Adatta</button>
+      </div>
+      <p class="dna-full-view__hint" id="dnaFullViewHint">Scorri per vederla tutta, poi fai uno screenshot.</p>
+    </div>
     <div class="dna-full-view__scroll">
       <div id="dnaFullCanvas" class="dna-full-canvas">
-        <svg id="dnaFullEdges" class="dna-edges"></svg>
-        <div id="dnaFullNodes" class="dna-nodes"></div>
+        <!-- Lo strato interno porta l'angolo della rete sull'origine, quello
+             esterno scala: così il riquadro dichiarato coincide con la rete
+             disegnata (vedi applyFullViewScale). -->
+        <div id="dnaFullShift" class="dna-full-shift">
+          <svg id="dnaFullEdges" class="dna-edges"></svg>
+          <div id="dnaFullNodes" class="dna-nodes"></div>
+        </div>
       </div>
     </div>
   </div>

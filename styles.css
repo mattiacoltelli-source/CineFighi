@@ -894,9 +894,14 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
   font-family: var(--font-display); font-weight: 700; color: var(--text); font-size: 15px;
 }
 .dna-full-view__who { display: block; margin-top: 2px; font-size: 12px; font-weight: 600; color: var(--text3); }
-.dna-full-view__hint { margin: 10px 16px 0; font-size: 12px; color: var(--text3); }
+/* Interruttore + spiegazione su una riga sola quando ci stanno, altrimenti la
+   scritta va a capo sotto la pillola: su uno schermo stretto il tasto viene
+   prima della frase che lo spiega. */
+.dna-full-view__bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 16px 0; }
+.dna-full-view__hint { margin: 0; flex: 1; min-width: 160px; font-size: 12px; color: var(--text3); }
 .dna-full-view__scroll { flex: 1; position: relative; overflow: auto; -webkit-overflow-scrolling: touch; }
 .dna-full-canvas { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.dna-full-shift { position: absolute; left: 0; top: 0; }
 
 /* Il foglio di scelta copre il riquadro della rete invece di spingere la
    pagina: aprirlo e chiuderlo non sposta di un pixel quello che c'è sotto. */
