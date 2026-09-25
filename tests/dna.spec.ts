@@ -1,4 +1,3 @@
-import fs from "node:fs/promises";
 import { test, expect } from "@playwright/test";
 import { entra, vaiA, tuttoRaggiungibile, osserva, soloLettura } from "./helpers";
 
@@ -155,10 +154,13 @@ test("l'alone dorato dei molto amati e l'anello verde dei punti d'incontro non c
   expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
 });
 
-// Il tasto "scarica la rete" (vedi updateExportButton in dna-view.js) deve
-// comparire solo dove ha senso — modalita' condivisa (2-3 persone) e rete gia'
-// grande — e deve produrre un file vero quando premuto.
-test("il tasto scarica la rete compare solo in modalita' condivisa con rete grande, e produce un file", async ({ page }) => {
+// Il tasto "vedi tutta la rete" (vedi updateViewAllButton in dna-view.js)
+// deve comparire solo dove ha senso — modalita' condivisa (2-3 persone) e
+// rete gia' grande — e aprendolo deve mostrare DAVVERO tutti i nodi aperti,
+// non un sottoinsieme: e' il punto per cui questa vista esiste (vedi
+// openFullNetworkView, che ridisegna l'intera rete con le stesse funzioni
+// del render live, senza il budget DOM).
+test("il tasto vedi tutta la rete compare solo in modalita' condivisa con rete grande, e mostra ogni nodo aperto", async ({ page }) => {
   const guasti = osserva(page);
   const scritture = soloLettura(page);
   await entra(page);
@@ -167,7 +169,7 @@ test("il tasto scarica la rete compare solo in modalita' condivisa con rete gran
 
   // "Tutti" (nessun filtro): anche con una rete grande il tasto non deve comparire.
   await esplora(page, 10);
-  await expect(page.locator("#dnaExportBtn")).toHaveClass(/hidden/);
+  await expect(page.locator("#dnaViewAllBtn")).toHaveClass(/hidden/);
 
   await page.locator("#dnaPeopleBtn").click();
   const persone = await page.locator("#dnaPeopleList .dna-sheet__row[data-user]").evaluateAll(
@@ -178,20 +180,36 @@ test("il tasto scarica la rete compare solo in modalita' condivisa con rete gran
 
   // Modalita' condivisa ma rete appena ricostruita (un solo nodo): ancora nascosto.
   await selezionaPersone(page, [persone[0], persone[1]]);
-  await expect(page.locator("#dnaExportBtn")).toHaveClass(/hidden/);
+  await expect(page.locator("#dnaViewAllBtn")).toHaveClass(/hidden/);
 
-  // Sopra soglia: compare, e cliccarlo produce davvero un'immagine.
+  // Sopra soglia: compare.
   await esplora(page, 10);
-  await expect(page.locator("#dnaExportBtn")).not.toHaveClass(/hidden/);
+  await expect(page.locator("#dnaViewAllBtn")).not.toHaveClass(/hidden/);
 
-  const downloadPromise = page.waitForEvent("download");
-  await page.locator("#dnaExportBtn").click();
-  const download = await downloadPromise;
-  const path = await download.path();
-  expect(path, "il download non ha prodotto un file").toBeTruthy();
-  const stat = await fs.stat(path!);
-  expect(stat.size, "il PNG scaricato e' sospettosamente piccolo").toBeGreaterThan(5000);
+  const nodiAperti = await page.evaluate(() => document.querySelectorAll("#dnaNodes .dna-node").length);
 
-  expect(guasti, `guasti esportando la rete:\n${guasti.join("\n")}`).toEqual([]);
+  await page.locator("#dnaViewAllBtn").click();
+  await expect(page.locator("#dnaFullView")).not.toHaveClass(/hidden/);
+  await page.locator("#dnaFullNodes .dna-node").first().waitFor({ state: "visible" });
+
+  // La vista live ha un budget (MAX_DOM_NODES/DOM_MAX_HOPS): la vista
+  // completa non deve averne — deve mostrare almeno quanti nodi mostra già
+  // la vista live, e nella pratica normalmente di più (root compreso, che il
+  // budget live potrebbe aver escluso se lontano dalla camera).
+  const nodiNellaVistaCompleta = await page.evaluate(() => document.querySelectorAll("#dnaFullNodes .dna-node").length);
+  expect(nodiNellaVistaCompleta, "la vista completa mostra meno nodi della vista live").toBeGreaterThanOrEqual(nodiAperti);
+
+  // Le locandine sono quelle vere (stesso meccanismo dello schermo normale:
+  // background-image su .dna-node__poster), non un segnaposto.
+  const conLocandina = await page.evaluate(() =>
+    [...document.querySelectorAll("#dnaFullNodes .dna-node__poster")]
+      .filter(p => (p as HTMLElement).style.backgroundImage.includes("image.tmdb.org")).length
+  );
+  expect(conLocandina, "nessuna locandina vera nella vista completa").toBeGreaterThan(0);
+
+  await page.locator("#dnaFullViewCloseBtn").click();
+  await expect(page.locator("#dnaFullView")).toHaveClass(/hidden/);
+
+  expect(guasti, `guasti aprendo la vista completa:\n${guasti.join("\n")}`).toEqual([]);
   expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
 });
