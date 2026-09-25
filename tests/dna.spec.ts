@@ -211,6 +211,20 @@ test("il tasto vedi tutta la rete compare con rete grande in ogni modalita', e m
   );
   expect(conLocandina, "nessuna locandina vera nella vista completa").toBeGreaterThan(0);
 
+  // Qui la sfumatura per distanza dal nodo attivo non deve applicarsi: in una
+  // foto della rete intera nasconderebbe meta' dei nodi per un motivo (dov'era
+  // la camera) che nella foto non esiste piu'.
+  const opacitaMinima = await page.evaluate(() =>
+    Math.min(...[...document.querySelectorAll("#dnaFullNodes .dna-node")]
+      .map(n => parseFloat(getComputedStyle(n as HTMLElement).opacity)))
+  );
+  expect(opacitaMinima, "nella vista completa restano nodi sbiaditi dalla distanza").toBeGreaterThan(0.7);
+
+  // Le righe di numeri sotto la rete: con 2 persone ci sono anche le due
+  // righe "in comune", quindi almeno tre.
+  const righeStat = await page.locator("#dnaFullViewStats .dna-full-stats__row").count();
+  expect(righeStat, "mancano le righe di statistiche sotto la rete").toBeGreaterThanOrEqual(3);
+
   // "Adatta" ha una promessa sola: tutto dentro una schermata. Si verifica
   // sulla cosa che conta davvero — nessuno scorrimento residuo — non sul
   // fattore di scala, che dipende da quanto e' grande la rete del gruppo.

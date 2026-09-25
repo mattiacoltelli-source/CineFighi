@@ -903,6 +903,46 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .dna-full-canvas { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
 .dna-full-shift { position: absolute; left: 0; top: 0; }
 
+/* Qui la sfumatura per distanza dal nodo attivo (dna-h2/h3/h4, fino al 20%)
+   NON si applica: dice "quanto sei lontano da dove stavo guardando", e in
+   una foto della rete intera quell'informazione non esiste più — chi la
+   guarda non sa nemmeno quale fosse il nodo attivo. Al suo posto il risalto
+   va su un dato vero: i punti d'incontro (anello verde, modalità a 2-3
+   persone) e i molto amati (alone dorato, tutte le altre modalità) restano
+   pieni, il resto è appena smorzato. Specificità a tre classi apposta, per
+   vincere su .dna-node.dna-h2 senza dipendere dall'ordine nel foglio. */
+.dna-full-view .dna-nodes .dna-node { opacity: .78; }
+.dna-full-view .dna-nodes .dna-node--persona,
+.dna-full-view .dna-nodes .dna-node.is-shared,
+.dna-full-view .dna-nodes .dna-node.is-loved-1,
+.dna-full-view .dna-nodes .dna-node.is-loved-2 { opacity: 1; }
+/* Gli archi restano trama di fondo: a piena opacità, con qualche decina di
+   nodi, diventano un piatto di spaghetti che nasconde le locandine. */
+.dna-full-view .dna-edges .dna-edge { opacity: .3; }
+
+/* I numeri sotto la rete. Altezza contenuta apposta: quella che prendono qui
+   la tolgono alla rete, e in "Adatta" l'altezza è la scala (vedi
+   applyFullViewScale). Vuoto -> sparisce, invece di lasciare un bordo
+   orfano: stesso criterio di .dna-affinity. */
+.dna-full-stats {
+  flex-shrink: 0; border-top: 1px solid var(--border);
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+}
+.dna-full-stats:empty { display: none; }
+.dna-full-stats__title {
+  font-family: var(--font-display); font-weight: 700; font-size: 12px;
+  color: var(--text3); margin-bottom: 6px;
+}
+.dna-full-stats__row {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+  font-size: 12.5px; line-height: 1.6;
+}
+.dna-full-stats__row span { color: var(--text3); white-space: nowrap; }
+.dna-full-stats__row strong {
+  color: var(--text); font-weight: 600; text-align: right;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
 /* Il foglio di scelta copre il riquadro della rete invece di spingere la
    pagina: aprirlo e chiuderlo non sposta di un pixel quello che c'è sotto. */
 .dna-sheet {
