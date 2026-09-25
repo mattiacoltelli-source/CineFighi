@@ -491,7 +491,14 @@ function renderFullViewStats() {
         <span>${escapeHtml(r.label)}</span><strong>${escapeHtml(r.value)}</strong>
       </div>`).join("")}` : "";
 
-  box.innerHTML = legenda + numeri;
+  // Firma discreta: questa è l'unica schermata pensata per essere
+  // condivisa fuori dall'app ("tutto in una schermata: lo screenshot la
+  // prende intera"), quindi ha senso che porti il nome — ma in fondo, dopo
+  // i numeri, e spenta (vedi .dna-signature in CSS): una firma, non un
+  // secondo titolo che compete con "Il DNA di...".
+  const firma = `<div class="dna-signature">CineFighi</div>`;
+
+  box.innerHTML = legenda + numeri + firma;
 }
 
 function updateViewAllButton() {

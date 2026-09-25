@@ -993,6 +993,19 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
+/* Firma in fondo alla card condivisibile — vedi renderFullViewStats in
+   dna-view.js. Stesso gradiente della scritta in topbar ma opaca al 55% e
+   piccola: si legge come firma di chi ha fatto lo screenshot, non come un
+   secondo titolo che compete con "Il DNA di..." sopra. */
+.dna-signature {
+  margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border);
+  text-align: center; font-family: var(--font-display); font-weight: 800;
+  font-size: 12px; letter-spacing: .4px;
+  background: linear-gradient(135deg, var(--cyan2), var(--orange));
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  opacity: .55;
+}
+
 /* Il foglio di scelta copre il riquadro della rete invece di spingere la
    pagina: aprirlo e chiuderlo non sposta di un pixel quello che c'è sotto. */
 .dna-sheet {
