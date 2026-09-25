@@ -25,7 +25,16 @@ export function soloLettura(page: Page): string[] {
 // selettore propone. Se un domani il gruppo cambia nomi, questi test non se ne
 // accorgono nemmeno — ed e' esattamente il punto.
 export async function entra(page: Page): Promise<void> {
-  await page.goto("/", { waitUntil: "domcontentloaded" });
+  let risposta = await page.goto("/", { waitUntil: "domcontentloaded" });
+  if (risposta && risposta.status() === 404) {
+    // Non e' un 404 dell'app (la home non ne restituisce mai uno): e' il 404
+    // nativo di GitHub Pages ("There isn't a GitHub Pages site here"), un
+    // routing interno di GitHub che ogni tanto non trova il sito per un
+    // attimo. Un secondo tentativo basta quasi sempre; se il sito e' davvero
+    // giu' il secondo goto fallisce uguale e il test fallisce comunque.
+    await page.waitForTimeout(2000);
+    risposta = await page.goto("/", { waitUntil: "domcontentloaded" });
+  }
   const lista = page.locator("#userPickerList button").first();
   await lista.waitFor({ state: "visible", timeout: 30_000 });
   await lista.click();
