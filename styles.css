@@ -113,9 +113,13 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 800; line-height: 1.
    cover) il contenuto può estendersi sotto la status bar/notch/Dynamic
    Island — senza questo il titolo "CineFighi" rischia di finirci sotto. */
 .topbar { display:flex; align-items:center; justify-content:space-between; padding: calc(22px + env(safe-area-inset-top)) 0 16px; }
+/* width:fit-content: senza, il box si allarga quanto il fratello più largo
+   nella colonna (spesso topbar__sub) e il gradiente non arriva mai al vero
+   arancio — stesso bug già corretto in .user-picker__title, vedi lì. */
 .topbar__title {
   font-family: var(--font-display); font-size: 28px; font-weight: 900; letter-spacing:-.5px;
-  background: linear-gradient(135deg, var(--cyan2), var(--cyan));
+  width:fit-content;
+  background: linear-gradient(90deg, var(--cyan) 15%, var(--orange) 100%);
   -webkit-background-clip: text; background-clip:text; -webkit-text-fill-color: transparent;
 }
 .topbar__sub { font-size: 13px; color: var(--text3); margin-top: 2px; }
@@ -452,7 +456,8 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .splash-emoji { font-size:44px; margin-bottom:12px; }
 .splash-title {
   font-family: var(--font-display); font-size:28px; font-weight:900; letter-spacing:-.5px;
-  background: linear-gradient(135deg, var(--cyan2), var(--cyan));
+  width:fit-content; margin:0 auto;
+  background: linear-gradient(90deg, var(--cyan) 15%, var(--orange) 100%);
   -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
 }
 .splash-sub { font-size:13px; color: var(--text3); margin:8px 0 22px; }
