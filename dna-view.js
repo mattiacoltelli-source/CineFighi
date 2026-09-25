@@ -303,29 +303,108 @@ function openSheet(apri) {
 // camera — dentro un riquadro a schermo intero e scorrevole. Le stesse
 // locandine, le stesse etichette, la stessa sfumatura per profondità: è la
 // rete vera, solo srotolata invece che ritagliata. Da lì lo screenshot lo fa
-// il telefono, non l'app — su Android/iOS recenti anche quelli "a scorrimento"
-// se la rete non ci sta in una schermata sola.
+// il telefono, non l'app.
+//
+// Due modi di guardarla, perché nessuno dei due va bene sempre:
+//   INGRANDITA — si ingrandisce fino a riempire lo schermo e il resto si
+//     scorre. È come la rete a schermo normale (che non "fa stare tutto":
+//     ritaglia, ed è per questo che sembra sempre piena), quindi le locandine
+//     restano grandi e leggibili. Su una rete enorme però lo screenshot la
+//     prende solo a pezzi.
+//   ADATTA — tutta in una schermata sola, a costo di rimpicciolirla: uno
+//     screenshot solo e c'è dentro tutto. Su reti molto grandi le locandine
+//     diventano francobolli (è il prezzo, dichiarato nell'etichetta del
+//     tasto), su quelle medie si legge ancora bene.
 const VIEW_ALL_MIN_NODES = 10;
-const FULL_VIEW_PAD = 60;
+// Mezza larghezza/altezza del nodo più ingombrante: il riquadro è 62px ma
+// l'etichetta sotto arriva a 88px e sfora simmetrica (vedi .dna-node,
+// .dna-node__label). Serve a far stare i nodi di bordo dentro l'inquadratura
+// invece di tagliarli a metà.
+const FULL_VIEW_NODE_HALF = 50;
+const FULL_VIEW_GAP = 12;          // respiro ai bordi dello schermo
+
+// Quale dei due modi è attivo. Solo in memoria, come il resto dello stato di
+// questa schermata: la scelta resta per tutta la sessione ma non diventa
+// un'impostazione da ricordare per sempre.
+let fullViewFit = false;
+// Geometria dell'ultima apertura, così passare da un modo all'altro ricalcola
+// solo il transform invece di ricostruire tutti i nodi.
+let fullViewGeom = null;
 
 function updateViewAllButton() {
   const btn = el("dnaViewAllBtn");
   if (!btn) return;
-  const n = selectedPeople?.length;
-  const condivisa = n === 2 || n === 3;
+  // Vale in ogni modalità — una persona sola, due, tre, tutto il gruppo: la
+  // rete diventa grande allo stesso modo, e il motivo per guardarla intera
+  // non dipende da quante persone ci sono dentro.
   const aperti = net ? [...net.nodes.values()].filter(x => x.x !== null).length : 0;
-  btn.classList.toggle("hidden", !(condivisa && aperti >= VIEW_ALL_MIN_NODES));
+  btn.classList.toggle("hidden", aperti < VIEW_ALL_MIN_NODES);
+}
+
+// Applica solo zoom e posizione, sui nodi già disegnati (vedi fullViewGeom).
+function applyFullViewScale() {
+  const canvas = el("dnaFullCanvas");
+  const shift = el("dnaFullShift");
+  const scrollBox = el("dnaFullView")?.querySelector(".dna-full-view__scroll");
+  if (!canvas || !shift || !scrollBox || !fullViewGeom) return;
+
+  const { left, top, contentW, contentH } = fullViewGeom;
+  const availW = Math.max(scrollBox.clientWidth - FULL_VIEW_GAP * 2, 1);
+  const availH = Math.max(scrollBox.clientHeight - FULL_VIEW_GAP * 2, 1);
+  const ratioW = availW / contentW, ratioH = availH / contentH;
+
+  // Adatta: la più piccola delle due proporzioni fa stare TUTTO, senza
+  // pavimento — se serve scendere a un terzo della scala si scende, altrimenti
+  // il modo non manterrebbe la sua unica promessa. Ingrandita: la più grande,
+  // mai sotto 1 (una rete più grande dello schermo si scorre, non si
+  // rimpicciolisce fino a diventare illeggibile).
+  const scale = fullViewFit
+    ? Math.min(Math.min(ratioW, ratioH), 2.5)
+    : Math.min(Math.max(1, Math.max(ratioW, ratioH)), 2.5);
+
+  // Quando la rete scalata è più piccola del riquadro (sempre, in "Adatta":
+  // una rete larga e bassa in uno schermo stretto e alto avanza parecchia
+  // altezza) si centra invece di incollarla in alto: metà schermata nera in
+  // fondo è proprio quello che si porterebbe dietro lo screenshot.
+  const offX = Math.max(FULL_VIEW_GAP, (scrollBox.clientWidth - contentW * scale) / 2);
+  const offY = Math.max(FULL_VIEW_GAP, (scrollBox.clientHeight - contentH * scale) / 2);
+
+  // Due trasformazioni annidate invece di una: quella interna porta l'angolo
+  // della rete sull'origine (i nodi tengono le loro coordinate originali,
+  // condivise col render normale), quella esterna scala e posiziona. Così il
+  // riquadro dichiarato coincide con la rete disegnata, e non resta spazio
+  // vuoto in fondo allo scorrimento.
+  shift.style.transform = `translate(${-left}px, ${-top}px)`;
+  canvas.style.width = `${contentW}px`;
+  canvas.style.height = `${contentH}px`;
+  canvas.style.transform = `translate(${offX}px, ${offY}px) scale(${scale})`;
+
+  if (fullViewFit) { scrollBox.scrollTop = 0; scrollBox.scrollLeft = 0; }
+}
+
+function setFullViewFit(fit) {
+  fullViewFit = fit;
+  for (const btn of document.querySelectorAll("#dnaFullViewZoom [data-zoom]")) {
+    const attiva = (btn.dataset.zoom === "fit") === fit;
+    btn.classList.toggle("active", attiva);
+    btn.setAttribute("aria-pressed", attiva ? "true" : "false");
+  }
+  const hint = el("dnaFullViewHint");
+  if (hint) {
+    hint.textContent = fit
+      ? "Tutta in una schermata: lo screenshot la prende intera."
+      : "Scorri per vederla tutta, poi fai uno screenshot.";
+  }
+  applyFullViewScale();
 }
 
 function openFullNetworkView() {
   if (!net) return;
-  const canvas = el("dnaFullCanvas");
   const edgesEl = el("dnaFullEdges");
   const nodesEl = el("dnaFullNodes");
   const overlay = el("dnaFullView");
-  const scrollBox = overlay?.querySelector(".dna-full-view__scroll");
   const who = el("dnaFullViewWho");
-  if (!canvas || !edgesEl || !nodesEl || !overlay || !scrollBox) return;
+  if (!edgesEl || !nodesEl || !overlay) return;
 
   const placed = [...net.nodes.values()].filter(n => n.x !== null);
   if (!placed.length) return;
@@ -335,42 +414,22 @@ function openFullNetworkView() {
     minX = Math.min(minX, n.x); maxX = Math.max(maxX, n.x);
     minY = Math.min(minY, n.y); maxY = Math.max(maxY, n.y);
   }
-  const contentW = maxX - minX + FULL_VIEW_PAD * 2;
-  const contentH = maxY - minY + FULL_VIEW_PAD * 2;
+  fullViewGeom = {
+    left: minX - FULL_VIEW_NODE_HALF,
+    top: minY - FULL_VIEW_NODE_HALF,
+    contentW: maxX - minX + FULL_VIEW_NODE_HALF * 2,
+    contentH: maxY - minY + FULL_VIEW_NODE_HALF * 2
+  };
 
   const hops = hopsFrom(net, focusId);
   edgesEl.innerHTML = net.edges.map(e => edgeLine(e, hops)).join("");
   nodesEl.innerHTML = placed.map(n => nodeButton(n, hops)).join("");
   if (who) who.textContent = peopleLabel();
 
-  // L'overlay va mostrato PRIMA di leggere le dimensioni del riquadro
-  // scorrevole: nascosto misurerebbe 0.
+  // L'overlay va mostrato PRIMA di misurare il riquadro scorrevole: nascosto
+  // misurerebbe 0.
   overlay.classList.remove("hidden");
-
-  // Sullo schermo normale la camera sta sempre vicina (un riquadro piccolo,
-  // 1-2 salti attorno al fuoco): non "fa stare tutto", RITAGLIA — ed è
-  // proprio per questo che sembra sempre piena. Qui si replica lo stesso
-  // principio invece di quello opposto ("fai stare tutto senza scorrere",
-  // che con una rete a ventaglio più larga che alta in un riquadro stretto
-  // e alto lascerebbe comunque vuoto sopra e sotto): si ingrandisce fino a
-  // riempire la dimensione più generosa del riquadro, anche se l'altra
-  // dimensione poi richiede di scorrere — esattamente il "Scorri per
-  // vederla tutta" già scritto sopra. Non si rimpicciolisce MAI sotto scala
-  // 1 una rete già più grande dello schermo: lì le locandine resterebbero
-  // leggibili solo scorrendo, mai rimpicciolite fino a diventare illeggibili
-  // (vedi CSS .dna-full-canvas).
-  const scaleToFill = Math.max(scrollBox.clientWidth / contentW, scrollBox.clientHeight / contentH);
-  const scale = Math.min(Math.max(1, scaleToFill), 2.5);
-
-  // Stesso trucco della camera vera (applyCamera): un solo transform sul
-  // contenitore sposta e scala tutta la rete, i nodi dentro restano con le
-  // loro coordinate originali (n.x/n.y) — qui basta farlo una volta, non ad
-  // ogni tocco, perché la vista non segue nessun fuoco. Il margine (PAD)
-  // resta in pixel di schermo, non scalato: uno spazio attorno alla rete
-  // costante a qualunque zoom, invece di crescere con lo zoom.
-  canvas.style.width = `${contentW}px`;
-  canvas.style.height = `${contentH}px`;
-  canvas.style.transform = `translate(${FULL_VIEW_PAD - minX * scale}px, ${FULL_VIEW_PAD - minY * scale}px) scale(${scale})`;
+  setFullViewFit(fullViewFit);
 }
 
 function closeFullNetworkView() {
@@ -380,6 +439,12 @@ function closeFullNetworkView() {
 function bindFullView() {
   el("dnaViewAllBtn")?.addEventListener("click", () => { haptic(8); openFullNetworkView(); });
   el("dnaFullViewCloseBtn")?.addEventListener("click", () => { haptic(8); closeFullNetworkView(); });
+  el("dnaFullViewZoom")?.addEventListener("click", e => {
+    const btn = e.target.closest("[data-zoom]");
+    if (!btn) return;
+    haptic(8);
+    setFullViewFit(btn.dataset.zoom === "fit");
+  });
 }
 
 function renderMessage(text) {

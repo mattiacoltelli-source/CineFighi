@@ -155,21 +155,25 @@ test("l'alone dorato dei molto amati e l'anello verde dei punti d'incontro non c
 });
 
 // Il tasto "vedi tutta la rete" (vedi updateViewAllButton in dna-view.js)
-// deve comparire solo dove ha senso — modalita' condivisa (2-3 persone) e
-// rete gia' grande — e aprendolo deve mostrare DAVVERO tutti i nodi aperti,
-// non un sottoinsieme: e' il punto per cui questa vista esiste (vedi
-// openFullNetworkView, che ridisegna l'intera rete con le stesse funzioni
-// del render live, senza il budget DOM).
-test("il tasto vedi tutta la rete compare solo in modalita' condivisa con rete grande, e mostra ogni nodo aperto", async ({ page }) => {
+// dipende SOLO da quanto e' grande la rete, non da quante persone sono
+// selezionate: vale con "Tutti", con una persona sola, con due, con cinque.
+// Aprendolo deve mostrare DAVVERO tutti i nodi aperti, non un sottoinsieme:
+// e' il punto per cui questa vista esiste (vedi openFullNetworkView, che
+// ridisegna l'intera rete con le stesse funzioni del render live, senza il
+// budget DOM).
+test("il tasto vedi tutta la rete compare con rete grande in ogni modalita', e mostra ogni nodo aperto", async ({ page }) => {
   const guasti = osserva(page);
   const scritture = soloLettura(page);
   await entra(page);
   await vaiA(page, "tonight");
   await page.locator("#dnaNodes .dna-node").first().waitFor({ state: "visible", timeout: 30_000 });
 
-  // "Tutti" (nessun filtro): anche con una rete grande il tasto non deve comparire.
-  await esplora(page, 10);
+  // Rete appena costruita (un solo nodo): sotto soglia, nascosto.
   await expect(page.locator("#dnaViewAllBtn")).toHaveClass(/hidden/);
+
+  // "Tutti" (nessun filtro) con una rete grande: deve comparire.
+  await esplora(page, 10);
+  await expect(page.locator("#dnaViewAllBtn")).not.toHaveClass(/hidden/);
 
   await page.locator("#dnaPeopleBtn").click();
   const persone = await page.locator("#dnaPeopleList .dna-sheet__row[data-user]").evaluateAll(
@@ -178,11 +182,11 @@ test("il tasto vedi tutta la rete compare solo in modalita' condivisa con rete g
   await page.locator("#dnaPeopleDoneBtn").click();
   test.skip(persone.length < 2, "serve un gruppo di almeno 2 persone");
 
-  // Modalita' condivisa ma rete appena ricostruita (un solo nodo): ancora nascosto.
+  // Cambiando selezione la rete riparte da un nodo solo: torna sotto soglia.
   await selezionaPersone(page, [persone[0], persone[1]]);
   await expect(page.locator("#dnaViewAllBtn")).toHaveClass(/hidden/);
 
-  // Sopra soglia: compare.
+  // Sopra soglia: compare di nuovo.
   await esplora(page, 10);
   await expect(page.locator("#dnaViewAllBtn")).not.toHaveClass(/hidden/);
 
@@ -206,6 +210,22 @@ test("il tasto vedi tutta la rete compare solo in modalita' condivisa con rete g
       .filter(p => (p as HTMLElement).style.backgroundImage.includes("image.tmdb.org")).length
   );
   expect(conLocandina, "nessuna locandina vera nella vista completa").toBeGreaterThan(0);
+
+  // "Adatta" ha una promessa sola: tutto dentro una schermata. Si verifica
+  // sulla cosa che conta davvero — nessuno scorrimento residuo — non sul
+  // fattore di scala, che dipende da quanto e' grande la rete del gruppo.
+  await page.locator('#dnaFullViewZoom [data-zoom="fit"]').click();
+  const adattata = await page.evaluate(() => {
+    const s = document.querySelector(".dna-full-view__scroll")!;
+    return { scorrimentoX: s.scrollWidth - s.clientWidth, scorrimentoY: s.scrollHeight - s.clientHeight };
+  });
+  expect(adattata.scorrimentoX, "in 'Adatta' resta da scorrere in orizzontale").toBeLessThanOrEqual(1);
+  expect(adattata.scorrimentoY, "in 'Adatta' resta da scorrere in verticale").toBeLessThanOrEqual(1);
+
+  // Tornando a "Ingrandita" i nodi restano tutti li': cambia solo lo zoom.
+  await page.locator('#dnaFullViewZoom [data-zoom="fill"]').click();
+  const dopoRitorno = await page.evaluate(() => document.querySelectorAll("#dnaFullNodes .dna-node").length);
+  expect(dopoRitorno, "cambiando zoom si sono persi dei nodi").toBe(nodiNellaVistaCompleta);
 
   await page.locator("#dnaFullViewCloseBtn").click();
   await expect(page.locator("#dnaFullView")).toHaveClass(/hidden/);
