@@ -348,29 +348,40 @@ function exportCaptionData() {
 }
 
 const EXPORT_COLORS = {
-  bg: "#06090e", surface2: "#141d2a",
+  bg: "#06090e", surface2: "#141d2a", surface3: "#1b2738",
   text: "#f0f6fc", text2: "#a3b8cc", text3: "#62788e",
   border: "rgba(255,255,255,.10)",
   cyan: "#38bdf8", orange: "#ff9d4d", orange2: "#ffc48a",
-  green: "#3ec97a", gold: "#ffd166",
+  green: "#3ec97a", gold: "#ffd166", avatarText: "#3a2008",
+  genreBorder: "rgba(255,157,77,.35)", directorBorder: "rgba(56,189,248,.4)",
   edgeAma: "rgba(56,189,248,.34)", edgeAppartiene: "rgba(255,157,77,.26)", edgeDiretto: "rgba(56,189,248,.22)",
   edgeShared: "rgba(62,201,122,.5)"
 };
 
-// Stessi criteri visivi della rete vera (is-shared verde, is-loved oro,
-// is-root arancio, vedi styles.css) — qui come colore del bordo invece che
-// come classe, perché il canvas non ha CSS.
-function exportNodeRing(n) {
-  if (isMeetingPoint(n)) return EXPORT_COLORS.green;
-  if (lovedLevel(n)) return EXPORT_COLORS.gold;
-  if (n.id === net.rootId) return EXPORT_COLORS.orange;
-  return "rgba(255,255,255,.16)";
+// Le locandine dei nodi film: stesso dominio TMDB già usato a schermo (vedi
+// DNA_POSTER più in alto), solo più grandi (w342) perché qui i nodi possono
+// arrivare a occupare più pixel che sullo schermo di un telefono. Il CDN
+// manda Access-Control-Allow-Origin: *, quindi l'immagine si può disegnare
+// su canvas senza "sporcarlo" (altrimenti canvas.toBlob() fallirebbe).
+const EXPORT_POSTER = "https://image.tmdb.org/t/p/w342";
+
+function loadImage(src) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
 }
 
-function exportNodeRadius(n) {
-  if (n.type === "persona") return n.id === net.rootId ? 17 : 14;
-  if (n.type === "film") return 11;
-  return 9; // genere, regista
+// Riempie il riquadro ritagliando l'immagine al centro, come CSS
+// background-size:cover — stesso effetto della locandina vera a schermo.
+function drawCoverImage(c, img, x, y, w, h) {
+  const s = Math.max(w / img.width, h / img.height);
+  const sw = w / s, sh = h / s;
+  const sx = (img.width - sw) / 2, sy = (img.height - sh) / 2;
+  c.drawImage(img, sx, sy, sw, sh, x, y, w, h);
 }
 
 function roundRect(c, x, y, w, h, r) {
@@ -381,6 +392,83 @@ function roundRect(c, x, y, w, h, r) {
   c.arcTo(x, y + h, x, y, r);
   c.arcTo(x, y, x + w, y, r);
   c.closePath();
+}
+
+// Le stesse dimensioni CSS della rete vera (styles.css: poster 56/62/70px,
+// persona 52px, genere/regista 44px) — qui in "pixel nativi", scalati poi
+// dello STESSO fattore delle posizioni (vedi scale in exportNetworkImage):
+// le proporzioni fra un nodo e la distanza dal successivo restano identiche
+// a quelle a schermo, a qualunque livello di zoom finisca l'immagine.
+function exportNodeSize(n) {
+  if (n.type === "persona") return 52;
+  if (n.type === "film") {
+    if (isMeetingPoint(n) || lovedLevel(n) === 2) return 70;
+    if (lovedLevel(n) === 1) return 62;
+    return 56;
+  }
+  return 44; // genere, regista
+}
+
+// Un nodo disegnato com'è davvero in rete — locandina vera per i film,
+// avatar con iniziali per le persone, pastiglie per generi e registi — non
+// un pallino astratto: è il punto della richiesta ("letteralmente la rete
+// che ho aperto"). Stessi criteri visivi di styles.css (anello verde =
+// punto d'incontro, alone oro = molto amato, anello chiaro = radice).
+function drawExportNode(c, n, x, y, size, posters) {
+  const half = size / 2;
+  c.textAlign = "center"; c.textBaseline = "middle";
+
+  if (n.type === "persona") {
+    c.beginPath();
+    c.arc(x, y, half, 0, Math.PI * 2);
+    c.fillStyle = EXPORT_COLORS.orange;
+    c.fill();
+    if (n.id === net.rootId) {
+      c.lineWidth = Math.max(2, size * 0.045);
+      c.strokeStyle = EXPORT_COLORS.text;
+      c.stroke();
+    }
+    c.fillStyle = EXPORT_COLORS.avatarText;
+    c.font = `800 ${Math.round(size * 0.36)}px Outfit, system-ui, sans-serif`;
+    c.fillText(initials(n.label), x, y + size * 0.02);
+  } else if (n.type === "genere" || n.type === "regista") {
+    const radius = n.type === "genere" ? half : size * 0.24;
+    roundRect(c, x - half, y - half, size, size, radius);
+    c.fillStyle = EXPORT_COLORS.surface2;
+    c.fill();
+    const shared = isMeetingPoint(n);
+    roundRect(c, x - half, y - half, size, size, radius);
+    c.lineWidth = shared ? size * 0.045 : 1.6;
+    c.strokeStyle = shared ? EXPORT_COLORS.green : (n.type === "genere" ? EXPORT_COLORS.genreBorder : EXPORT_COLORS.directorBorder);
+    c.stroke();
+    c.fillStyle = n.type === "genere" ? EXPORT_COLORS.orange : EXPORT_COLORS.cyan;
+    c.font = `800 ${Math.round(size * 0.24)}px Outfit, system-ui, sans-serif`;
+    c.fillText(n.type === "genere" ? n.label.slice(0, 3).toUpperCase() : initials(n.label), x, y + size * 0.02);
+  } else { // film
+    const radius = size * 0.25;
+    const img = posters.get(n.id);
+    roundRect(c, x - half, y - half, size, size, radius);
+    if (img) {
+      c.save();
+      c.clip();
+      drawCoverImage(c, img, x - half, y - half, size, size);
+      c.restore();
+    } else {
+      c.fillStyle = EXPORT_COLORS.surface2;
+      c.fill();
+      c.font = `${Math.round(size * 0.36)}px sans-serif`;
+      c.fillStyle = EXPORT_COLORS.text2;
+      c.fillText("🎬", x, y + size * 0.02);
+    }
+    const shared = isMeetingPoint(n);
+    const loved = lovedLevel(n);
+    roundRect(c, x - half, y - half, size, size, radius);
+    c.lineWidth = shared ? size * 0.045 : loved === 2 ? size * 0.05 : loved === 1 ? size * 0.03 : 1.4;
+    c.strokeStyle = shared ? EXPORT_COLORS.green : loved ? EXPORT_COLORS.gold : EXPORT_COLORS.surface3;
+    c.stroke();
+  }
+
+  c.textAlign = "left"; c.textBaseline = "alphabetic";
 }
 
 async function exportNetworkImage() {
@@ -425,6 +513,20 @@ async function exportNetworkImage() {
     c.fill();
 
     const placed = [...net.nodes.values()].filter(n => n.x !== null);
+
+    // Le locandine vere (vedi drawExportNode): caricate PRIMA di disegnare,
+    // altrimenti il canvas andrebbe dipinto due volte. Un film senza
+    // locandina (raro) resta con il segnaposto 🎬, non blocca l'export.
+    const posters = new Map();
+    await Promise.all(
+      placed
+        .filter(n => n.type === "film" && n.meta.poster_path)
+        .map(async n => {
+          const img = await loadImage(`${EXPORT_POSTER}${n.meta.poster_path}`);
+          if (img) posters.set(n.id, img);
+        })
+    );
+
     if (placed.length) {
       let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
       for (const n of placed) {
@@ -432,11 +534,14 @@ async function exportNetworkImage() {
         minY = Math.min(minY, n.y); maxY = Math.max(maxY, n.y);
       }
       const spanX = Math.max(maxX - minX, 1), spanY = Math.max(maxY - minY, 1);
-      // Il tetto evita solo il caso patologico (nodi quasi allineati, spanX o
+      // Il margine tiene conto della metà del nodo più grande (70px, vedi
+      // exportNodeSize) alla scala massima: senza, le locandine dei nodi sui
+      // bordi finirebbero tagliate dal ritaglio del riquadro qui sotto. Il
+      // tetto evita solo il caso patologico (nodi quasi allineati, spanX o
       // spanY vicino a 0): senza, una rete appena sopra soglia riempirebbe
-      // il riquadro con pochi puntini sparsi al centro.
-      const margin = 48;
-      const scale = Math.min((netBox.w - margin * 2) / spanX, (netBox.h - margin * 2) / spanY, 3.4);
+      // il riquadro con pochi nodi enormi al centro.
+      const margin = 110;
+      const scale = Math.min((netBox.w - margin * 2) / spanX, (netBox.h - margin * 2) / spanY, 2.2);
       const cx = netBox.x + netBox.w / 2, cy = netBox.y + netBox.h / 2;
       const midX = (minX + maxX) / 2, midY = (minY + maxY) / 2;
       const toX = (x) => cx + (x - midX) * scale;
@@ -463,14 +568,7 @@ async function exportNetworkImage() {
       c.setLineDash([]);
 
       for (const n of placed) {
-        const r = exportNodeRadius(n);
-        c.beginPath();
-        c.arc(toX(n.x), toY(n.y), r, 0, Math.PI * 2);
-        c.fillStyle = EXPORT_COLORS.surface2;
-        c.fill();
-        c.lineWidth = 2.4;
-        c.strokeStyle = exportNodeRing(n);
-        c.stroke();
+        drawExportNode(c, n, toX(n.x), toY(n.y), exportNodeSize(n) * scale, posters);
       }
       c.restore();
     }
