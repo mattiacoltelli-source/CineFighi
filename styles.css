@@ -964,6 +964,21 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
   padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
 }
 .dna-full-stats:empty { display: none; }
+/* Legenda degli archi: una riga sola. Tre righe impilate sopra il titolo e
+   le cinque righe di numeri farebbero della fascia un muro di testo che
+   compete col disegno. I colori dei trattini sono gli stessi identici degli
+   archi qui sopra, non "simili": è l'unica cosa che rende la legenda
+   utilizzabile, quindi stanno vicini apposta per non divergere. */
+.dna-full-legend {
+  display: flex; flex-wrap: wrap; gap: 4px 16px; margin-bottom: 10px;
+  font-size: 11.5px; color: var(--text3);
+}
+.dna-full-legend__voce { display: inline-flex; align-items: center; gap: 6px; }
+.dna-full-legend__voce i { width: 16px; height: 3px; border-radius: 2px; flex-shrink: 0; }
+.dna-full-legend__voce i.is-shared { background: rgba(62,201,122,.7); }
+.dna-full-legend__voce i.is-loved { background: rgba(255,209,102,.6); }
+.dna-full-legend__voce i.is-ama { background: rgba(56,189,248,.45); }
+
 .dna-full-stats__title {
   font-family: var(--font-display); font-weight: 700; font-size: 12px;
   color: var(--text3); margin-bottom: 6px;

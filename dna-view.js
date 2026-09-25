@@ -420,18 +420,55 @@ function fullViewStats() {
   return righe;
 }
 
+// La legenda degli archi. Serve perché questa immagine è fatta per essere
+// mandata agli altri, e chi la riceve non ha modo di sapere che il verde
+// vuol dire "lo amate entrambi": senza una riga che lo dica, i colori
+// restano un codice privato di chi ha fatto lo screenshot.
+//
+// Si guarda cosa è stato DAVVERO disegnato invece di dedurlo dalla modalità.
+// Non è pignoleria: con 4 persone selezionate non c'è né il verde (serve la
+// modalità a 2-3) né l'oro (servono 5 fan su 4 possibili), e una voce per un
+// colore assente sarebbe una bugia in piccolo. Restano fuori apposta
+// l'arancione (film→genere) e il tratteggio (regista): un arco che finisce su
+// una pastiglia con scritto "Thriller" o "James Cameron" si legge dai suoi
+// estremi, e didascalarlo sarebbe solo rumore. Una voce sola copre anche i
+// nodi: l'anello verde e l'arco verde usano lo stesso verde di proposito.
+function fullViewLegend() {
+  const edges = el("dnaFullEdges");
+  if (!edges) return [];
+  const voci = [];
+  if (edges.querySelector(".dna-edge--ama.is-shared")) {
+    voci.push({ classe: "is-shared", testo: selectedPeople?.length === 3 ? "amato da tutti e tre" : "amato da entrambi" });
+  }
+  if (edges.querySelector(".dna-edge--ama.is-loved-2")) {
+    voci.push({ classe: "is-loved", testo: "amato da 5+ persone" });
+  }
+  if (edges.querySelector(".dna-edge--ama")) {
+    voci.push({ classe: "is-ama", testo: "chi ama cosa" });
+  }
+  return voci;
+}
+
 function renderFullViewStats() {
   const box = el("dnaFullViewStats");
   if (!box) return;
+  const voci = fullViewLegend();
   const righe = fullViewStats();
-  if (!righe.length) { box.innerHTML = ""; return; }
+  if (!voci.length && !righe.length) { box.innerHTML = ""; return; }
+
+  const legenda = voci.length ? `
+    <div class="dna-full-legend">
+      ${voci.map(v => `<span class="dna-full-legend__voce"><i class="${v.classe}"></i>${escapeHtml(v.testo)}</span>`).join("")}
+    </div>` : "";
   const titolo = selectedPeople ? `Il DNA di ${peopleLabel()}` : "Il DNA del gruppo";
-  box.innerHTML = `
+  const numeri = righe.length ? `
     <div class="dna-full-stats__title">${escapeHtml(titolo)}</div>
     ${righe.map(r => `
       <div class="dna-full-stats__row">
         <span>${escapeHtml(r.label)}</span><strong>${escapeHtml(r.value)}</strong>
-      </div>`).join("")}`;
+      </div>`).join("")}` : "";
+
+  box.innerHTML = legenda + numeri;
 }
 
 function updateViewAllButton() {

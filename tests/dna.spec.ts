@@ -225,6 +225,21 @@ test("il tasto vedi tutta la rete compare con rete grande in ogni modalita', e m
   const righeStat = await page.locator("#dnaFullViewStats .dna-full-stats__row").count();
   expect(righeStat, "mancano le righe di statistiche sotto la rete").toBeGreaterThanOrEqual(3);
 
+  // La legenda deve dire esattamente quello che c'e' nell'immagine: mai una
+  // voce per un colore non disegnato (con 4 persone selezionate, per dire,
+  // non c'e' ne' verde ne' oro), e mai un colore disegnato senza la sua voce.
+  // Scritta come uguaglianza, quindi vale in qualunque modalita'.
+  const legenda = await page.evaluate(() => ({
+    verdeInLegenda: !!document.querySelector(".dna-full-legend__voce i.is-shared"),
+    verdeNegliArchi: !!document.querySelector("#dnaFullEdges .dna-edge--ama.is-shared"),
+    oroInLegenda: !!document.querySelector(".dna-full-legend__voce i.is-loved"),
+    oroNegliArchi: !!document.querySelector("#dnaFullEdges .dna-edge--ama.is-loved-2"),
+    voci: document.querySelectorAll(".dna-full-legend__voce").length,
+  }));
+  expect(legenda.voci, "manca la legenda degli archi").toBeGreaterThan(0);
+  expect(legenda.verdeInLegenda, "la legenda non combacia con gli archi verdi disegnati").toBe(legenda.verdeNegliArchi);
+  expect(legenda.oroInLegenda, "la legenda non combacia con gli archi oro disegnati").toBe(legenda.oroNegliArchi);
+
   // "Adatta" ha una promessa sola: tutto dentro una schermata. Si verifica
   // sulla cosa che conta davvero — nessuno scorrimento residuo — non sul
   // fattore di scala, che dipende da quanto e' grande la rete del gruppo.
