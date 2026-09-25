@@ -916,9 +916,44 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .dna-full-view .dna-nodes .dna-node.is-shared,
 .dna-full-view .dna-nodes .dna-node.is-loved-1,
 .dna-full-view .dna-nodes .dna-node.is-loved-2 { opacity: 1; }
-/* Gli archi restano trama di fondo: a piena opacità, con qualche decina di
-   nodi, diventano un piatto di spaghetti che nasconde le locandine. */
-.dna-full-view .dna-edges .dna-edge { opacity: .3; }
+/* Gli archi: tre livelli invece di una riduzione piatta. Prima era al
+   contrario — i colori portano già la loro trasparenza dentro (ama 34%,
+   appartiene 24%, diretto 20%) e il 30% che ci mettevo sopra li riduceva a
+   10/7/6%: l'impalcatura (film→genere, la più numerosa) era la cosa più
+   presente, il filo che unisce le persone la meno visibile. Qui niente
+   moltiplicazione: ogni livello ha la sua tinta e il suo spessore.
+     FORTE  — SOLO "ama" (persona→film) verso un punto d'incontro, o verso un
+              molto amato fuori dalla modalità condivisa: è letteralmente il
+              filo fra una persona e un titolo che vi unisce.
+     MEDIO  — "ama" normale: il legame concreto persona→film.
+     DEBOLE — "appartiene" e "diretto": impalcatura, spiegano i raggruppamenti
+              ma non sono la storia. Restano trama di fondo, non invisibili.
+   Il forte è volutamente stretto. Primo tentativo era "qualunque arco che
+   tocca un punto d'incontro": con due persone quasi ogni nodo è un punto
+   d'incontro, quindi diventava forte QUASI TUTTO — un intrico verde sopra le
+   locandine, cioè il contrario del risalto. Un film→genere non è "cosa vi
+   unisce" nemmeno quando il film è condiviso: è come ci è arrivato.
+   La specificità a cinque classi fa vincere il livello sul tipo. Annulla
+   anche l'evidenza di .is-focus (0,2,0), che in una foto non vuol dire
+   niente. Gli spessori arrivano da applyFullViewScale, che li adatta allo
+   zoom. */
+.dna-full-view .dna-edges .dna-edge { opacity: 1; stroke-width: var(--dna-edge-debole, 1.6px); }
+.dna-full-view .dna-edges .dna-edge--appartiene { stroke: rgba(255,157,77,.24); }
+.dna-full-view .dna-edges .dna-edge--diretto { stroke: rgba(56,189,248,.2); }
+.dna-full-view .dna-edges .dna-edge--ama {
+  stroke: rgba(56,189,248,.45); stroke-width: var(--dna-edge-medio, 2.2px);
+}
+/* Qui l'arco che conta prende il verde dei nodi condivisi — a schermo normale
+   resta solo più spesso, senza colore nuovo (vedi il commento su
+   .dna-edge.is-shared più sopra: là vale ancora). In una foto però il filo e
+   l'anello devono leggersi come un sistema solo, non come due segnali
+   scollegati. Stesso ragionamento per l'oro dei molto amati. */
+.dna-full-view .dna-edges .dna-edge--ama.is-shared {
+  stroke: rgba(62,201,122,.7); stroke-width: var(--dna-edge-forte, 3px);
+}
+.dna-full-view .dna-edges .dna-edge--ama.is-loved-2 {
+  stroke: rgba(255,209,102,.6); stroke-width: var(--dna-edge-forte, 3px);
+}
 
 /* I numeri sotto la rete. Altezza contenuta apposta: quella che prendono qui
    la tolgono alla rete, e in "Adatta" l'altezza è la scala (vedi

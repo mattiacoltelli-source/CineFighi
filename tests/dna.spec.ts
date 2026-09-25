@@ -236,6 +236,20 @@ test("il tasto vedi tutta la rete compare con rete grande in ogni modalita', e m
   expect(adattata.scorrimentoX, "in 'Adatta' resta da scorrere in orizzontale").toBeLessThanOrEqual(1);
   expect(adattata.scorrimentoY, "in 'Adatta' resta da scorrere in verticale").toBeLessThanOrEqual(1);
 
+  // "Adatta" e' il caso peggiore per gli archi: la scala e' la piu' piccola,
+  // e uno spessore che la segue in modo lineare finirebbe sotto il pixel —
+  // dove l'antialiasing lo spegne e la rete resta senza collegamenti
+  // visibili. Si misura lo spessore EFFETTIVO a schermo (nominale x scala).
+  const tratti = await page.evaluate(() => {
+    const canvas = document.getElementById("dnaFullCanvas")!;
+    const scala = Number((canvas.style.transform.match(/scale\(([\d.]+)\)/) || [])[1] || 1);
+    const spessori = [...document.querySelectorAll("#dnaFullEdges .dna-edge")]
+      .map(e => parseFloat(getComputedStyle(e).strokeWidth) * scala);
+    return { minimo: Math.min(...spessori), quanti: spessori.length };
+  });
+  expect(tratti.quanti, "nessun arco disegnato nella vista completa").toBeGreaterThan(0);
+  expect(tratti.minimo, "archi troppo sottili per vedersi nello screenshot").toBeGreaterThanOrEqual(1);
+
   // Tornando a "Ingrandita" i nodi restano tutti li': cambia solo lo zoom.
   await page.locator('#dnaFullViewZoom [data-zoom="fill"]').click();
   const dopoRitorno = await page.evaluate(() => document.querySelectorAll("#dnaFullNodes .dna-node").length);
