@@ -865,6 +865,20 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .dna-people-btn span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .dna-people-btn.is-active { border-color: rgba(56,189,248,.45); color: var(--cyan); background: var(--cyan-dim); }
 
+/* Scarica la rete come immagine: compare solo quando ha senso (modalità a
+   2/3 persone e rete già grande, vedi updateExportButton in dna-view.js).
+   Icona sola, stesso riquadro tondo del filtro persone accanto: non è una
+   funzione nuova che chiede spazio, è un'opzione in più nello stesso posto. */
+.dna-export-btn {
+  flex-shrink:0; display:inline-flex; align-items:center; justify-content:center;
+  width:32px; height:32px; padding:0; border-radius:999px;
+  background: var(--surface2); border:1px solid var(--surface3); color: var(--text2);
+  cursor:pointer; -webkit-tap-highlight-color: transparent;
+}
+.dna-export-btn svg { width:15px; height:15px; }
+.dna-export-btn:active { transform: scale(.94); }
+.dna-export-btn:disabled { opacity:.5; }
+
 /* Il foglio di scelta copre il riquadro della rete invece di spingere la
    pagina: aprirlo e chiuderlo non sposta di un pixel quello che c'è sotto. */
 .dna-sheet {

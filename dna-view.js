@@ -293,6 +293,253 @@ function openSheet(apri) {
   renderPeopleControl();
 }
 
+// ─── ESPORTA RETE COME IMMAGINE ───────────────────────────────────────────────
+// Solo in modalità condivisa (2 o 3 persone) e solo quando la rete è già
+// grande abbastanza da valere la pena portarsela via: sotto la soglia il
+// tasto sarebbe solo un'icona in più senza un motivo per esistere. Il file è
+// ridisegnato da zero su un <canvas> dalle stesse posizioni x/y già calcolate
+// per lo schermo — non è uno screenshot del DOM — e i numeri sotto sono
+// esattamente quelli già calcolati altrove in questo file (dnaAffinity e la
+// stessa intersezione, letta per genere): zero chiamate esterne, zero AI.
+const EXPORT_MIN_NODES = 10;
+
+function updateExportButton() {
+  const btn = el("dnaExportBtn");
+  if (!btn) return;
+  const n = selectedPeople?.length;
+  const condivisa = n === 2 || n === 3;
+  const aperti = net ? [...net.nodes.values()].filter(x => x.x !== null).length : 0;
+  btn.classList.toggle("hidden", !(condivisa && aperti >= EXPORT_MIN_NODES));
+}
+
+function personLabel(name) {
+  return name === ctx?.currentUser ? "Tu" : name;
+}
+
+function exportCaptionData() {
+  const persone = selectedPeople || [];
+  const n = persone.length;
+  const nomi = persone.map(personLabel);
+  const peopleLine = nomi.length <= 1 ? nomi.join("") : `${nomi.slice(0, -1).join(", ")} & ${nomi[nomi.length - 1]}`;
+
+  let insieme = 0;
+  if ((n === 2 || n === 3) && index) {
+    for (const f of index.films.values()) if (f.fans.length === n) insieme++;
+  }
+  const chi = n === 2 ? "da entrambi" : "da tutti e tre";
+  const affinityLine = insieme > 0 ? `${insieme} ${insieme === 1 ? "titolo amato" : "titoli amati"} ${chi}.` : "";
+
+  // Stessa intersezione di dnaAffinity, letta per genere invece che in totale.
+  let genreTop = null;
+  if ((n === 2 || n === 3) && index) {
+    const tally = new Map();
+    for (const f of index.films.values()) {
+      if (f.fans.length !== n) continue;
+      for (const g of f.genres) tally.set(g, (tally.get(g) || 0) + 1);
+    }
+    const top = [...tally.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0];
+    if (top) genreTop = { name: top[0], count: top[1] };
+  }
+
+  const nodeCount = net ? [...net.nodes.values()].filter(x => x.x !== null).length : 0;
+  const dateLine = new Date().toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" });
+
+  return { peopleLine, affinityLine, genreTop, nodeCount, dateLine };
+}
+
+const EXPORT_COLORS = {
+  bg: "#06090e", surface2: "#141d2a",
+  text: "#f0f6fc", text2: "#a3b8cc", text3: "#62788e",
+  border: "rgba(255,255,255,.10)",
+  cyan: "#38bdf8", orange: "#ff9d4d", orange2: "#ffc48a",
+  green: "#3ec97a", gold: "#ffd166",
+  edgeAma: "rgba(56,189,248,.34)", edgeAppartiene: "rgba(255,157,77,.26)", edgeDiretto: "rgba(56,189,248,.22)",
+  edgeShared: "rgba(62,201,122,.5)"
+};
+
+// Stessi criteri visivi della rete vera (is-shared verde, is-loved oro,
+// is-root arancio, vedi styles.css) — qui come colore del bordo invece che
+// come classe, perché il canvas non ha CSS.
+function exportNodeRing(n) {
+  if (isMeetingPoint(n)) return EXPORT_COLORS.green;
+  if (lovedLevel(n)) return EXPORT_COLORS.gold;
+  if (n.id === net.rootId) return EXPORT_COLORS.orange;
+  return "rgba(255,255,255,.16)";
+}
+
+function exportNodeRadius(n) {
+  if (n.type === "persona") return n.id === net.rootId ? 17 : 14;
+  if (n.type === "film") return 11;
+  return 9; // genere, regista
+}
+
+function roundRect(c, x, y, w, h, r) {
+  c.beginPath();
+  c.moveTo(x + r, y);
+  c.arcTo(x + w, y, x + w, y + h, r);
+  c.arcTo(x + w, y + h, x, y + h, r);
+  c.arcTo(x, y + h, x, y, r);
+  c.arcTo(x, y, x + w, y, r);
+  c.closePath();
+}
+
+async function exportNetworkImage() {
+  if (!net) return;
+  const btn = el("dnaExportBtn");
+  if (btn) btn.disabled = true;
+  try {
+    // I font sono già quelli dell'app (caricati da styles.css): questa
+    // attesa serve solo a non disegnare testo prima che siano pronti.
+    await (document.fonts?.ready || Promise.resolve());
+
+    const W = 1080, H = 1560, PAD = 56;
+    const canvas = document.createElement("canvas");
+    canvas.width = W; canvas.height = H;
+    const c = canvas.getContext("2d");
+
+    c.fillStyle = EXPORT_COLORS.bg;
+    c.fillRect(0, 0, W, H);
+    const g1 = c.createRadialGradient(W * 0.5, 0, 0, W * 0.5, 0, W * 0.75);
+    g1.addColorStop(0, "rgba(56,189,248,.10)"); g1.addColorStop(1, "rgba(56,189,248,0)");
+    c.fillStyle = g1; c.fillRect(0, 0, W, H);
+    const g2 = c.createRadialGradient(W, H, 0, W, H, W * 0.75);
+    g2.addColorStop(0, "rgba(255,157,77,.09)"); g2.addColorStop(1, "rgba(255,157,77,0)");
+    c.fillStyle = g2; c.fillRect(0, 0, W, H);
+
+    const brandGrad = c.createLinearGradient(PAD, 0, PAD + 260, 0);
+    brandGrad.addColorStop(0.15, EXPORT_COLORS.cyan); brandGrad.addColorStop(1, EXPORT_COLORS.orange);
+    c.fillStyle = brandGrad;
+    c.font = "900 40px Outfit, system-ui, sans-serif";
+    c.textBaseline = "alphabetic";
+    c.fillText("CineFighi", PAD, PAD + 34);
+    c.fillStyle = EXPORT_COLORS.text3;
+    c.font = "600 21px Outfit, system-ui, sans-serif";
+    c.fillText("DNA condiviso", PAD, PAD + 66);
+
+    const data = exportCaptionData();
+    const captionTop = H - 360;
+    const netTop = PAD + 96, netBottom = captionTop - 24;
+    const netBox = { x: PAD, y: netTop, w: W - PAD * 2, h: netBottom - netTop };
+    roundRect(c, netBox.x, netBox.y, netBox.w, netBox.h, 20);
+    c.fillStyle = "rgba(255,255,255,.02)";
+    c.fill();
+
+    const placed = [...net.nodes.values()].filter(n => n.x !== null);
+    if (placed.length) {
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      for (const n of placed) {
+        minX = Math.min(minX, n.x); maxX = Math.max(maxX, n.x);
+        minY = Math.min(minY, n.y); maxY = Math.max(maxY, n.y);
+      }
+      const spanX = Math.max(maxX - minX, 1), spanY = Math.max(maxY - minY, 1);
+      // Il tetto evita solo il caso patologico (nodi quasi allineati, spanX o
+      // spanY vicino a 0): senza, una rete appena sopra soglia riempirebbe
+      // il riquadro con pochi puntini sparsi al centro.
+      const margin = 48;
+      const scale = Math.min((netBox.w - margin * 2) / spanX, (netBox.h - margin * 2) / spanY, 3.4);
+      const cx = netBox.x + netBox.w / 2, cy = netBox.y + netBox.h / 2;
+      const midX = (minX + maxX) / 2, midY = (minY + maxY) / 2;
+      const toX = (x) => cx + (x - midX) * scale;
+      const toY = (y) => cy + (y - midY) * scale;
+
+      c.save();
+      roundRect(c, netBox.x, netBox.y, netBox.w, netBox.h, 20);
+      c.clip();
+
+      for (const e of net.edges) {
+        const a = net.nodes.get(e.a), b = net.nodes.get(e.b);
+        if (!a || !b || a.x === null || b.x === null) continue;
+        const shared = isMeetingPoint(a) || isMeetingPoint(b);
+        c.strokeStyle = shared ? EXPORT_COLORS.edgeShared
+          : e.kind === "ama" ? EXPORT_COLORS.edgeAma
+          : e.kind === "appartiene" ? EXPORT_COLORS.edgeAppartiene
+          : EXPORT_COLORS.edgeDiretto;
+        c.lineWidth = shared ? 3.4 : 2.2;
+        c.setLineDash(e.kind === "diretto" ? [5, 7] : []);
+        c.beginPath();
+        c.moveTo(toX(a.x), toY(a.y)); c.lineTo(toX(b.x), toY(b.y));
+        c.stroke();
+      }
+      c.setLineDash([]);
+
+      for (const n of placed) {
+        const r = exportNodeRadius(n);
+        c.beginPath();
+        c.arc(toX(n.x), toY(n.y), r, 0, Math.PI * 2);
+        c.fillStyle = EXPORT_COLORS.surface2;
+        c.fill();
+        c.lineWidth = 2.4;
+        c.strokeStyle = exportNodeRing(n);
+        c.stroke();
+      }
+      c.restore();
+    }
+
+    c.strokeStyle = EXPORT_COLORS.border;
+    c.lineWidth = 1;
+    c.beginPath();
+    c.moveTo(PAD, captionTop); c.lineTo(W - PAD, captionTop);
+    c.stroke();
+
+    let ty = captionTop + 46;
+    c.fillStyle = EXPORT_COLORS.text;
+    c.font = "800 32px Outfit, system-ui, sans-serif";
+    c.fillText(data.peopleLine, PAD, ty);
+
+    if (data.affinityLine) {
+      ty += 40;
+      c.fillStyle = EXPORT_COLORS.green;
+      c.font = "600 23px Inter, system-ui, sans-serif";
+      c.fillText(data.affinityLine, PAD, ty);
+    }
+
+    if (data.genreTop) {
+      ty += 38;
+      c.font = "400 21px Inter, system-ui, sans-serif";
+      c.fillStyle = EXPORT_COLORS.text2;
+      const prefix = "Il genere che vi unisce di più: ";
+      c.fillText(prefix, PAD, ty);
+      const prefixW = c.measureText(prefix).width;
+      c.font = "600 21px Inter, system-ui, sans-serif";
+      c.fillStyle = EXPORT_COLORS.orange2;
+      c.fillText(data.genreTop.name, PAD + prefixW, ty);
+      const nameW = c.measureText(data.genreTop.name).width;
+      c.font = "400 21px Inter, system-ui, sans-serif";
+      c.fillStyle = EXPORT_COLORS.text2;
+      c.fillText(` (${data.genreTop.count} in comune)`, PAD + prefixW + nameW, ty);
+    }
+
+    ty = H - 46;
+    c.font = "600 18px Outfit, system-ui, sans-serif";
+    c.fillStyle = EXPORT_COLORS.text3;
+    c.fillText(`${data.nodeCount} nodi esplorati · ${data.dateLine}`, PAD, ty);
+    const foot = "CineFighi";
+    const footW = c.measureText(foot).width;
+    c.fillText(foot, W - PAD - footW, ty);
+
+    const blob = await new Promise(res => canvas.toBlob(res, "image/png"));
+    if (!blob) return;
+    const slug = (selectedPeople || []).join("-").toLowerCase()
+      .normalize("NFD").replace(/[̀-ͯ]/g, "")
+      .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `cinefighi-dna-${slug || "gruppo"}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function bindExport() {
+  const btn = el("dnaExportBtn");
+  btn?.addEventListener("click", () => { haptic(8); exportNetworkImage(); });
+}
+
 function renderMessage(text) {
   const nodes = el("dnaNodes");
   const edges = el("dnaEdges");
@@ -509,6 +756,7 @@ function render() {
   // e la schermata torna identica a tutte le altre.
   el("app")?.classList.toggle("dna-esplorazione", esplorando);
 
+  updateExportButton();
   renderPanel(net.nodes.get(focusId));
 }
 
@@ -659,6 +907,7 @@ export function initDnaView() {
   bindPan();
   bindPeople();
   bindIntroToggle();
+  bindExport();
 
   const nodesEl = el("dnaNodes");
   if (nodesEl) {

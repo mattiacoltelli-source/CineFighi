@@ -1,3 +1,4 @@
+import fs from "node:fs/promises";
 import { test, expect } from "@playwright/test";
 import { entra, vaiA, tuttoRaggiungibile, osserva, soloLettura } from "./helpers";
 
@@ -151,5 +152,46 @@ test("l'alone dorato dei molto amati e l'anello verde dei punti d'incontro non c
   expect(fuori.lovedEShared, "alone dorato e anello verde non devono mai comparire sullo stesso nodo").toBe(0);
 
   expect(guasti, `guasti esplorando il DNA:\n${guasti.join("\n")}`).toEqual([]);
+  expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
+});
+
+// Il tasto "scarica la rete" (vedi updateExportButton in dna-view.js) deve
+// comparire solo dove ha senso — modalita' condivisa (2-3 persone) e rete gia'
+// grande — e deve produrre un file vero quando premuto.
+test("il tasto scarica la rete compare solo in modalita' condivisa con rete grande, e produce un file", async ({ page }) => {
+  const guasti = osserva(page);
+  const scritture = soloLettura(page);
+  await entra(page);
+  await vaiA(page, "tonight");
+  await page.locator("#dnaNodes .dna-node").first().waitFor({ state: "visible", timeout: 30_000 });
+
+  // "Tutti" (nessun filtro): anche con una rete grande il tasto non deve comparire.
+  await esplora(page, 10);
+  await expect(page.locator("#dnaExportBtn")).toHaveClass(/hidden/);
+
+  await page.locator("#dnaPeopleBtn").click();
+  const persone = await page.locator("#dnaPeopleList .dna-sheet__row[data-user]").evaluateAll(
+    els => els.map(e => e.getAttribute("data-user")).filter((u): u is string => !!u && u !== "*")
+  );
+  await page.locator("#dnaPeopleDoneBtn").click();
+  test.skip(persone.length < 2, "serve un gruppo di almeno 2 persone");
+
+  // Modalita' condivisa ma rete appena ricostruita (un solo nodo): ancora nascosto.
+  await selezionaPersone(page, [persone[0], persone[1]]);
+  await expect(page.locator("#dnaExportBtn")).toHaveClass(/hidden/);
+
+  // Sopra soglia: compare, e cliccarlo produce davvero un'immagine.
+  await esplora(page, 10);
+  await expect(page.locator("#dnaExportBtn")).not.toHaveClass(/hidden/);
+
+  const downloadPromise = page.waitForEvent("download");
+  await page.locator("#dnaExportBtn").click();
+  const download = await downloadPromise;
+  const path = await download.path();
+  expect(path, "il download non ha prodotto un file").toBeTruthy();
+  const stat = await fs.stat(path!);
+  expect(stat.size, "il PNG scaricato e' sospettosamente piccolo").toBeGreaterThan(5000);
+
+  expect(guasti, `guasti esportando la rete:\n${guasti.join("\n")}`).toEqual([]);
   expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
 });
