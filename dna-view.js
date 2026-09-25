@@ -446,10 +446,11 @@ function updateViewAllButton() {
 
 // Applica solo zoom e posizione, sui nodi già disegnati (vedi fullViewGeom).
 function applyFullViewScale() {
+  const overlay = el("dnaFullView");
   const canvas = el("dnaFullCanvas");
   const shift = el("dnaFullShift");
-  const scrollBox = el("dnaFullView")?.querySelector(".dna-full-view__scroll");
-  if (!canvas || !shift || !scrollBox || !fullViewGeom) return;
+  const scrollBox = overlay?.querySelector(".dna-full-view__scroll");
+  if (!overlay || !canvas || !shift || !scrollBox || !fullViewGeom) return;
 
   const { left, top, contentW, contentH } = fullViewGeom;
   const availW = Math.max(scrollBox.clientWidth - FULL_VIEW_GAP * 2, 1);
@@ -481,6 +482,19 @@ function applyFullViewScale() {
   canvas.style.width = `${contentW}px`;
   canvas.style.height = `${contentH}px`;
   canvas.style.transform = `translate(${offX}px, ${offY}px) scale(${scale})`;
+
+  // Lo spessore degli archi non può seguire lo zoom in modo lineare: in
+  // "Adatta" a 0,35x un tratto da 2,6px diventa 0,9px — sotto il pixel, dove
+  // l'antialiasing lo spegne. (Sui nodi non si nota: una locandina piccola
+  // resta una locandina, una linea sottile invece sparisce.) Ogni livello ha
+  // quindi uno spessore nominale e un minimo garantito A SCHERMO: sotto quella
+  // soglia il nominale cresce quanto basta a compensare la riduzione. Non è
+  // "spessore costante" (che a zoom alto farebbe linee sproporzionate rispetto
+  // ai nodi): è un pavimento, non un blocco.
+  const spessore = (nominale, minimoAschermo) => `${Math.max(nominale, minimoAschermo / scale).toFixed(2)}px`;
+  overlay.style.setProperty("--dna-edge-forte", spessore(3.2, 2.2));
+  overlay.style.setProperty("--dna-edge-medio", spessore(2.2, 1.5));
+  overlay.style.setProperty("--dna-edge-debole", spessore(1.6, 1.1));
 
   if (fullViewFit) { scrollBox.scrollTop = 0; scrollBox.scrollLeft = 0; }
 }
@@ -707,7 +721,15 @@ function edgeLine(e, hops) {
   // d'incontro) è il tratto che racconta l'incrocio: più spesso, non un
   // colore nuovo — lo stesso trattamento già riservato a is-focus.
   const suIncontro = isMeetingPoint(a) || isMeetingPoint(b) ? " is-shared" : "";
-  return `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" class="dna-edge dna-edge--${e.kind} dna-h${depthClass(h)}${suFocus}${suIncontro}"/>`;
+  // Fuori dalla modalità condivisa il punto d'incontro non esiste, e
+  // l'equivalente è il molto amato — ma solo quello di livello forte (5+ fan,
+  // vedi lovedLevel). Col gradino basso (3 fan) su tutto il gruppo sarebbe
+  // quasi ogni film, cioè di nuovo nessun risalto. lovedLevel vale 0 DENTRO
+  // la modalità condivisa, quindi questa classe e is-shared non capitano mai
+  // insieme — stessa esclusione già garantita sui nodi. A schermo normale non
+  // cambia niente: la usa solo la vista completa.
+  const suAmato = lovedLevel(a) === 2 || lovedLevel(b) === 2 ? " is-loved-2" : "";
+  return `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" class="dna-edge dna-edge--${e.kind} dna-h${depthClass(h)}${suFocus}${suIncontro}${suAmato}"/>`;
 }
 
 // Un nodo, con la sua classe (locandina/avatar/pastiglia dentro, vedi
