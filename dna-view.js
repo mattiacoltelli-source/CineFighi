@@ -293,6 +293,95 @@ function openSheet(apri) {
   renderPeopleControl();
 }
 
+// ─── VEDI TUTTA LA RETE ───────────────────────────────────────────────────────
+// Tre tentativi di ricostruire la rete su un <canvas> (pallini astratti, poi
+// locandine vere ma senza etichette, poi un "meglio di" curato) non sono mai
+// arrivati a essere davvero "la rete che ho aperto" — ognuno era un'altra
+// approssimazione. Qui non si ricostruisce più niente: le STESSE funzioni che
+// disegnano la rete sullo schermo (edgeLine/nodeButton, vedi RENDER più sotto)
+// ridisegnano l'INTERA rete — senza il budget DOM né il ritaglio della
+// camera — dentro un riquadro a schermo intero e scorrevole. Le stesse
+// locandine, le stesse etichette, la stessa sfumatura per profondità: è la
+// rete vera, solo srotolata invece che ritagliata. Da lì lo screenshot lo fa
+// il telefono, non l'app — su Android/iOS recenti anche quelli "a scorrimento"
+// se la rete non ci sta in una schermata sola.
+const VIEW_ALL_MIN_NODES = 10;
+const FULL_VIEW_PAD = 60;
+
+function updateViewAllButton() {
+  const btn = el("dnaViewAllBtn");
+  if (!btn) return;
+  const n = selectedPeople?.length;
+  const condivisa = n === 2 || n === 3;
+  const aperti = net ? [...net.nodes.values()].filter(x => x.x !== null).length : 0;
+  btn.classList.toggle("hidden", !(condivisa && aperti >= VIEW_ALL_MIN_NODES));
+}
+
+function openFullNetworkView() {
+  if (!net) return;
+  const canvas = el("dnaFullCanvas");
+  const edgesEl = el("dnaFullEdges");
+  const nodesEl = el("dnaFullNodes");
+  const overlay = el("dnaFullView");
+  const scrollBox = overlay?.querySelector(".dna-full-view__scroll");
+  const who = el("dnaFullViewWho");
+  if (!canvas || !edgesEl || !nodesEl || !overlay || !scrollBox) return;
+
+  const placed = [...net.nodes.values()].filter(n => n.x !== null);
+  if (!placed.length) return;
+
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const n of placed) {
+    minX = Math.min(minX, n.x); maxX = Math.max(maxX, n.x);
+    minY = Math.min(minY, n.y); maxY = Math.max(maxY, n.y);
+  }
+  const contentW = maxX - minX + FULL_VIEW_PAD * 2;
+  const contentH = maxY - minY + FULL_VIEW_PAD * 2;
+
+  const hops = hopsFrom(net, focusId);
+  edgesEl.innerHTML = net.edges.map(e => edgeLine(e, hops)).join("");
+  nodesEl.innerHTML = placed.map(n => nodeButton(n, hops)).join("");
+  if (who) who.textContent = peopleLabel();
+
+  // L'overlay va mostrato PRIMA di leggere le dimensioni del riquadro
+  // scorrevole: nascosto misurerebbe 0.
+  overlay.classList.remove("hidden");
+
+  // Sullo schermo normale la camera sta sempre vicina (un riquadro piccolo,
+  // 1-2 salti attorno al fuoco): non "fa stare tutto", RITAGLIA — ed è
+  // proprio per questo che sembra sempre piena. Qui si replica lo stesso
+  // principio invece di quello opposto ("fai stare tutto senza scorrere",
+  // che con una rete a ventaglio più larga che alta in un riquadro stretto
+  // e alto lascerebbe comunque vuoto sopra e sotto): si ingrandisce fino a
+  // riempire la dimensione più generosa del riquadro, anche se l'altra
+  // dimensione poi richiede di scorrere — esattamente il "Scorri per
+  // vederla tutta" già scritto sopra. Non si rimpicciolisce MAI sotto scala
+  // 1 una rete già più grande dello schermo: lì le locandine resterebbero
+  // leggibili solo scorrendo, mai rimpicciolite fino a diventare illeggibili
+  // (vedi CSS .dna-full-canvas).
+  const scaleToFill = Math.max(scrollBox.clientWidth / contentW, scrollBox.clientHeight / contentH);
+  const scale = Math.min(Math.max(1, scaleToFill), 2.5);
+
+  // Stesso trucco della camera vera (applyCamera): un solo transform sul
+  // contenitore sposta e scala tutta la rete, i nodi dentro restano con le
+  // loro coordinate originali (n.x/n.y) — qui basta farlo una volta, non ad
+  // ogni tocco, perché la vista non segue nessun fuoco. Il margine (PAD)
+  // resta in pixel di schermo, non scalato: uno spazio attorno alla rete
+  // costante a qualunque zoom, invece di crescere con lo zoom.
+  canvas.style.width = `${contentW}px`;
+  canvas.style.height = `${contentH}px`;
+  canvas.style.transform = `translate(${FULL_VIEW_PAD - minX * scale}px, ${FULL_VIEW_PAD - minY * scale}px) scale(${scale})`;
+}
+
+function closeFullNetworkView() {
+  el("dnaFullView")?.classList.add("hidden");
+}
+
+function bindFullView() {
+  el("dnaViewAllBtn")?.addEventListener("click", () => { haptic(8); openFullNetworkView(); });
+  el("dnaFullViewCloseBtn")?.addEventListener("click", () => { haptic(8); closeFullNetworkView(); });
+}
+
 function renderMessage(text) {
   const nodes = el("dnaNodes");
   const edges = el("dnaEdges");
@@ -433,6 +522,56 @@ function lovedLevel(n) {
   return 0;
 }
 
+// Un arco, con la sua classe (tipo, profondità, focus, punto d'incontro).
+// Usata sia dal render live (sul solo budget visibile) sia dalla vista
+// completa (openFullNetworkView, su TUTTI gli archi): stessa funzione,
+// stesso risultato visivo, non due modi diversi di disegnare la rete.
+function edgeLine(e, hops) {
+  const a = net.nodes.get(e.a);
+  const b = net.nodes.get(e.b);
+  const suFocus = e.a === focusId || e.b === focusId ? " is-focus" : "";
+  // Un arco è lontano quanto il più lontano dei suoi due estremi.
+  const h = Math.max(hops.get(e.a) ?? 0, hops.get(e.b) ?? 0);
+  // Un arco fra due punti d'incontro (o fra una persona e un punto
+  // d'incontro) è il tratto che racconta l'incrocio: più spesso, non un
+  // colore nuovo — lo stesso trattamento già riservato a is-focus.
+  const suIncontro = isMeetingPoint(a) || isMeetingPoint(b) ? " is-shared" : "";
+  return `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" class="dna-edge dna-edge--${e.kind} dna-h${depthClass(h)}${suFocus}${suIncontro}"/>`;
+}
+
+// Un nodo, con la sua classe (locandina/avatar/pastiglia dentro, vedi
+// nodeInner). Stessa funzione condivisa fra il render live e la vista
+// completa — vedi edgeLine qui sopra per il perché.
+function nodeButton(n, hops) {
+  const h = hops.get(n.id);
+  const withLabel = h <= LABEL_MAX_HOPS;
+  const cls = [
+    "dna-node",
+    `dna-node--${n.type}`,
+    // Profondità dalla camera: è già calcolata per il budget DOM, qui
+    // diventa anche visibile. Senza, un nodo a quattro salti pesa
+    // all'occhio quanto il vicino di quello attivo, ed è il motivo per
+    // cui una rete molto aperta diventa illeggibile.
+    `dna-h${depthClass(h)}`,
+    n.id === focusId ? "is-focus" : "",
+    n.id === net.rootId ? "is-root" : "",
+    n.expanded ? "is-open" : "",
+    withLabel ? "" : "is-far",
+    // Punto d'incontro: lo ama ognuna delle persone che stai guardando.
+    // Solo in modalità condivisa — vedi isMeetingPoint.
+    isMeetingPoint(n) ? "is-shared" : "",
+    // "Molto amato": vedi lovedLevel. Mai insieme a is-shared (si escludono
+    // a vicenda sulla modalità condivisa).
+    lovedLevel(n) ? `is-loved-${lovedLevel(n)}` : ""
+  ].filter(Boolean).join(" ");
+  return `<button type="button" class="${cls}" data-node="${escapeHtml(n.id)}"
+    style="left:${n.x.toFixed(1)}px;top:${n.y.toFixed(1)}px"
+    aria-label="${escapeHtml(n.label)}">
+    ${nodeInner(n)}
+    ${withLabel ? `<span class="dna-node__label">${escapeHtml(n.label)}</span>` : ""}
+  </button>`;
+}
+
 function render() {
   const nodesEl = el("dnaNodes");
   const edgesEl = el("dnaEdges");
@@ -450,49 +589,10 @@ function render() {
 
   edgesEl.innerHTML = net.edges
     .filter(e => shown.has(e.a) && shown.has(e.b))
-    .map(e => {
-      const a = net.nodes.get(e.a);
-      const b = net.nodes.get(e.b);
-      const suFocus = e.a === focusId || e.b === focusId ? " is-focus" : "";
-      // Un arco è lontano quanto il più lontano dei suoi due estremi.
-      const h = Math.max(hops.get(e.a) ?? 0, hops.get(e.b) ?? 0);
-      // Un arco fra due punti d'incontro (o fra una persona e un punto
-      // d'incontro) è il tratto che racconta l'incrocio: più spesso, non un
-      // colore nuovo — lo stesso trattamento già riservato a is-focus.
-      const suIncontro = isMeetingPoint(a) || isMeetingPoint(b) ? " is-shared" : "";
-      return `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" class="dna-edge dna-edge--${e.kind} dna-h${depthClass(h)}${suFocus}${suIncontro}"/>`;
-    })
+    .map(e => edgeLine(e, hops))
     .join("");
 
-  nodesEl.innerHTML = visible.map(n => {
-    const h = hops.get(n.id);
-    const withLabel = h <= LABEL_MAX_HOPS;
-    const cls = [
-      "dna-node",
-      `dna-node--${n.type}`,
-      // Profondità dalla camera: è già calcolata per il budget DOM, qui
-      // diventa anche visibile. Senza, un nodo a quattro salti pesa
-      // all'occhio quanto il vicino di quello attivo, ed è il motivo per
-      // cui una rete molto aperta diventa illeggibile.
-      `dna-h${depthClass(h)}`,
-      n.id === focusId ? "is-focus" : "",
-      n.id === net.rootId ? "is-root" : "",
-      n.expanded ? "is-open" : "",
-      withLabel ? "" : "is-far",
-      // Punto d'incontro: lo ama ognuna delle persone che stai guardando.
-      // Solo in modalità condivisa — vedi isMeetingPoint.
-      isMeetingPoint(n) ? "is-shared" : "",
-      // "Molto amato": vedi lovedLevel. Mai insieme a is-shared (si escludono
-      // a vicenda sulla modalità condivisa).
-      lovedLevel(n) ? `is-loved-${lovedLevel(n)}` : ""
-    ].filter(Boolean).join(" ");
-    return `<button type="button" class="${cls}" data-node="${escapeHtml(n.id)}"
-      style="left:${n.x.toFixed(1)}px;top:${n.y.toFixed(1)}px"
-      aria-label="${escapeHtml(n.label)}">
-      ${nodeInner(n)}
-      ${withLabel ? `<span class="dna-node__label">${escapeHtml(n.label)}</span>` : ""}
-    </button>`;
-  }).join("");
+  nodesEl.innerHTML = visible.map(n => nodeButton(n, hops)).join("");
 
   shownIds = visible.map(n => n.id);
   applyCamera();
@@ -509,6 +609,7 @@ function render() {
   // e la schermata torna identica a tutte le altre.
   el("app")?.classList.toggle("dna-esplorazione", esplorando);
 
+  updateViewAllButton();
   renderPanel(net.nodes.get(focusId));
 }
 
@@ -659,6 +760,7 @@ export function initDnaView() {
   bindPan();
   bindPeople();
   bindIntroToggle();
+  bindFullView();
 
   const nodesEl = el("dnaNodes");
   if (nodesEl) {

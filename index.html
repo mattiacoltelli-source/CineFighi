@@ -239,6 +239,9 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 20v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9.5" cy="7" r="4"/><path d="M22 20v-2a4 4 0 0 0-3-3.87"/></svg>
           <span id="dnaPeopleLabel">Tutti</span>
         </button>
+        <button id="dnaViewAllBtn" type="button" class="dna-view-all-btn hidden" aria-label="Vedi tutta la rete">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+        </button>
         <button id="dnaResetBtn" type="button" class="btn-link-quiet dna-reset-btn">Ricomincia</button>
       </div>
       <button type="button" id="dnaIntroToggle" class="dna-intro" aria-expanded="false" aria-controls="dnaIntroFull">
@@ -399,6 +402,29 @@
       </div>
     </section>
 
+  </div>
+
+  <!-- Vedi tutta la rete del DNA: la STESSA rete (stesse locandine, stesse
+       etichette), solo srotolata invece che ritagliata nel piccolo riquadro
+       di esplorazione — vedi openFullNetworkView in dna-view.js. Da qui lo
+       screenshot lo fa il telefono, non l'app. Fuori da #app apposta, come
+       gli altri overlay a schermo intero: dentro sarebbe rimasta intrappolata
+       sotto la barra di navigazione (stacking context di #app). -->
+  <div id="dnaFullView" class="dna-full-view hidden">
+    <div class="dna-full-view__head">
+      <div>
+        <strong>Tutta la rete</strong>
+        <span id="dnaFullViewWho" class="dna-full-view__who"></span>
+      </div>
+      <button id="dnaFullViewCloseBtn" type="button" class="btn-link-quiet">Chiudi ✕</button>
+    </div>
+    <p class="dna-full-view__hint">Scorri per vederla tutta, poi fai uno screenshot.</p>
+    <div class="dna-full-view__scroll">
+      <div id="dnaFullCanvas" class="dna-full-canvas">
+        <svg id="dnaFullEdges" class="dna-edges"></svg>
+        <div id="dnaFullNodes" class="dna-nodes"></div>
+      </div>
+    </div>
   </div>
 
   <nav class="bottom-nav">

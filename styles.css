@@ -865,6 +865,39 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .dna-people-btn span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .dna-people-btn.is-active { border-color: rgba(56,189,248,.45); color: var(--cyan); background: var(--cyan-dim); }
 
+/* Vedi tutta la rete: compare solo quando ha senso (modalità a 2/3 persone e
+   rete già grande, vedi updateViewAllButton in dna-view.js). Icona sola,
+   stesso riquadro tondo del filtro persone accanto: non è una funzione nuova
+   che chiede spazio, è un'opzione in più nello stesso posto. */
+.dna-view-all-btn {
+  flex-shrink:0; display:inline-flex; align-items:center; justify-content:center;
+  width:32px; height:32px; padding:0; border-radius:999px;
+  background: var(--surface2); border:1px solid var(--surface3); color: var(--text2);
+  cursor:pointer; -webkit-tap-highlight-color: transparent;
+}
+.dna-view-all-btn svg { width:15px; height:15px; }
+.dna-view-all-btn:active { transform: scale(.94); }
+
+/* La vista a schermo intero della rete completa: stessi nodi/archi dello
+   schermo normale (.dna-node, .dna-edge — nessuna regola nuova per loro qui),
+   solo srotolati in un riquadro grande quanto la rete invece che ritagliati
+   nel piccolo .dna-stage. Sopra tutto il resto, scorrevole in entrambe le
+   direzioni: la rete può essere più larga E più alta dello schermo. */
+.dna-full-view {
+  position: fixed; inset: 0; z-index: 150; background: var(--bg);
+  display: flex; flex-direction: column;
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.dna-full-view__head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 14px 16px; border-bottom: 1px solid var(--border);
+  font-family: var(--font-display); font-weight: 700; color: var(--text); font-size: 15px;
+}
+.dna-full-view__who { display: block; margin-top: 2px; font-size: 12px; font-weight: 600; color: var(--text3); }
+.dna-full-view__hint { margin: 10px 16px 0; font-size: 12px; color: var(--text3); }
+.dna-full-view__scroll { flex: 1; position: relative; overflow: auto; -webkit-overflow-scrolling: touch; }
+.dna-full-canvas { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+
 /* Il foglio di scelta copre il riquadro della rete invece di spingere la
    pagina: aprirlo e chiuderlo non sposta di un pixel quello che c'è sotto. */
 .dna-sheet {
