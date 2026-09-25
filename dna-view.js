@@ -348,6 +348,17 @@ const STAT_MIN_TITOLI = 3;
 const mediaVoti = (voti) => voti.reduce((s, v) => s + v, 0) / voti.length;
 const unaCifra = (n) => n.toFixed(1).replace(".", ",");
 
+// Quante delle persone selezionate devono avere VISTO (votato, qualunque
+// voto) un titolo perché la sua media conti per "Voto medio più alto" più
+// sotto — altrimenti un 10 isolato da una sola persona vincerebbe sempre,
+// anche con un gruppo di 8. Fino a 3 persone serve l'unanimità (con così
+// pochi, "quasi tutti" non vuol dire granché); da 4 in su basta circa un
+// terzo abbondante del gruppo, arrotondato per eccesso — stessa idea del
+// minimo per generi/registi sopra, solo scalata al numero di persone.
+function sogliaVisti(n) {
+  return n <= 3 ? n : Math.ceil((2 * n) / 3);
+}
+
 function fullViewStats() {
   if (!index) return [];
   const films = [...index.films.values()];
@@ -409,13 +420,25 @@ function fullViewStats() {
     }
   }
 
-  // Voto più alto: con due persone i 10 pieni sono parecchi, quindi a parità
-  // vince chi l'ha amato in più persone e poi l'ordine alfabetico — mai un
-  // pareggio risolto a caso, come ovunque in questa schermata.
-  const film = films
-    .map(f => ({ f, avg: mediaVoti(f.fans.map(x => x.vote)) }))
-    .sort((a, b) => b.avg - a.avg || b.f.fans.length - a.f.fans.length || a.f.title.localeCompare(b.f.title))[0];
-  if (film) righe.push({ label: "Voto più alto", value: `${film.f.title} (${unaCifra(film.avg)})` });
+  // Voto medio più alto: NON sugli "amati" di index/films (fans è filtrato
+  // a chi ha dato 7+, quindi lì la media sarebbe sempre alta per
+  // costruzione) — sui voti veri, qualunque valore, così un titolo che
+  // tutti hanno visto con una media onesta di 6,8 può battere un film
+  // adorato da una persona sola con un 9. Serve però che l'abbiano visto in
+  // abbastanza persone (sogliaVisti sopra), altrimenti vince sempre chi ha
+  // un voto isolato molto alto. A parità di media vince chi l'ha visto in
+  // più persone e poi l'ordine alfabetico — mai un pareggio risolto a caso,
+  // come ovunque in questa schermata.
+  const personeStat = selectedPeople || ctx.users;
+  const sogliaMedia = sogliaVisti(personeStat.length);
+  const film = (ctx.db || [])
+    .map(t => {
+      const voti = personeStat.map(nome => Number(t.votes?.[nome]?.vote)).filter(Number.isFinite);
+      return { title: t.title, avg: voti.length ? mediaVoti(voti) : 0, n: voti.length };
+    })
+    .filter(c => c.n >= sogliaMedia)
+    .sort((a, b) => b.avg - a.avg || b.n - a.n || a.title.localeCompare(b.title))[0];
+  if (film) righe.push({ label: "Voto medio più alto", value: `${film.title} (${unaCifra(film.avg)})` });
 
   return righe;
 }
