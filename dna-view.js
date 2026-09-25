@@ -329,22 +329,43 @@ function exportCaptionData() {
   const chi = n === 2 ? "da entrambi" : "da tutti e tre";
   const affinityLine = insieme > 0 ? `${insieme} ${insieme === 1 ? "titolo amato" : "titoli amati"} ${chi}.` : "";
 
-  // Stessa intersezione di dnaAffinity, letta per genere invece che in totale.
-  let genreTop = null;
-  if ((n === 2 || n === 3) && index) {
-    const tally = new Map();
-    for (const f of index.films.values()) {
-      if (f.fans.length !== n) continue;
-      for (const g of f.genres) tally.set(g, (tally.get(g) || 0) + 1);
-    }
-    const top = [...tally.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0];
-    if (top) genreTop = { name: top[0], count: top[1] };
-  }
-
-  const nodeCount = net ? [...net.nodes.values()].filter(x => x.x !== null).length : 0;
   const dateLine = new Date().toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" });
+  return { peopleLine, affinityLine, dateLine };
+}
 
-  return { peopleLine, affinityLine, genreTop, nodeCount, dateLine };
+// Non "tutti i nodi che hai aperto" — con una rete grande sarebbero decine,
+// illeggibili in un'immagine — ma il meglio di quello che vi unisce: i
+// titoli amati da TUTTE le persone selezionate (stesso criterio di
+// dnaAffinity), ordinati per voto medio, più i generi e i registi che
+// ricorrono di più fra quei titoli. Scelto dai dati dell'indice condiviso
+// già in memoria, non da cosa hai toccato a mano: zero invenzioni, zero AI.
+const EXPORT_MAX_FILMS = 6;
+const EXPORT_MAX_GENRES = 2;
+const EXPORT_MAX_DIRECTORS = 2;
+
+function curatedHighlights() {
+  const persone = selectedPeople || [];
+  const n = persone.length;
+  if (!(n === 2 || n === 3) || !index) return null;
+
+  const shared = [...index.films.values()].filter(f => f.fans.length === n);
+  if (!shared.length) return null;
+
+  const films = shared
+    .map(f => ({ f, avgVote: f.fans.reduce((s, x) => s + x.vote, 0) / f.fans.length }))
+    .sort((a, b) => b.avgVote - a.avgVote || a.f.title.localeCompare(b.f.title))
+    .slice(0, EXPORT_MAX_FILMS)
+    .map(x => x.f);
+
+  const genreTally = new Map(), directorTally = new Map();
+  for (const f of shared) {
+    for (const g of f.genres) genreTally.set(g, (genreTally.get(g) || 0) + 1);
+    if (f.director) directorTally.set(f.director, (directorTally.get(f.director) || 0) + 1);
+  }
+  const genres = [...genreTally.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, EXPORT_MAX_GENRES);
+  const directors = [...directorTally.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, EXPORT_MAX_DIRECTORS);
+
+  return { persone, films, genres, directors, totalShared: shared.length };
 }
 
 const EXPORT_COLORS = {
@@ -384,10 +405,6 @@ function drawCoverImage(c, img, x, y, w, h) {
   c.drawImage(img, sx, sy, sw, sh, x, y, w, h);
 }
 
-// Stessa sfumatura per profondità della rete vera (depthClass/dna-h* in
-// styles.css): chi è lontano dal nodo attivo si spegne, non sparisce.
-const EXPORT_HOP_OPACITY = [1, 1, .6, .34, .2];
-
 // Tronca con un'ellissi quando il testo supera la larghezza massima — stesso
 // criterio del text-overflow:ellipsis reale (.dna-node__label), qui rifatto
 // a mano perché il canvas non tronca il testo da solo.
@@ -412,59 +429,44 @@ function roundRect(c, x, y, w, h, r) {
   c.closePath();
 }
 
-// Le stesse dimensioni CSS della rete vera (styles.css: poster 56/62/70px,
-// persona 52px, genere/regista 44px) — qui in "pixel nativi", scalati poi
-// dello STESSO fattore delle posizioni (vedi scale in exportNetworkImage):
-// le proporzioni fra un nodo e la distanza dal successivo restano identiche
-// a quelle a schermo, a qualunque livello di zoom finisca l'immagine.
-function exportNodeSize(n) {
-  if (n.type === "persona") return 52;
-  if (n.type === "film") {
-    if (isMeetingPoint(n) || lovedLevel(n) === 2) return 70;
-    if (lovedLevel(n) === 1) return 62;
-    return 56;
-  }
-  return 44; // genere, regista
-}
+// Dimensioni fisse dei nodi curati: qui non c'è più una rete con la sua
+// scala da inseguire (vedi curatedHighlights) — solo fino a 6 locandine +
+// 2 generi + 2 registi + le persone, quindi le taglie si scelgono una volta
+// sola, pensate per il riquadro di esportazione.
+const EXPORT_FILM_SIZE = 108, EXPORT_CHIP_SIZE = 76, EXPORT_PERSON_SIZE = 84;
 
 // Un nodo disegnato com'è davvero in rete — locandina vera per i film,
 // avatar con iniziali per le persone, pastiglie per generi e registi — non
-// un pallino astratto: è il punto della richiesta ("letteralmente la rete
-// che ho aperto"). Stessi criteri visivi di styles.css (anello verde =
-// punto d'incontro, alone oro = molto amato, anello chiaro = radice).
-function drawExportNode(c, n, x, y, size, posters) {
+// un pallino astratto. L'anello verde segna un titolo/genere/regista
+// condiviso da tutte le persone scelte: qui è sempre vero, è il criterio
+// con cui questi nodi sono stati scelti (vedi curatedHighlights).
+function drawExportNode(c, { type, label, id, shared = false }, x, y, size, posters) {
   const half = size / 2;
   c.textAlign = "center"; c.textBaseline = "middle";
 
-  if (n.type === "persona") {
+  if (type === "persona") {
     c.beginPath();
     c.arc(x, y, half, 0, Math.PI * 2);
     c.fillStyle = EXPORT_COLORS.orange;
     c.fill();
-    if (n.id === net.rootId) {
-      c.lineWidth = Math.max(2, size * 0.045);
-      c.strokeStyle = EXPORT_COLORS.text;
-      c.stroke();
-    }
     c.fillStyle = EXPORT_COLORS.avatarText;
     c.font = `800 ${Math.round(size * 0.36)}px Outfit, system-ui, sans-serif`;
-    c.fillText(initials(n.label), x, y + size * 0.02);
-  } else if (n.type === "genere" || n.type === "regista") {
-    const radius = n.type === "genere" ? half : size * 0.24;
+    c.fillText(initials(label), x, y + size * 0.02);
+  } else if (type === "genere" || type === "regista") {
+    const radius = type === "genere" ? half : size * 0.24;
     roundRect(c, x - half, y - half, size, size, radius);
     c.fillStyle = EXPORT_COLORS.surface2;
     c.fill();
-    const shared = isMeetingPoint(n);
     roundRect(c, x - half, y - half, size, size, radius);
     c.lineWidth = shared ? size * 0.045 : 1.6;
-    c.strokeStyle = shared ? EXPORT_COLORS.green : (n.type === "genere" ? EXPORT_COLORS.genreBorder : EXPORT_COLORS.directorBorder);
+    c.strokeStyle = shared ? EXPORT_COLORS.green : (type === "genere" ? EXPORT_COLORS.genreBorder : EXPORT_COLORS.directorBorder);
     c.stroke();
-    c.fillStyle = n.type === "genere" ? EXPORT_COLORS.orange : EXPORT_COLORS.cyan;
+    c.fillStyle = type === "genere" ? EXPORT_COLORS.orange : EXPORT_COLORS.cyan;
     c.font = `800 ${Math.round(size * 0.24)}px Outfit, system-ui, sans-serif`;
-    c.fillText(n.type === "genere" ? n.label.slice(0, 3).toUpperCase() : initials(n.label), x, y + size * 0.02);
+    c.fillText(type === "genere" ? label.slice(0, 3).toUpperCase() : initials(label), x, y + size * 0.02);
   } else { // film
     const radius = size * 0.25;
-    const img = posters.get(n.id);
+    const img = posters.get(id);
     roundRect(c, x - half, y - half, size, size, radius);
     if (img) {
       c.save();
@@ -478,19 +480,29 @@ function drawExportNode(c, n, x, y, size, posters) {
       c.fillStyle = EXPORT_COLORS.text2;
       c.fillText("🎬", x, y + size * 0.02);
     }
-    const shared = isMeetingPoint(n);
-    const loved = lovedLevel(n);
     roundRect(c, x - half, y - half, size, size, radius);
-    c.lineWidth = shared ? size * 0.045 : loved === 2 ? size * 0.05 : loved === 1 ? size * 0.03 : 1.4;
-    c.strokeStyle = shared ? EXPORT_COLORS.green : loved ? EXPORT_COLORS.gold : EXPORT_COLORS.surface3;
+    c.lineWidth = shared ? size * 0.06 : 1.4;
+    c.strokeStyle = shared ? EXPORT_COLORS.green : EXPORT_COLORS.surface3;
     c.stroke();
   }
 
   c.textAlign = "left"; c.textBaseline = "alphabetic";
 }
 
+// Le persone stanno al centro della ruota: vicine fra loro (due affiancate,
+// tre a triangolo), con tutto quello che le unisce disposto intorno.
+function personaOffsets(n) {
+  if (n >= 3) return [
+    { dx: 0, dy: -EXPORT_PERSON_SIZE * 0.5 },
+    { dx: -EXPORT_PERSON_SIZE * 0.5, dy: EXPORT_PERSON_SIZE * 0.34 },
+    { dx: EXPORT_PERSON_SIZE * 0.5, dy: EXPORT_PERSON_SIZE * 0.34 }
+  ];
+  return [{ dx: -EXPORT_PERSON_SIZE * 0.52, dy: 0 }, { dx: EXPORT_PERSON_SIZE * 0.52, dy: 0 }];
+}
+
 async function exportNetworkImage() {
-  if (!net) return;
+  const curated = curatedHighlights();
+  if (!curated) return;
   const btn = el("dnaExportBtn");
   if (btn) btn.disabled = true;
   try {
@@ -523,95 +535,80 @@ async function exportNetworkImage() {
     c.fillText("DNA condiviso", PAD, PAD + 66);
 
     const data = exportCaptionData();
-    const captionTop = H - 360;
+    const captionTop = H - 320;
     const netTop = PAD + 96, netBottom = captionTop - 24;
     const netBox = { x: PAD, y: netTop, w: W - PAD * 2, h: netBottom - netTop };
     roundRect(c, netBox.x, netBox.y, netBox.w, netBox.h, 20);
     c.fillStyle = "rgba(255,255,255,.02)";
     c.fill();
 
-    const placed = [...net.nodes.values()].filter(n => n.x !== null);
-
     // Le locandine vere (vedi drawExportNode): caricate PRIMA di disegnare,
     // altrimenti il canvas andrebbe dipinto due volte. Un film senza
     // locandina (raro) resta con il segnaposto 🎬, non blocca l'export.
     const posters = new Map();
     await Promise.all(
-      placed
-        .filter(n => n.type === "film" && n.meta.poster_path)
-        .map(async n => {
-          const img = await loadImage(`${EXPORT_POSTER}${n.meta.poster_path}`);
-          if (img) posters.set(n.id, img);
+      curated.films
+        .filter(f => f.poster_path)
+        .map(async f => {
+          const img = await loadImage(`${EXPORT_POSTER}${f.poster_path}`);
+          if (img) posters.set(f.key, img);
         })
     );
 
-    if (placed.length) {
-      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-      for (const n of placed) {
-        minX = Math.min(minX, n.x); maxX = Math.max(maxX, n.x);
-        minY = Math.min(minY, n.y); maxY = Math.max(maxY, n.y);
-      }
-      const spanX = Math.max(maxX - minX, 1), spanY = Math.max(maxY - minY, 1);
-      // Il margine tiene conto della metà del nodo più grande (70px, vedi
-      // exportNodeSize) alla scala massima più lo spazio dell'etichetta sotto:
-      // senza, le locandine e le scritte dei nodi sui bordi finirebbero
-      // tagliate dal ritaglio del riquadro qui sotto. Il tetto evita solo il
-      // caso patologico (nodi quasi allineati, spanX o spanY vicino a 0):
-      // senza, una rete appena sopra soglia riempirebbe il riquadro con
-      // pochi nodi enormi al centro.
-      const margin = 130;
-      const scale = Math.min((netBox.w - margin * 2) / spanX, (netBox.h - margin * 2) / spanY, 2.2);
-      const cx = netBox.x + netBox.w / 2, cy = netBox.y + netBox.h / 2;
-      const midX = (minX + maxX) / 2, midY = (minY + maxY) / 2;
-      const toX = (x) => cx + (x - midX) * scale;
-      const toY = (y) => cy + (y - midY) * scale;
+    const hubX = netBox.x + netBox.w / 2, hubY = netBox.y + netBox.h / 2;
+    const items = [
+      ...curated.films.map(f => ({ type: "film", label: f.title, id: f.key })),
+      ...curated.genres.map(([name]) => ({ type: "genere", label: name })),
+      ...curated.directors.map(([name]) => ({ type: "regista", label: name }))
+    ];
+    // Il raggio della ruota lascia spazio al nodo più grande (le locandine)
+    // e alla sua etichetta prima del bordo del riquadro qui ritagliato.
+    const ringRadius = Math.min(netBox.w, netBox.h) / 2 - (EXPORT_FILM_SIZE / 2 + 40);
+    const angleStep = items.length ? (Math.PI * 2) / items.length : 0;
+    const itemPos = items.map((it, i) => {
+      const angle = -Math.PI / 2 + i * angleStep;
+      return { ...it, x: hubX + Math.cos(angle) * ringRadius, y: hubY + Math.sin(angle) * ringRadius };
+    });
+    const personaPos = personaOffsets(curated.persone.length).map((o, i) => ({
+      label: curated.persone[i], x: hubX + o.dx, y: hubY + o.dy
+    }));
 
-      // Stessa sfumatura per profondità della rete vera: calcolata dal nodo
-      // attivo di questa sessione (focusId), non da uno stato inventato per
-      // l'esportazione.
-      const hops = hopsFrom(net, focusId);
-      const opacityOf = (id) => EXPORT_HOP_OPACITY[Math.min(hops.get(id) ?? 0, 4)];
+    c.save();
+    roundRect(c, netBox.x, netBox.y, netBox.w, netBox.h, 20);
+    c.clip();
 
-      c.save();
-      roundRect(c, netBox.x, netBox.y, netBox.w, netBox.h, 20);
-      c.clip();
-
-      for (const e of net.edges) {
-        const a = net.nodes.get(e.a), b = net.nodes.get(e.b);
-        if (!a || !b || a.x === null || b.x === null) continue;
-        const shared = isMeetingPoint(a) || isMeetingPoint(b);
-        c.strokeStyle = shared ? EXPORT_COLORS.edgeShared
-          : e.kind === "ama" ? EXPORT_COLORS.edgeAma
-          : e.kind === "appartiene" ? EXPORT_COLORS.edgeAppartiene
-          : EXPORT_COLORS.edgeDiretto;
-        c.lineWidth = shared ? 3.4 : 2.2;
-        c.setLineDash(e.kind === "diretto" ? [5, 7] : []);
-        c.globalAlpha = Math.max(opacityOf(e.a), opacityOf(e.b));
-        c.beginPath();
-        c.moveTo(toX(a.x), toY(a.y)); c.lineTo(toX(b.x), toY(b.y));
-        c.stroke();
-      }
-      c.setLineDash([]);
-      c.globalAlpha = 1;
-
-      for (const n of placed) {
-        const size = exportNodeSize(n) * scale;
-        const x = toX(n.x), y = toY(n.y);
-        c.globalAlpha = opacityOf(n.id);
-        drawExportNode(c, n, x, y, size, posters);
-
-        // L'etichetta sotto al nodo: stessa distinzione della rete vera fra
-        // il nodo attivo (bianco, grassetto) e tutti gli altri (grigio).
-        const isFocus = n.id === focusId;
-        c.font = `${isFocus ? "700" : "400"} ${Math.max(9, Math.round(11 * scale))}px Inter, system-ui, sans-serif`;
-        c.fillStyle = isFocus ? EXPORT_COLORS.text : EXPORT_COLORS.text2;
-        c.textAlign = "center"; c.textBaseline = "top";
-        c.fillText(fitLabel(c, n.label, 88 * scale), x, y + size / 2 + 5 * scale);
-        c.textAlign = "left"; c.textBaseline = "alphabetic";
-      }
-      c.globalAlpha = 1;
-      c.restore();
+    // Non ci sono archi "veri" da ridisegnare qui (questa non è la rete che
+    // hai esplorato a mano, vedi curatedHighlights): un raggio dal centro a
+    // ogni titolo/genere/regista basta a raccontare "cosa vi lega".
+    c.strokeStyle = EXPORT_COLORS.edgeShared;
+    c.lineWidth = 2.4;
+    for (const it of itemPos) {
+      c.beginPath();
+      c.moveTo(hubX, hubY);
+      c.lineTo(it.x, it.y);
+      c.stroke();
     }
+
+    for (const it of itemPos) {
+      const size = it.type === "film" ? EXPORT_FILM_SIZE : EXPORT_CHIP_SIZE;
+      drawExportNode(c, { type: it.type, label: it.label, id: it.id, shared: true }, it.x, it.y, size, posters);
+      c.font = "400 13px Inter, system-ui, sans-serif";
+      c.fillStyle = EXPORT_COLORS.text2;
+      c.textAlign = "center"; c.textBaseline = "top";
+      c.fillText(fitLabel(c, it.label, 130), it.x, it.y + size / 2 + 8);
+      c.textAlign = "left"; c.textBaseline = "alphabetic";
+    }
+
+    for (const p of personaPos) {
+      drawExportNode(c, { type: "persona", label: p.label }, p.x, p.y, EXPORT_PERSON_SIZE, posters);
+      c.font = "700 15px Outfit, system-ui, sans-serif";
+      c.fillStyle = EXPORT_COLORS.text;
+      c.textAlign = "center"; c.textBaseline = "top";
+      c.fillText(personLabel(p.label), p.x, p.y + EXPORT_PERSON_SIZE / 2 + 8);
+      c.textAlign = "left"; c.textBaseline = "alphabetic";
+    }
+
+    c.restore();
 
     c.strokeStyle = EXPORT_COLORS.border;
     c.lineWidth = 1;
@@ -631,26 +628,20 @@ async function exportNetworkImage() {
       c.fillText(data.affinityLine, PAD, ty);
     }
 
-    if (data.genreTop) {
-      ty += 38;
-      c.font = "400 21px Inter, system-ui, sans-serif";
-      c.fillStyle = EXPORT_COLORS.text2;
-      const prefix = "Il genere che vi unisce di più: ";
-      c.fillText(prefix, PAD, ty);
-      const prefixW = c.measureText(prefix).width;
-      c.font = "600 21px Inter, system-ui, sans-serif";
-      c.fillStyle = EXPORT_COLORS.orange2;
-      c.fillText(data.genreTop.name, PAD + prefixW, ty);
-      const nameW = c.measureText(data.genreTop.name).width;
-      c.font = "400 21px Inter, system-ui, sans-serif";
-      c.fillStyle = EXPORT_COLORS.text2;
-      c.fillText(` (${data.genreTop.count} in comune)`, PAD + prefixW + nameW, ty);
+    // I generi e i registi sono già nella ruota qui sopra come nodi veri:
+    // ripeterli in testo sarebbe ridondante. Qui solo la trasparenza sul
+    // criterio, quando i titoli in comune sono più di quelli mostrati.
+    if (curated.totalShared > curated.films.length) {
+      ty += 34;
+      c.font = "400 19px Inter, system-ui, sans-serif";
+      c.fillStyle = EXPORT_COLORS.text3;
+      c.fillText(`Qui i ${curated.films.length} più votati.`, PAD, ty);
     }
 
     ty = H - 46;
     c.font = "600 18px Outfit, system-ui, sans-serif";
     c.fillStyle = EXPORT_COLORS.text3;
-    c.fillText(`${data.nodeCount} nodi esplorati · ${data.dateLine}`, PAD, ty);
+    c.fillText(data.dateLine, PAD, ty);
     const foot = "CineFighi";
     const footW = c.measureText(foot).width;
     c.fillText(foot, W - PAD - footW, ty);
