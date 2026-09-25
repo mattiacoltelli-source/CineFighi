@@ -494,9 +494,13 @@ function renderFullViewStats() {
   // Firma discreta: questa è l'unica schermata pensata per essere
   // condivisa fuori dall'app ("tutto in una schermata: lo screenshot la
   // prende intera"), quindi ha senso che porti il nome — ma in fondo, dopo
-  // i numeri, e spenta (vedi .dna-signature in CSS): una firma, non un
-  // secondo titolo che compete con "Il DNA di...".
-  const firma = `<div class="dna-signature">CineFighi</div>`;
+  // i numeri, e piccola (vedi .dna-signature in CSS): una firma, non un
+  // secondo titolo che compete con "Il DNA di...". Il testo sta in uno
+  // <span> a parte, non nel div a piena larghezza: il gradiente si clippa
+  // sulla larghezza del box, quindi su un div intero (con text-align:center)
+  // il centro del testo cade a metà sfumatura — un grigiastro invece del
+  // vero ciano/arancio (stesso bug già risolto per .topbar__title).
+  const firma = `<div class="dna-signature"><span>CineFighi</span></div>`;
 
   box.innerHTML = legenda + numeri + firma;
 }
