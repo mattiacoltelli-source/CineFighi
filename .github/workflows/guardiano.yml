@@ -118,6 +118,19 @@ jobs:
           node-version: "22"
       - run: npm install
       - run: npx playwright install --with-deps chromium
+      - name: Controllo diretto (senza browser), per capire se un 404 è di rete o del browser
+        # Il 25/26 settembre 2026 questo job ha fallito piu' volte di fila con
+        # il 404 nativo di GitHub Pages ("There isn't a GitHub Pages site
+        # here"), mai riprodotto ne' da qui ne' visitando il sito a mano — solo
+        # dal runner di Actions. Un curl semplice, nello stesso runner, prima
+        # di Playwright: se fallisce anche questo e' un problema di rete di
+        # GitHub Actions verso Pages (da segnalare al supporto GitHub); se solo
+        # Playwright fallisce, il problema e' nel browser/nella sua rete.
+        run: |
+          for i in 1 2 3; do
+            curl -sS -o /dev/null -w "tentativo $i: HTTP %{http_code}\n" https://mattiacoltelli-source.github.io/CineFighi/
+            sleep 3
+          done
       - name: Prova il sito pubblicato
         run: npx playwright test
         env:
