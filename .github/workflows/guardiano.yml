@@ -126,11 +126,21 @@ jobs:
         # di Playwright: se fallisce anche questo e' un problema di rete di
         # GitHub Actions verso Pages (da segnalare al supporto GitHub); se solo
         # Playwright fallisce, il problema e' nel browser/nella sua rete.
+        #
+        # Prima riprova (25/9, sera): il curl semplice ha risposto 200 tre
+        # volte su tre nello stesso run in cui Playwright falliva ancora — la
+        # rete del runner va bene, il problema e' specifico del browser.
+        # Sospetto concreto: IPv6. Chromium in sandbox spesso lo preferisce a
+        # IPv4 quando disponibile; se il nodo Fastly di GitHub Pages raggiunto
+        # via IPv6 ha un problema (mentre quello IPv4 no), il sintomo sarebbe
+        # esattamente questo. -4/-6 forzano il curl a isolare i due percorsi.
         run: |
           for i in 1 2 3; do
-            curl -sS -o /dev/null -w "tentativo $i: HTTP %{http_code}\n" https://mattiacoltelli-source.github.io/CineFighi/
+            curl -sS -o /dev/null -w "tentativo $i (default): HTTP %{http_code}\n" https://mattiacoltelli-source.github.io/CineFighi/
             sleep 3
           done
+          curl -4 -sS -o /dev/null -w "IPv4: HTTP %{http_code}\n" https://mattiacoltelli-source.github.io/CineFighi/ || echo "IPv4 fallito"
+          curl -6 -sS -o /dev/null -w "IPv6: HTTP %{http_code}\n" https://mattiacoltelli-source.github.io/CineFighi/ || echo "IPv6 non disponibile o fallito su questo runner"
       - name: Prova il sito pubblicato
         run: npx playwright test
         env:
