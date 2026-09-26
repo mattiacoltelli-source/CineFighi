@@ -149,6 +149,16 @@ jobs:
           curl -6 -sS -o /dev/null -w "IPv6: HTTP %{http_code}\n" https://mattiacoltelli-source.github.io/CineFighi/ || echo "IPv6 non disponibile o fallito su questo runner"
           curl --http1.1 -sS -o /dev/null -w "HTTP/1.1: HTTP %{http_code}\n" https://mattiacoltelli-source.github.io/CineFighi/
           curl --http2 -sS -o /dev/null -w "HTTP/2: HTTP %{http_code}\n" https://mattiacoltelli-source.github.io/CineFighi/
+      - name: Controllo con il motore di rete di Playwright (senza browser)
+        # Terza riprova (26/9): anche HTTP/2 via curl risponde 200 — non e'
+        # nemmeno la versione del protocollo. Tutti i percorsi curl restano
+        # puliti; il problema e' specifico del motore vero del browser.
+        # Ultimo passo prima di Playwright/Chromium: lo stesso client HTTP di
+        # Playwright ("request", niente browser), per capire se il bug e' nel
+        # motore di rete di Playwright o solo nel browser vero — e le
+        # intestazioni della risposta, per vedere quale nodo/cache di Fastly
+        # l'ha servita quando succede.
+        run: node scripts/diagnostica-sito.mjs
       - name: Prova il sito pubblicato
         run: npx playwright test
         env:
