@@ -91,15 +91,37 @@ export async function addUser(rawName) {
 // ─── LIBRERIA (titoli + voti, uniti in un unico oggetto comodo da usare) ─────
 // Ogni titolo torna con: { ...campi, votes: { "Mattia": { vote, comment }, ... } }
 
+// Legge TUTTE le righe di una tabella. Supabase (PostgREST) risponde al
+// massimo con 1000 righe per richiesta e NON segnala niente quando taglia:
+// con `select("*")` semplice, oltre la riga 1000 i dati sparivano in
+// silenzio. E' successo davvero (30/9/2026): `votes` aveva 1005 righe, il
+// voto appena dato a "The Lighthouse" era nel database ma l'app non lo
+// rileggeva mai. Si legge a pagine da PAGE_SIZE con un ordine stabile
+// (`order` + `id` come spareggio: senza, due pagine potrebbero ripetere o
+// saltare righe) finche' una pagina non torna incompleta.
+const PAGE_SIZE = 1000;
+
+async function fetchAllRows(table, select, order) {
+  const rows = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    let q = supabase.from(table).select(select);
+    for (const [col, ascending] of order) q = q.order(col, { ascending });
+    const { data, error } = await q.range(from, from + PAGE_SIZE - 1);
+    if (error) return { data: null, error };
+    rows.push(...(data || []));
+    if (!data || data.length < PAGE_SIZE) return { data: rows, error: null };
+  }
+}
+
 export async function fetchLibrary() {
   const [
     { data: titles, error: e1 },
     { data: votes, error: e2 },
     { data: watchlistAdds, error: e3 }
   ] = await Promise.all([
-    supabase.from("titles").select("*").order("created_at", { ascending: false }),
-    supabase.from("votes").select("*"),
-    supabase.from("watchlist_adds").select("title_id, user_name")
+    fetchAllRows("titles", "*", [["created_at", false], ["id", true]]),
+    fetchAllRows("votes", "*", [["created_at", true], ["id", true]]),
+    fetchAllRows("watchlist_adds", "title_id, user_name", [["title_id", true], ["user_name", true]])
   ]);
 
   // FIX: come fetchUsers, non ritorniamo piu' [] su errore (svuotava
