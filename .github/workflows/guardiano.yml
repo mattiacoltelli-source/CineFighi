@@ -118,47 +118,17 @@ jobs:
           node-version: "22"
       - run: npm install
       - run: npx playwright install --with-deps chromium
-      - name: Controllo diretto (senza browser), per capire se un 404 è di rete o del browser
-        # Il 25/26 settembre 2026 questo job ha fallito piu' volte di fila con
-        # il 404 nativo di GitHub Pages ("There isn't a GitHub Pages site
-        # here"), mai riprodotto ne' da qui ne' visitando il sito a mano — solo
-        # dal runner di Actions. Un curl semplice, nello stesso runner, prima
-        # di Playwright: se fallisce anche questo e' un problema di rete di
-        # GitHub Actions verso Pages (da segnalare al supporto GitHub); se solo
-        # Playwright fallisce, il problema e' nel browser/nella sua rete.
-        #
-        # Prima riprova (25/9, sera): il curl semplice ha risposto 200 tre
-        # volte su tre nello stesso run in cui Playwright falliva ancora — la
-        # rete del runner va bene, il problema e' specifico del browser.
-        #
-        # Seconda riprova (26/9): IPv6 escluso — il runner non ha proprio
-        # connettivita' IPv6 (curl -6 fallisce a connettersi, 0ms, nessuna
-        # rotta), quindi non puo' essere quello che sceglie Chromium.
-        #
-        # Sospetto concreto ora: HTTP/2. curl di default usa HTTP/1.1, mentre
-        # Chromium negozia sempre HTTP/2 con chi lo supporta (come GitHub
-        # Pages/Fastly) — se il bug e' in come Fastly gestisce le richieste
-        # HTTP/2 da certe IP, solo il browser lo vedrebbe. --http1.1/--http2
-        # isolano i due percorsi.
-        run: |
-          for i in 1 2 3; do
-            curl -sS -o /dev/null -w "tentativo $i (default): HTTP %{http_code}\n" https://mattiacoltelli-source.github.io/CineFighi/
-            sleep 3
-          done
-          curl -4 -sS -o /dev/null -w "IPv4: HTTP %{http_code}\n" https://mattiacoltelli-source.github.io/CineFighi/ || echo "IPv4 fallito"
-          curl -6 -sS -o /dev/null -w "IPv6: HTTP %{http_code}\n" https://mattiacoltelli-source.github.io/CineFighi/ || echo "IPv6 non disponibile o fallito su questo runner"
-          curl --http1.1 -sS -o /dev/null -w "HTTP/1.1: HTTP %{http_code}\n" https://mattiacoltelli-source.github.io/CineFighi/
-          curl --http2 -sS -o /dev/null -w "HTTP/2: HTTP %{http_code}\n" https://mattiacoltelli-source.github.io/CineFighi/
-      - name: Controllo con il motore di rete di Playwright (senza browser)
-        # Terza riprova (26/9): anche HTTP/2 via curl risponde 200 — non e'
-        # nemmeno la versione del protocollo. Tutti i percorsi curl restano
-        # puliti; il problema e' specifico del motore vero del browser.
-        # Ultimo passo prima di Playwright/Chromium: lo stesso client HTTP di
-        # Playwright ("request", niente browser), per capire se il bug e' nel
-        # motore di rete di Playwright o solo nel browser vero — e le
-        # intestazioni della risposta, per vedere quale nodo/cache di Fastly
-        # l'ha servita quando succede.
-        run: node scripts/diagnostica-sito.mjs
+      # (25-30 settembre 2026: questo job ha fallito piu' volte di fila col
+      # 404 nativo di GitHub Pages. Non era un problema di rete, di IPv4/IPv6,
+      # di HTTP/1.1 vs HTTP/2 ne' del motore del browser — tutti esclusi con
+      # controlli diretti nel job. La causa vera era in helpers.ts::entra():
+      # "/" contro una baseURL con sottopercorso (questo sito vive sotto
+      # /CineFighi/, non alla radice del dominio) si risolve contro l'ORIGINE
+      # per le regole standard di risoluzione URL, scartando il sottopercorso
+      # — page.goto("/") apriva https://mattiacoltelli-source.github.io/ dove
+      # non esiste nessun sito Pages, non https://.../CineFighi/. Corretto
+      # usando "./" ovunque. Mai visto in locale perche' li' la baseURL non
+      # ha sottopercorso.)
       - name: Prova il sito pubblicato
         run: npx playwright test
         env:

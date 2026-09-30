@@ -69,7 +69,7 @@ function mockTmdb(page: Page, titolo: typeof BASE_TITLE) {
 }
 
 async function entraEcerca(page: Page, query: string) {
-  await page.goto("/");
+  await page.goto("./"); // vedi il commento in helpers.ts::entra su "/" vs baseURL con sottopercorso
   await page.locator("#userPickerList button").first().waitFor({ state: "visible", timeout: 30_000 });
   await page.locator("#userPickerList button").first().click();
   await page.waitForSelector("#app:not(.hidden)", { timeout: 30_000 });
@@ -235,7 +235,7 @@ test("voto e rimozione voto: giro completo su un titolo già in watchlist", asyn
     return route.fallback();
   });
 
-  await page.goto("/");
+  await page.goto("./"); // vedi il commento in helpers.ts::entra su "/" vs baseURL con sottopercorso
   await page.locator("#userPickerList button").first().waitFor({ state: "visible", timeout: 30_000 });
   await page.locator("#userPickerList button").first().click();
   await page.waitForSelector("#app:not(.hidden)", { timeout: 30_000 });

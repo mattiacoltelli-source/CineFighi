@@ -25,21 +25,18 @@ export function soloLettura(page: Page): string[] {
 // selettore propone. Se un domani il gruppo cambia nomi, questi test non se ne
 // accorgono nemmeno — ed e' esattamente il punto.
 export async function entra(page: Page): Promise<void> {
-  // Non e' un 404 dell'app (la home non ne restituisce mai uno): e' il 404
-  // nativo di GitHub Pages ("There isn't a GitHub Pages site here"), un
-  // routing interno di GitHub che a volte impiega piu' di qualche secondo a
-  // risolversi da solo (osservato fino a oltre un'ora). Si riprova con
-  // attese crescenti fino a un budget extra di 40s; se il sito e' davvero
-  // giu' anche l'ultimo tentativo torna 404 e il test fallisce comunque,
-  // come deve — questo non nasconde un sito rotto, allunga solo la pazienza
-  // per un blip di GitHub.
-  const attese = [3000, 6000, 12000, 19000];
-  let risposta = await page.goto("/", { waitUntil: "domcontentloaded" });
-  for (const attesa of attese) {
-    if (!risposta || risposta.status() !== 404) break;
-    await page.waitForTimeout(attesa);
-    risposta = await page.goto("/", { waitUntil: "domcontentloaded" });
-  }
+  // "./" e non "/": con una baseURL che ha un sottopercorso (il sito vero e'
+  // https://mattiacoltelli-source.github.io/CineFighi/, non la radice del
+  // dominio) un path assoluto come "/" si risolve contro l'ORIGINE, non
+  // contro la baseURL — new URL("/", baseURL) scarta "/CineFighi/" e apre
+  // https://mattiacoltelli-source.github.io/, dove GitHub Pages risponde col
+  // suo 404 vero ("There isn't a GitHub Pages site here"). E' la causa reale
+  // dei fallimenti di "sito-vero": non un glitch di rete o del browser (gia'
+  // escluso curl, IPv4/IPv6, HTTP/1.1 vs HTTP/2), ma la risoluzione URL di
+  // Playwright stessa, deterministica al 100% ogni volta che la baseURL ha
+  // un sottopercorso — motivo per cui in locale (baseURL senza sottopercorso)
+  // non si e' mai visto.
+  await page.goto("./", { waitUntil: "domcontentloaded" });
   const lista = page.locator("#userPickerList button").first();
   await lista.waitFor({ state: "visible", timeout: 30_000 });
   await lista.click();

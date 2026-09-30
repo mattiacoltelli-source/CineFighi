@@ -19,7 +19,7 @@ test("con Supabase irraggiungibile l'app avvisa dell'errore e propone comunque l
   const scritture = soloLettura(page);
 
   await page.route(/supabase\.co/, route => route.abort());
-  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await page.goto("./", { waitUntil: "domcontentloaded" }); // vedi il commento in helpers.ts::entra su "/" vs baseURL con sottopercorso
 
   // init() fa piu' fetch falliti in sequenza (utenti, poi libreria): li
   // verifichiamo entrambi, non solo il primo.

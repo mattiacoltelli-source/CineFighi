@@ -16,7 +16,10 @@ import { entra, osserva, soloLettura } from "./helpers";
 // commenti in app.js) ha almeno le fondamenta giuste.
 
 test("il manifest della PWA è valido e le icone caricano", async ({ page, request }) => {
-  const res = await request.get("/manifest.json");
+  // "./" e non "/": vedi il commento in helpers.ts::entra — con una baseURL
+  // che ha un sottopercorso, un path assoluto la scavalca e finisce sulla
+  // radice del dominio invece che su /CineFighi/.
+  const res = await request.get("./manifest.json");
   expect(res.ok(), "manifest.json non raggiungibile").toBe(true);
   const manifest = await res.json();
 
@@ -25,7 +28,7 @@ test("il manifest della PWA è valido e le icone caricano", async ({ page, reque
   expect(Array.isArray(manifest.icons) && manifest.icons.length > 0, "manifest senza icone").toBe(true);
 
   for (const icona of manifest.icons) {
-    const r = await request.get(`/${icona.src}`);
+    const r = await request.get(`./${icona.src}`);
     expect(r.ok(), `icona "${icona.src}" del manifest non carica`).toBe(true);
     expect(Number(r.headers()["content-length"] || 0), `icona "${icona.src}" è vuota`).toBeGreaterThan(0);
   }
@@ -50,7 +53,7 @@ test("il service worker si registra e prende il controllo della pagina", async (
   const controllato = await page.evaluate(() => !!navigator.serviceWorker.controller);
   expect(controllato, "il service worker non ha preso il controllo della pagina dopo l'attivazione").toBe(true);
 
-  const sw = await page.request.get("/sw.js");
+  const sw = await page.request.get("./sw.js"); // "./" e non "/": vedi il commento in helpers.ts::entra
   expect(sw.ok(), "sw.js non raggiungibile").toBe(true);
   const testo = await sw.text();
   expect(testo, "sw.js senza SW_VERSION: il cache-busting dell'aggiornamento dipende da questo").toMatch(/SW_VERSION\s*=/);
