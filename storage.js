@@ -134,7 +134,10 @@ export async function fetchLibrary() {
   const votesByTitle = {};
   (votes || []).forEach(v => {
     if (!votesByTitle[v.title_id]) votesByTitle[v.title_id] = {};
-    votesByTitle[v.title_id][v.user_name] = { vote: Number(v.vote), comment: v.comment || "" };
+    // `at` = quando questa persona ha dato il PRIMO voto (created_at della riga:
+    // un nuovo voto sullo stesso titolo aggiorna la riga e non lo cambia).
+    // Serve a "Ultimi film/serie visti" in Home, vedi app.js::lastActivityAt.
+    votesByTitle[v.title_id][v.user_name] = { vote: Number(v.vote), comment: v.comment || "", at: v.created_at || null };
   });
 
   // Chi ha aggiunto il titolo alla PROPRIA watchlist (una riga per persona,
