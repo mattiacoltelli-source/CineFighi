@@ -360,6 +360,17 @@ function goToScreen(screen) {
   if (screen === "tonight") showDna({ db, users, currentUser });
 }
 
+// Ultima attività "visto" su un titolo, in millisecondi: il piu' recente tra
+// seen_at e il primo voto di ciascuna persona (vedi storage.js::fetchLibrary).
+function lastActivityAt(item) {
+  let t = item.seen_at ? new Date(item.seen_at).getTime() : 0;
+  for (const v of Object.values(item.votes || {})) {
+    const at = v?.at ? new Date(v.at).getTime() : 0;
+    if (at > t) t = at;
+  }
+  return t;
+}
+
 function renderHome() {
   document.querySelectorAll("#watchlistModeToggle .io-gruppo-btn").forEach(btn => {
     btn.classList.toggle("active", btn.dataset.mode === watchlistMode);
@@ -372,9 +383,12 @@ function renderHome() {
   // bene per la watchlist ("cosa ho aggiunto di recente"), ma "Ultimi film/
   // serie visti" deve riflettere quando sono stati davvero VISTI — un
   // titolo in watchlist da tempo, appena votato, altrimenti resterebbe
-  // sepolto nella sua vecchia posizione invece di comparire qui. Ordiniamo
-  // esplicitamente per seen_at (vedi storage.js::updateTitleStatus/addTitle).
-  const byRecentlySeen = (a, b) => new Date(b.seen_at || 0) - new Date(a.seen_at || 0);
+  // sepolto nella sua vecchia posizione invece di comparire qui. Conta
+  // l'ultima attività: quando il titolo e' stato segnato visto (seen_at) OPPURE
+  // quando qualcuno l'ha votato per la prima volta (lastActivityAt). Solo
+  // seen_at non bastava: un titolo gia' visto da un altro e votato adesso da
+  // te (The Lighthouse, 30/9/2026) restava sepolto alla data del primo "visto".
+  const byRecentlySeen = (a, b) => lastActivityAt(b) - lastActivityAt(a);
   const seenMovies = db.filter(x => x.status === "seen" && x.media_type === "movie").sort(byRecentlySeen).slice(0, 10);
   const seenSeries = db.filter(x => x.status === "seen" && x.media_type === "tv").sort(byRecentlySeen).slice(0, 10);
 
@@ -1108,7 +1122,7 @@ async function handleSaveVote() {
     showToast("Voto salvato", "success");
     previewItem = null;
     const saved = byId(savedId);
-    if (saved) { saved.votes = saved.votes || {}; saved.votes[currentUser] = { vote, comment }; }
+    if (saved) { saved.votes = saved.votes || {}; saved.votes[currentUser] = { vote, comment, at: saved.votes[currentUser]?.at || new Date().toISOString() }; }
     renderAfterLocalChange();
     openDetail(savedId, { push: false });
     return;
@@ -1127,7 +1141,7 @@ async function handleSaveVote() {
   haptic(12);
   showToast("Voto salvato", "success");
   item.votes = item.votes || {};
-  item.votes[currentUser] = { vote, comment };
+  item.votes[currentUser] = { vote, comment, at: item.votes[currentUser]?.at || new Date().toISOString() };
   renderAfterLocalChange();
   openDetail(item.id, { push: false });
 }
