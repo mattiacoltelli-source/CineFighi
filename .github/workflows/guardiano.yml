@@ -129,10 +129,17 @@ jobs:
       # non esiste nessun sito Pages, non https://.../CineFighi/. Corretto
       # usando "./" ovunque. Mai visto in locale perche' li' la baseURL non
       # ha sottopercorso.)
+      # Oltre a provare l'app, qui girano i due controlli che hanno senso solo
+      # sul sito vero (si saltano da soli altrove): i report (le funzioni
+      # rispondono, l'ultimo report di gruppo non e' vecchio) e la versione
+      # pubblicata (uguale all'ultimo commit su main). GITHUB_TOKEN serve a
+      # quest'ultimo per leggere i commit senza il limite di richieste dei
+      # server condivisi.
       - name: Prova il sito pubblicato
         run: npx playwright test
         env:
           CINEFIGHI_URL: https://mattiacoltelli-source.github.io/CineFighi/
+          GITHUB_TOKEN: ${{ github.token }}
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
