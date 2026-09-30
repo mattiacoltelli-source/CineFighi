@@ -285,39 +285,53 @@ export async function ensureWatchlistMembership(titleId, userName) {
 // quando è stato davvero visto: un titolo in watchlist da tempo, appena
 // votato, restava sepolto nella sua vecchia posizione). Tornando indietro a
 // "watchlist" lo azzeriamo, per coerenza (non è più "visto").
+// .select() dopo update/delete e controllo righe: come deleteUser/addToWatchlist
+// più sotto — Postgres/PostgREST non segnala errore se una riga viene
+// bloccata da RLS, la scrittura si limita a non toccare nulla (è così che
+// l'incidente sui users è passato inosservato finché non è stato troppo
+// tardi). Oggi queste tabelle sono ancora scrivibili pubblicamente, ma se un
+// giorno una policy si stringesse come già successo per users, questa è la
+// differenza fra "l'app se ne accorge subito" e "un'azione sembra riuscita e
+// non lo è".
 export async function updateTitleStatus(titleId, status) {
   const seen_at = status === "seen" ? new Date().toISOString() : null;
-  const { error } = await supabase.from("titles").update({ status, seen_at }).eq("id", titleId);
+  const { data, error } = await supabase.from("titles").update({ status, seen_at }).eq("id", titleId).select();
   if (error) { console.error("updateTitleStatus:", error); return { ok: false }; }
+  if (!data || data.length === 0) { console.error("updateTitleStatus: nessuna riga aggiornata (RLS?)"); return { ok: false }; }
   return { ok: true };
 }
 
 export async function removeTitle(titleId) {
-  const { error } = await supabase.from("titles").delete().eq("id", titleId);
+  const { data, error } = await supabase.from("titles").delete().eq("id", titleId).select();
   if (error) { console.error("removeTitle:", error); return { ok: false }; }
+  if (!data || data.length === 0) { console.error("removeTitle: nessuna riga eliminata (RLS?)"); return { ok: false }; }
   return { ok: true };
 }
 
 // ─── VOTI (uno per persona per titolo) ────────────────────────────────────────
 
 export async function upsertVote(titleId, userName, vote, comment) {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("votes")
     .upsert(
       { title_id: titleId, user_name: userName, vote, comment: comment || null },
       { onConflict: "title_id,user_name" }
-    );
+    )
+    .select();
   if (error) { console.error("upsertVote:", error); return { ok: false }; }
+  if (!data || data.length === 0) { console.error("upsertVote: nessuna riga scritta (RLS?)"); return { ok: false }; }
   return { ok: true };
 }
 
 export async function removeVote(titleId, userName) {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("votes")
     .delete()
     .eq("title_id", titleId)
-    .eq("user_name", userName);
+    .eq("user_name", userName)
+    .select();
   if (error) { console.error("removeVote:", error); return { ok: false }; }
+  if (!data || data.length === 0) { console.error("removeVote: nessuna riga eliminata (RLS?)"); return { ok: false }; }
   return { ok: true };
 }
 

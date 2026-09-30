@@ -97,7 +97,9 @@ test("Bug 1 — \"✓ Visto\" da ricerca su un titolo già in watchlist altrui a
     }
     if (req.method() === "PATCH") {
       patchRicevuta = true;
-      return route.fulfill({ status: 204, contentType: "application/json", body: "" });
+      // Come Supabase vero con .select(): 200 e l'array della riga scritta,
+      // non 204 vuoto — vedi il commento su updateTitleStatus in storage.js.
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([{ ...BASE_TITLE, status: "seen" }]) });
     }
     return route.fallback();
   });
@@ -133,7 +135,20 @@ test("Bug 2 — un voto su una scheda di anteprima diventata duplicata nel fratt
     }
     if (req.method() === "PATCH") {
       patchRicevuta = true;
-      return route.fulfill({ status: 204, contentType: "application/json", body: "" });
+      // Come Supabase vero con .select(): 200 e l'array della riga scritta,
+      // non 204 vuoto — vedi il commento su updateTitleStatus in storage.js.
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([{ ...T2, status: "seen" }]) });
+    }
+    return route.fallback();
+  });
+  await page.route("**/dxzukpujouayxlomwryc.supabase.co/rest/v1/votes**", async route => {
+    const req = route.request();
+    if (req.method() === "POST") {
+      const voto = JSON.parse(req.postData() || "{}");
+      // Come Supabase vero con .select(): l'array della riga scritta, non
+      // il 204 vuoto della "rete di sicurezza" — vedi il commento su
+      // upsertVote in storage.js.
+      return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify([{ title_id: T2.id, user_name: "Cos", vote: voto.vote, comment: voto.comment ?? null }]) });
     }
     return route.fallback();
   });
@@ -216,7 +231,9 @@ test("voto e rimozione voto: giro completo su un titolo già in watchlist", asyn
     if (req.method() === "PATCH") {
       patchStatus = JSON.parse(req.postData() || "{}").status ?? null;
       statoAttuale = "seen";
-      return route.fulfill({ status: 204, contentType: "application/json", body: "" });
+      // Come Supabase vero con .select(): 200 e l'array della riga scritta,
+      // non 204 vuoto — vedi il commento su updateTitleStatus in storage.js.
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([{ ...T4, status: "seen" }]) });
     }
     return route.fallback();
   });
@@ -225,12 +242,16 @@ test("voto e rimozione voto: giro completo su un titolo già in watchlist", asyn
     if (req.method() === "POST") {
       postVoto = JSON.parse(req.postData() || "{}");
       votoAttuale = { vote: postVoto.vote as number, comment: (postVoto.comment as string | null) ?? null };
-      return route.fulfill({ status: 201, contentType: "application/json", body: "[]" });
+      // Come Supabase vero con .select(): l'array della riga scritta, non
+      // "[]" — vedi il commento su upsertVote in storage.js.
+      return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify([{ title_id: T4.id, user_name: "Mattia", vote: postVoto.vote, comment: postVoto.comment ?? null }]) });
     }
     if (req.method() === "DELETE") {
       deleteVoto = true;
       votoAttuale = null;
-      return route.fulfill({ status: 204, contentType: "application/json", body: "" });
+      // Come Supabase vero con .select(): 200 e l'array della riga
+      // eliminata, non 204 vuoto — vedi il commento su removeVote in storage.js.
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([{ title_id: T4.id, user_name: "Mattia" }]) });
     }
     return route.fallback();
   });
