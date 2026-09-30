@@ -714,12 +714,13 @@ function renderStats() {
     : "★ media voto";
 
   // Le 4 card numeriche: di gruppo in modalità "Gruppo", personali in "Io".
-  // "In watchlist" personale conta solo i titoli che HAI aggiunto tu e che
-  // sono ancora in watchlist in questo momento (si aggiorna da solo quando
-  // li segni visti o li rimuovi).
+  // "In watchlist" personale conta i titoli che sono NELLA TUA watchlist ora
+  // (watchlist_by, non added_by — vedi storage.js: chi l'ha catalogato per
+  // primo e chi la vuole vedere sono cose diverse da quando la watchlist è
+  // diventata multi-persona. Stessa fonte già usata da Home, vedi sopra).
   if (statsMode === "me") {
     const myVoted = db.filter(x => x.votes && x.votes[currentUser]);
-    const myWatch = db.filter(x => x.status === "watchlist" && x.added_by === currentUser);
+    const myWatch = db.filter(x => x.status === "watchlist" && x.watchlist_by?.includes(currentUser));
     animateValue(document.getElementById("statSeen"), myVoted.length);
     animateValue(document.getElementById("statWatch"), myWatch.length);
     animateValue(document.getElementById("statMovies"), myVoted.filter(x => x.media_type === "movie").length);
@@ -1142,18 +1143,25 @@ async function handleToggleStatus() {
   const nextStatus = item.status === "watchlist" ? "seen" : "watchlist";
   const res = await updateTitleStatus(item.id, nextStatus);
   if (!res.ok) { showToast("Errore, riprova", "error"); return; }
-  // Tornando in watchlist da "visto", assicuriamoci che chi ha appena
-  // premuto il tasto sia registrato come uno di chi la vuole vedere —
-  // altrimenti sparirebbe subito dalla SUA watchlist (vedi
-  // ensureWatchlistMembership in storage.js).
-  if (nextStatus === "watchlist") {
-    await ensureWatchlistMembership(item.id, currentUser);
-    item.watchlist_by = item.watchlist_by || [];
-    if (!item.watchlist_by.includes(currentUser)) item.watchlist_by.push(currentUser);
-  }
   haptic(12);
   item.status = nextStatus;
   item.seen_at = nextStatus === "seen" ? new Date().toISOString() : null;
+  // Tornando in watchlist da "visto", assicuriamoci che chi ha appena
+  // premuto il tasto sia registrato come uno di chi la vuole vedere —
+  // altrimenti sparirebbe subito dalla SUA watchlist (vedi
+  // ensureWatchlistMembership in storage.js). Lo stato è già cambiato sul
+  // server a questo punto: se questa scrittura fallisce lo stato locale non
+  // deve fingere che sia andata bene, altrimenti la watchlist mostra il
+  // titolo finché non arriva un refresh a smentirla.
+  if (nextStatus === "watchlist") {
+    const membership = await ensureWatchlistMembership(item.id, currentUser);
+    if (membership.ok) {
+      item.watchlist_by = item.watchlist_by || [];
+      if (!item.watchlist_by.includes(currentUser)) item.watchlist_by.push(currentUser);
+    } else {
+      showToast("Segnato da vedere, ma non aggiunto alla tua watchlist — riprova", "error");
+    }
+  }
   renderAfterLocalChange();
   openDetail(item.id, { push: false });
 }
