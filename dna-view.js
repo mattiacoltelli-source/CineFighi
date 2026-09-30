@@ -584,7 +584,17 @@ function applyFullViewScale() {
   overlay.style.setProperty("--dna-edge-medio", spessore(2.2, 1.5));
   overlay.style.setProperty("--dna-edge-debole", spessore(1.6, 1.1));
 
-  if (fullViewFit) { scrollBox.scrollTop = 0; scrollBox.scrollLeft = 0; }
+  if (fullViewFit) {
+    scrollBox.scrollTop = 0; scrollBox.scrollLeft = 0;
+  } else {
+    // Ingrandita: la rete e' piu' grande del riquadro e lo scorrimento
+    // partiva dall'angolo in alto a sinistra, spesso vuoto (la rete si
+    // allunga in diagonale): si apre invece sul baricentro dei nodi. Il
+    // browser limita da solo lo scorrimento ai bordi validi.
+    const { cx, cy } = fullViewGeom;
+    scrollBox.scrollLeft = offX + (cx - left) * scale - scrollBox.clientWidth / 2;
+    scrollBox.scrollTop = offY + (cy - top) * scale - scrollBox.clientHeight / 2;
+  }
 }
 
 function setFullViewFit(fit) {
@@ -623,7 +633,12 @@ function openFullNetworkView() {
     left: minX - FULL_VIEW_NODE_HALF,
     top: minY - FULL_VIEW_NODE_HALF,
     contentW: maxX - minX + FULL_VIEW_NODE_HALF * 2,
-    contentH: maxY - minY + FULL_VIEW_NODE_HALF * 2
+    contentH: maxY - minY + FULL_VIEW_NODE_HALF * 2,
+    // Baricentro dei nodi (non il centro del riquadro: una rete che si allunga
+    // in diagonale ha il riquadro in gran parte vuoto). Serve a "Ingrandita",
+    // che si apre centrata qui invece che sull'angolo in alto a sinistra.
+    cx: placed.reduce((a, n) => a + n.x, 0) / placed.length,
+    cy: placed.reduce((a, n) => a + n.y, 0) / placed.length
   };
 
   const hops = hopsFrom(net, focusId);
