@@ -1035,7 +1035,12 @@ function openDetail(id, options = {}) {
 // Salva in libreria il titolo attualmente in "consultazione" (previewItem,
 // non ancora in libreria), con lo status indicato. Usata sia da
 // handleSaveVote (status "seen") che da handleToggleStatus (status
-// "watchlist"). Ritorna l'id salvato, o null in caso di errore vero.
+// "watchlist"). Ritorna { id, created }, o null in caso di errore vero:
+// `created` dice se questa chiamata ha davvero creato il titolo (true) o si
+// è unita a uno che esisteva già (false, qualcun altro l'ha aggiunto nel
+// frattempo) — chi chiama ne ha bisogno per sapere se è sicuro fare
+// rollback su un fallimento successivo (vedi handleSaveVote: cancellare un
+// titolo che esiste già per colpa di qualcun altro sarebbe un danno nuovo).
 async function promotePreviewItem(status) {
   if (status === "watchlist") {
     // Se qualcun altro l'ha già messo in watchlist nel frattempo, ci
@@ -1050,13 +1055,13 @@ async function promotePreviewItem(status) {
     } else {
       db.unshift({ ...res.title, votes: {}, watchlist_by: res.title.watchlist_by || [currentUser] });
     }
-    return res.title.id;
+    return { id: res.title.id, created: !res.joined };
   }
 
   const res = await addTitle(previewItem, status, currentUser);
   if (res.ok) {
     db.unshift({ ...res.title, votes: {} });
-    return res.title.id;
+    return { id: res.title.id, created: true };
   }
   if (res.reason !== "duplicate") return null;
 
@@ -1072,7 +1077,7 @@ async function promotePreviewItem(status) {
     const statusRes = await updateTitleStatus(existing.id, "seen");
     if (statusRes.ok) { existing.status = "seen"; existing.seen_at = new Date().toISOString(); }
   }
-  return existing.id;
+  return { id: existing.id, created: false };
 }
 
 async function handleSaveVote() {
@@ -1081,10 +1086,24 @@ async function handleSaveVote() {
 
   if (previewItem) {
     // Un voto significa sempre "l'ho già visto": lo salviamo come visto, mai in watchlist
-    const savedId = await promotePreviewItem("seen");
-    if (!savedId) { showToast("Errore, riprova", "error"); return; }
+    const promosso = await promotePreviewItem("seen");
+    if (!promosso) { showToast("Errore, riprova", "error"); return; }
+    const savedId = promosso.id;
     const res = await upsertVote(savedId, currentUser, vote, comment);
-    if (!res.ok) { showToast("Errore nel salvare il voto, riprova", "error"); return; }
+    if (!res.ok) {
+      // Il titolo l'abbiamo appena creato noi (created: true): se il voto
+      // fallisce qui non deve restare "orfano" nella libreria condivisa —
+      // segnato visto, zero voti, finché qualcuno non se ne accorge per
+      // caso. Se invece esisteva già (created: false, un altro l'aveva
+      // appena aggiunto), non è nostro da cancellare: resta, il voto si può
+      // riprovare più tardi senza aver distrutto niente di chi l'ha messo.
+      if (promosso.created) {
+        const rollback = await removeTitle(savedId);
+        if (rollback.ok) db = db.filter(x => x.id !== savedId);
+      }
+      showToast("Errore nel salvare il voto, riprova", "error");
+      return;
+    }
     haptic(12);
     showToast("Voto salvato", "success");
     previewItem = null;
@@ -1128,13 +1147,13 @@ async function handleClearVote() {
 async function handleToggleStatus() {
   if (previewItem) {
     // Modalità consultazione: unico pulsante disponibile è "Aggiungi a watchlist"
-    const savedId = await promotePreviewItem("watchlist");
-    if (!savedId) { showToast("Errore, riprova", "error"); return; }
+    const promosso = await promotePreviewItem("watchlist");
+    if (!promosso) { showToast("Errore, riprova", "error"); return; }
     haptic(12);
     showToast(`${previewItem.title} aggiunto alla watchlist`, "success");
     previewItem = null;
     renderAfterLocalChange();
-    openDetail(savedId, { push: false });
+    openDetail(promosso.id, { push: false });
     return;
   }
 

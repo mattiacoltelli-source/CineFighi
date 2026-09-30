@@ -186,7 +186,10 @@ test("Bug 3 — addToWatchlist non mente più se l'insert su watchlist_adds fall
   await page.route("**/dxzukpujouayxlomwryc.supabase.co/rest/v1/titles**", async route => {
     const req = route.request();
     if (req.method() === "POST") {
-      return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify([{ ...T3, added_by: "Mattia" }]) });
+      // Oggetto singolo, non array: addToWatchlist usa .select().single(),
+      // e Supabase vero risponde con un oggetto nudo per quella richiesta
+      // (Accept: application/vnd.pgrst.object+json), non con un array.
+      return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ ...T3, added_by: "Mattia" }) });
     }
     return route.fallback();
   });
@@ -204,6 +207,54 @@ test("Bug 3 — addToWatchlist non mente più se l'insert su watchlist_adds fall
   await page.waitForTimeout(800);
 
   await expect(page.locator(".toast.error").last()).toContainText("Errore");
+  expect(errori, `eccezioni JS:\n${errori.join("\n")}`).toEqual([]);
+});
+
+test("voto fallito su un titolo appena creato dall'anteprima: nessun titolo orfano", async ({ page }) => {
+  const errori: string[] = [];
+  page.on("pageerror", e => errori.push(e.message));
+
+  const T5 = { ...BASE_TITLE, id: "ffffffff-0000-0000-0000-000000000005", tmdb_id: 999005, title: "Titolo Voto Fallito" };
+
+  await baseRoutes(page, { titles: () => [], votes: () => [], watchlistAdds: () => [] });
+  let deleteRicevuta: string | null = null;
+  await page.route("**/dxzukpujouayxlomwryc.supabase.co/rest/v1/titles**", async route => {
+    const req = route.request();
+    const url = new URL(req.url());
+    if (req.method() === "POST") {
+      // Promuovere l'anteprima crea davvero il titolo (created: true in
+      // promotePreviewItem) — a differenza del test "Bug 2", che simula un
+      // duplicato trovato da un altro utente.
+      // Oggetto singolo, non array: addTitle usa .select().single() (stesso
+      // motivo del commento in Bug 3 qui sopra).
+      return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ ...T5, added_by: "Mattia" }) });
+    }
+    if (req.method() === "DELETE") {
+      deleteRicevuta = url.searchParams.get("id");
+      // Come Supabase vero con .select(): l'array della riga eliminata.
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([{ ...T5 }]) });
+    }
+    return route.fallback();
+  });
+  await page.route("**/dxzukpujouayxlomwryc.supabase.co/rest/v1/votes**", async route => {
+    const req = route.request();
+    if (req.method() === "POST") {
+      return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ message: "errore simulato" }) });
+    }
+    return route.fallback();
+  });
+  await mockTmdb(page, T5);
+
+  const card = await entraEcerca(page, T5.title);
+  await card.locator(".open-preview").click();
+  await page.waitForSelector("#screen-detail:not(.hidden)", { timeout: 10_000 });
+
+  await page.locator("#detailVoteSlider").evaluate(el => { (el as HTMLInputElement).value = "7"; el.dispatchEvent(new Event("input", { bubbles: true })); });
+  await page.locator("#detailSaveVoteBtn").click();
+  await page.waitForTimeout(800);
+
+  expect(deleteRicevuta, "nessun DELETE per ripulire il titolo appena creato dopo il voto fallito").toContain(T5.id);
+  await expect(page.locator(".toast.error").last()).toContainText("Errore nel salvare il voto");
   expect(errori, `eccezioni JS:\n${errori.join("\n")}`).toEqual([]);
 });
 
