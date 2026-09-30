@@ -10,7 +10,20 @@ import { entra, vaiA, tuttoRaggiungibile, osserva, soloLettura } from "./helpers
 async function toccaNodo(page: import("@playwright/test").Page, selettore: string): Promise<boolean> {
   const nodo = page.locator(selettore).first();
   if (!(await nodo.count())) return false;
-  const box = await nodo.boundingBox();
+  // Un dito tocca un nodo FERMO: dopo un cambio di persone o un'apertura la
+  // camera si sta ancora muovendo, e leggere la posizione a meta' corsa fa
+  // cadere il tap dove il nodo non c'e' piu' (flake ~1 volta su 10: la rete
+  // restava al solo nodo radice e il test vedeva "tasto nascosto"). Si aspetta
+  // che due letture a 100ms di distanza coincidano.
+  let box = await nodo.boundingBox();
+  for (let i = 0; i < 20 && box; i++) {
+    await page.waitForTimeout(100);
+    const dopo = await nodo.boundingBox();
+    if (!dopo) return false;
+    const fermo = Math.abs(dopo.x - box.x) < 1 && Math.abs(dopo.y - box.y) < 1;
+    box = dopo;
+    if (fermo) break;
+  }
   if (!box) return false;
   await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
   await page.waitForTimeout(600);
