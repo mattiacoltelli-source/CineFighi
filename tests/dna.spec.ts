@@ -214,6 +214,47 @@ test("l'alone dorato dei molto amati e l'anello verde dei punti d'incontro non c
 // e' il punto per cui questa vista esiste (vedi openFullNetworkView, che
 // ridisegna l'intera rete con le stesse funzioni del render live, senza il
 // budget DOM).
+// "Ingrandita" (la vista di "Tutta la rete" all'apertura) e' piu' grande del
+// riquadro e si scorre. Partiva dall'angolo in alto a sinistra, spesso vuoto
+// perche' la rete si allunga in diagonale: ora si apre centrata sul baricentro
+// dei nodi. L'invariante: il baricentro sta al centro del riquadro (oppure lo
+// scorrimento e' arrivato a un bordo, dove il browser non puo' andare oltre).
+test("la vista ingrandita di tutta la rete si apre centrata sui nodi", async ({ page }) => {
+  const guasti = osserva(page);
+  await entra(page);
+  await vaiA(page, "tonight");
+  await page.locator("#dnaNodes .dna-node").first().waitFor({ state: "visible", timeout: 30_000 });
+
+  await esplora(page, 10);
+  await page.locator("#dnaViewAllBtn").click();
+  await expect(page.locator("#dnaFullView")).not.toHaveClass(/hidden/);
+  await page.locator("#dnaFullNodes .dna-node").first().waitFor({ state: "visible" });
+  await page.waitForTimeout(400);
+
+  const m = await page.evaluate(() => {
+    const scroll = document.querySelector<HTMLElement>(".dna-full-view__scroll")!;
+    const box = scroll.getBoundingClientRect();
+    const nodi = [...document.querySelectorAll("#dnaFullNodes .dna-node")].map(n => n.getBoundingClientRect());
+    const cx = nodi.reduce((a, r) => a + r.left + r.width / 2, 0) / nodi.length;
+    const cy = nodi.reduce((a, r) => a + r.top + r.height / 2, 0) / nodi.length;
+    const dx = Math.round(cx - (box.left + box.width / 2));
+    const dy = Math.round(cy - (box.top + box.height / 2));
+    // Bloccato dal bordo solo se per centrare serve scorrere NELLA direzione
+    // in cui non si puo' piu' andare (baricentro a destra: serve scorrere a
+    // destra, e si e' gia' in fondo). Fermo a 0 con il baricentro a destra
+    // non e' un bordo: e' non aver scorso.
+    const bloccato = (d: number, pos: number, max: number) => (d > 0 && pos >= max - 1) || (d < 0 && pos <= 1);
+    return {
+      dx, dy,
+      xClampata: bloccato(dx, scroll.scrollLeft, scroll.scrollWidth - scroll.clientWidth),
+      yClampata: bloccato(dy, scroll.scrollTop, scroll.scrollHeight - scroll.clientHeight),
+    };
+  });
+  expect(Math.abs(m.dx) <= 40 || m.xClampata, `baricentro fuori centro in orizzontale di ${m.dx}px`).toBe(true);
+  expect(Math.abs(m.dy) <= 40 || m.yClampata, `baricentro fuori centro in verticale di ${m.dy}px`).toBe(true);
+  expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
+});
+
 test("il tasto vedi tutta la rete compare con rete grande in ogni modalita', e mostra ogni nodo aperto", async ({ page }) => {
   const guasti = osserva(page);
   const scritture = soloLettura(page);
