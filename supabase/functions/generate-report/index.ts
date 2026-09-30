@@ -39,7 +39,7 @@ function average(values: number[]): number {
 function normTitle(t: string): string {
   return t
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
@@ -61,6 +61,24 @@ const ReportContentSchema = z.object({
     why: z.string().min(15),
   })).min(RECS_FINAL).max(RECS_REQUESTED + 6),
 });
+
+// PostgREST risponde al massimo con 1000 righe per richiesta e NON segnala il
+// taglio: con `select=*` semplice, oltre la riga 1000 i dati sparivano in
+// silenzio (30/9/2026: `votes` aveva 1005 righe e il report ne perdeva 5).
+// Si legge a pagine con un ordine stabile (`order=id.asc`, senza potrebbero
+// ripetersi o saltarsi righe tra una pagina e l'altra) finche' una pagina
+// torna incompleta. `query` e' il pezzo dopo `/rest/v1/`, senza order/limit.
+async function fetchAllRows(supabaseUrl: string, headers: Record<string, string>, query: string): Promise<any[]> {
+  const PAGE_SIZE = 1000;
+  const rows: any[] = [];
+  for (let offset = 0; ; offset += PAGE_SIZE) {
+    const res = await fetch(`${supabaseUrl}/rest/v1/${query}&order=id.asc&limit=${PAGE_SIZE}&offset=${offset}`, { headers });
+    if (!res.ok) throw new Error(`Lettura ${query.split("?")[0]} fallita: ${res.status} ${await res.text()}`);
+    const page = await res.json();
+    rows.push(...page);
+    if (page.length < PAGE_SIZE) return rows;
+  }
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -94,15 +112,10 @@ Deno.serve(async (req) => {
     };
 
     // ── 1. Dati grezzi da Supabase (libreria condivisa + voti di questo utente) ──
-    const [titlesRes, votesRes] = await Promise.all([
-      fetch(`${SUPABASE_URL}/rest/v1/titles?select=*`, { headers: restHeaders }),
-      fetch(`${SUPABASE_URL}/rest/v1/votes?user_name=eq.${encodeURIComponent(user_name)}&select=title_id,vote`, { headers: restHeaders }),
+    const [allTitles, myVotes] = await Promise.all([
+      fetchAllRows(SUPABASE_URL, restHeaders, "titles?select=*"),
+      fetchAllRows(SUPABASE_URL, restHeaders, `votes?user_name=eq.${encodeURIComponent(user_name)}&select=id,title_id,vote`) as Promise<{ title_id: number; vote: number }[]>,
     ]);
-    if (!titlesRes.ok) throw new Error(`Lettura titles fallita: ${titlesRes.status} ${await titlesRes.text()}`);
-    if (!votesRes.ok) throw new Error(`Lettura votes fallita: ${votesRes.status} ${await votesRes.text()}`);
-
-    const allTitles: any[] = await titlesRes.json();
-    const myVotes: { title_id: number; vote: number }[] = await votesRes.json();
     const myVoteByTitle = new Map(myVotes.map(v => [v.title_id, Number(v.vote)]));
 
     // "Visti da me": titoli segnati come visti E che io stesso ho votato —

@@ -37,6 +37,24 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// PostgREST risponde al massimo con 1000 righe per richiesta e NON segnala il
+// taglio: con `select=*` semplice, oltre la riga 1000 i dati sparivano in
+// silenzio (30/9/2026: `votes` aveva 1005 righe e il report ne perdeva 5).
+// Si legge a pagine con un ordine stabile (`order=id.asc`, senza potrebbero
+// ripetersi o saltarsi righe tra una pagina e l'altra) finche' una pagina
+// torna incompleta. `query` e' il pezzo dopo `/rest/v1/`, senza order/limit.
+async function fetchAllRows(supabaseUrl: string, headers: Record<string, string>, query: string): Promise<any[]> {
+  const PAGE_SIZE = 1000;
+  const rows: any[] = [];
+  for (let offset = 0; ; offset += PAGE_SIZE) {
+    const res = await fetch(`${supabaseUrl}/rest/v1/${query}&order=id.asc&limit=${PAGE_SIZE}&offset=${offset}`, { headers });
+    if (!res.ok) throw new Error(`Lettura ${query.split("?")[0]} fallita: ${res.status} ${await res.text()}`);
+    const page = await res.json();
+    rows.push(...page);
+    if (page.length < PAGE_SIZE) return rows;
+  }
+}
+
 function average(values: number[]): number {
   return values.reduce((a, b) => a + b, 0) / values.length;
 }
@@ -160,18 +178,12 @@ Deno.serve(async (req) => {
     }
 
     // ── 1. Dati grezzi: intera libreria + tutti i voti + elenco utenti ──────
-    const [titlesRes, votesRes, usersRes] = await Promise.all([
-      fetch(`${SUPABASE_URL}/rest/v1/titles?select=*`, { headers: restHeaders }),
-      fetch(`${SUPABASE_URL}/rest/v1/votes?select=title_id,user_name,vote`, { headers: restHeaders }),
-      fetch(`${SUPABASE_URL}/rest/v1/users?select=name`, { headers: restHeaders }),
+    const [allTitles, allVotes, usersRows] = await Promise.all([
+      fetchAllRows(SUPABASE_URL, restHeaders, "titles?select=*"),
+      fetchAllRows(SUPABASE_URL, restHeaders, "votes?select=id,title_id,user_name,vote") as Promise<{ title_id: number; user_name: string; vote: number }[]>,
+      fetchAllRows(SUPABASE_URL, restHeaders, "users?select=id,name"),
     ]);
-    if (!titlesRes.ok) throw new Error(`Lettura titles fallita: ${titlesRes.status} ${await titlesRes.text()}`);
-    if (!votesRes.ok) throw new Error(`Lettura votes fallita: ${votesRes.status} ${await votesRes.text()}`);
-    if (!usersRes.ok) throw new Error(`Lettura users fallita: ${usersRes.status} ${await usersRes.text()}`);
-
-    const allTitles: any[] = await titlesRes.json();
-    const allVotes: { title_id: number; user_name: string; vote: number }[] = await votesRes.json();
-    const users: string[] = (await usersRes.json()).map((u: any) => u.name);
+    const users: string[] = usersRows.map((u: any) => u.name);
 
     if (!users.length) {
       return new Response(JSON.stringify({ error: "Nessun utente nel gruppo." }), {
