@@ -26,12 +26,21 @@ const ACTOR_MIN_FILMS = 4;       // dna.js
 type Titolo = { id: string; title: string; director: string | null; genre_names: string[] | null; cast_names: string[] | null };
 type Voto = { title_id: string; user_name: string; vote: string };
 
+// Legge TUTTE le righe: PostgREST ne restituisce al massimo 1000 per richiesta
+// senza avvisare (e `votes` ha superato quota 1000). Senza paginare, il test
+// confrontava i numeri dell'app con una lettura troncata e falliva per un
+// errore suo, non dell'app.
 async function leggiTabella<T>(request: APIRequestContext, tabella: string, select: string): Promise<T[]> {
-  const res = await request.get(`${SUPABASE_URL}/rest/v1/${tabella}?select=${select}`, {
-    headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
-  });
-  expect(res.ok(), `lettura ${tabella} fallita: ${res.status()}`).toBe(true);
-  return res.json();
+  const righe: T[] = [];
+  for (let offset = 0; ; offset += 1000) {
+    const res = await request.get(`${SUPABASE_URL}/rest/v1/${tabella}?select=${select}&order=id.asc&limit=1000&offset=${offset}`, {
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+    });
+    expect(res.ok(), `lettura ${tabella} fallita: ${res.status()}`).toBe(true);
+    const pagina: T[] = await res.json();
+    righe.push(...pagina);
+    if (pagina.length < 1000) return righe;
+  }
 }
 
 // La stessa identica soglia di dna-view.js::sogliaVisti — unica formula che
@@ -94,9 +103,9 @@ test("i numeri di \"Tutta la rete\" corrispondono ai voti veri", async ({ page, 
   // Dati veri, per la modalità "Tutti" (nessuna selezione persone): tutto
   // il gruppo, come lo calcola buildIndex(db, null/users).
   const [persone, titoli, voti] = await Promise.all([
-    leggiTabella<{ name: string }>(request, "users", "name").then(r => r.map(u => u.name)),
+    leggiTabella<{ name: string }>(request, "users", "id,name").then(r => r.map(u => u.name)),
     leggiTabella<Titolo>(request, "titles", "id,title,director,genre_names,cast_names"),
-    leggiTabella<Voto>(request, "votes", "title_id,user_name,vote"),
+    leggiTabella<Voto>(request, "votes", "id,title_id,user_name,vote"),
   ]);
 
   const votiPerTitolo = new Map<string, Voto[]>();
