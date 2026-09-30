@@ -307,7 +307,7 @@ function metaFor(index, id) {
   if (type === "persona") return {
     liked: (index.byPerson.get(key) || []).length,
     topGenres: topGenresOfPerson(index, key),
-    topDirectors: (index.personDirectors.get(key) || []).slice(0, 3).map(d => ({ name: d.id.slice(8), film: d.n })),
+    topDirectors: (index.personDirectors.get(key) || []).map(d => ({ name: d.id.slice(8), film: d.n })),
     topActors: (index.personActors.get(key) || []).map(a => ({ name: a.id.slice(7), film: a.n }))
   };
   if (type === "regista") {
@@ -432,6 +432,11 @@ export function sharedCountOf(index, id) {
   return 0;
 }
 
+// Quota relativa di ciascun tipo tra i vicini mostrati (vedi pickNeighbours):
+// piu' alto = piu' posti. Film e persone in testa, poi registi, poi generi,
+// attori in fondo (entrano solo se avanza posto).
+const TYPE_SHARE = { film: 3, persona: 3, regista: 2, genere: 1.5, attore: 0.7 };
+
 export function pickNeighbours(net, index, sourceId, limit = 5) {
   const cands = neighboursOf(index, sourceId)
     .filter(n => !net.linked.has(edgeKey(sourceId, n.id)))
@@ -452,8 +457,15 @@ export function pickNeighbours(net, index, sourceId, limit = 5) {
     // il ponte viene prima, sempre.
     const topBridge = pool[0].bridge;
     const tier = pool.filter(c => c.bridge === topBridge);
-    const minSeen = Math.min(...tier.map(c => perType.get(c.type) || 0));
-    const chosen = tier.find(c => (perType.get(c.type) || 0) === minSeen);
+    // Varieta' di tipo PESATA (TYPE_SHARE): a parita' di ponte si sceglie il
+    // tipo che ha finora "meno del suo", cosi' la rete resta fatta soprattutto
+    // di film, con qualche regista e pochissimi attori — invece di alternare
+    // i tipi alla pari (con 4 tipi e 5 posti, ~1 attore ogni apertura).
+    // Il primo candidato del tipo scelto e' quello col peso piu' alto (la pool
+    // e' gia' ordinata).
+    const costo = c => ((perType.get(c.type) || 0) + 1) / (TYPE_SHARE[c.type] ?? 1);
+    const minCosto = Math.min(...tier.map(costo));
+    const chosen = tier.find(c => costo(c) === minCosto);
     picked.push(chosen);
     perType.set(chosen.type, (perType.get(chosen.type) || 0) + 1);
     pool.splice(pool.indexOf(chosen), 1);
@@ -552,7 +564,7 @@ export function hopsFrom(net, startId) {
 // mostra solo ciò che è piaciuto.
 //
 // Non è ancora usata dalla schermata: i nodi Regista arrivano in fase 2.
-export const DIRECTOR_MIN_FILMS = 3;
+export const DIRECTOR_MIN_FILMS = 2;
 // Un film solo non dice niente sui gusti: un regista compare tra i TUOI
 // quando ne hai amati almeno due.
 export const DIRECTOR_MIN_PER_PERSON = 2;
@@ -561,13 +573,16 @@ export const DIRECTOR_MIN_PER_PERSON = 2;
 // è già un indizio, vedi il commento in buildIndex.
 export const DIRECTOR_MIN_PER_PERSON_SHARED = 1;
 // Attori: si salvano i primi 3 per film (storage/cine-core), qui si tiene
-// lo stesso tetto. Un attore diventa nodo con almeno 2 film amati; ogni
-// persona ne mostra al massimo 2, se ne ha amati 2+ (1 in modalita'
-// condivisa). Pochi e solo quelli forti: un film ne ha fino a 3.
+// lo stesso tetto. Sono volutamente PIU' RARI dei registi: con 3 attori per
+// film, alla soglia di 2 film erano ~150 nodi contro ~20 registi e la rete
+// sembrava un elenco di cast. Ora un attore e' un nodo solo con almeno 4
+// film amati (~30 nodi), e ogni persona ne mostra al massimo 1, se ne ha
+// amati 3+ (1 in modalita' condivisa). I registi, all'opposto, scendono a 2
+// film (DIRECTOR_MIN_FILMS): ~55 nodi.
 export const ACTORS_PER_FILM = 3;
-export const ACTOR_MIN_FILMS = 2;
-export const ACTORS_PER_PERSON = 2;
-export const ACTOR_MIN_PER_PERSON = 2;
+export const ACTOR_MIN_FILMS = 4;
+export const ACTORS_PER_PERSON = 1;
+export const ACTOR_MIN_PER_PERSON = 3;
 export const ACTOR_MIN_PER_PERSON_SHARED = 1;
 const DIRECTOR_PRIOR_WEIGHT = 5;
 const DIRECTOR_PRIOR_MEAN = 6.84;   // media di tutti i voti del gruppo
