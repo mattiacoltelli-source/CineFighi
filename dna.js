@@ -161,7 +161,7 @@ export function buildIndex(db, users = null) {
     films, byPerson, byGenre, genrePop, byDirector, genreFans, directorFans,
     byActor, actorFans,
     directors: new Map(), personDirectors: new Map(),
-    actors: new Map(), personActors: new Map(), shared: condivisa
+    actors: new Map(), personActors: new Map(), personGenres: new Map(), shared: condivisa
   };
   // Solo i registi che superano la soglia diventano nodi: uno con un film solo
   // sarebbe un vicolo cieco, non un pezzo di DNA del gruppo.
@@ -214,6 +214,14 @@ export function buildIndex(db, users = null) {
       .slice(0, ACTORS_PER_PERSON);
     if (suoi.length) index.personActors.set(name, suoi);
   }
+
+  // Il genere piu' amato di ciascuna persona (quello con piu' film amati, lo
+  // stesso che il pannello mostra per primo in "Generi piu' presenti"): serve
+  // alla prima apertura di una persona, vedi PERSON_OPENING.
+  for (const name of byPerson.keys()) {
+    const top = topGenresOfPerson(index, name).slice(0, 1).map(g => ({ id: genreId(g.genere), n: g.film }));
+    if (top.length) index.personGenres.set(name, top);
+  }
   return index;
 }
 
@@ -231,7 +239,8 @@ export function neighboursOf(index, id) {
       // di una persona, "tre film dello stesso regista" e' un segnale piu'
       // forte di "un film votato 9".
       ...(index.personDirectors.get(key) || []).map(d => ({ id: d.id, kind: "diretto", w: 10 + d.n * 10 })),
-      ...(index.personActors.get(key) || []).map(a => ({ id: a.id, kind: "recita", w: 10 + a.n * 10 }))
+      ...(index.personActors.get(key) || []).map(a => ({ id: a.id, kind: "recita", w: 10 + a.n * 10 })),
+      ...(index.personGenres.get(key) || []).map(g => ({ id: g.id, kind: "ama", w: 10 + g.n }))
     ];
   }
 
@@ -437,6 +446,14 @@ export function sharedCountOf(index, id) {
 // attori in fondo (entrano solo se avanza posto).
 const TYPE_SHARE = { film: 3, persona: 3, regista: 2, genere: 1.5, attore: 0.7 };
 
+// Prima apertura di una PERSONA: prima di tutto "chi e'" (il suo genere piu'
+// amato, due registi, un attore), poi i film che vengono dopo, toccando uno di
+// questi nodi. Sono quote, non un obbligo: se la persona non ha un attore
+// (serve averne amati 3+ film) o ha meno di 2 registi ricorrenti, il posto
+// resta ai film (TYPE_SHARE) e la rete non si apre mai quasi vuota. I registi
+// restano nell'ordine di sempre (piu' film amati prima).
+const PERSON_OPENING = { genere: 1, regista: 2, attore: 1 };
+
 export function pickNeighbours(net, index, sourceId, limit = 5) {
   const cands = neighboursOf(index, sourceId)
     .filter(n => !net.linked.has(edgeKey(sourceId, n.id)))
@@ -463,9 +480,14 @@ export function pickNeighbours(net, index, sourceId, limit = 5) {
     // i tipi alla pari (con 4 tipi e 5 posti, ~1 attore ogni apertura).
     // Il primo candidato del tipo scelto e' quello col peso piu' alto (la pool
     // e' gia' ordinata).
+    // Aprendo una persona, le quote di PERSON_OPENING passano davanti; finite
+    // quelle (o mancando i candidati) si torna al criterio pesato.
+    const quota = nodeType(sourceId) === "persona"
+      ? tier.find(c => (PERSON_OPENING[c.type] || 0) > (perType.get(c.type) || 0))
+      : null;
     const costo = c => ((perType.get(c.type) || 0) + 1) / (TYPE_SHARE[c.type] ?? 1);
     const minCosto = Math.min(...tier.map(costo));
-    const chosen = tier.find(c => costo(c) === minCosto);
+    const chosen = quota || tier.find(c => costo(c) === minCosto);
     picked.push(chosen);
     perType.set(chosen.type, (perType.get(chosen.type) || 0) + 1);
     pool.splice(pool.indexOf(chosen), 1);

@@ -99,6 +99,37 @@ test("esplorando la rete i nodi non si sovrappongono mai", async ({ page }) => {
   expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
 });
 
+// Aprendo una persona la prima volta si vede "chi e'": al massimo 1 genere,
+// 2 registi e 1 attore (quote di PERSON_OPENING in dna.js), il resto film.
+// Niente di piu' (la rete non si riempie di nomi) e mai quasi vuota: chi non
+// ha un attore o ha pochi registi ha i film al loro posto.
+test("la prima apertura di una persona mostra genere, registi e attore senza sforare le quote", async ({ page }) => {
+  const guasti = osserva(page);
+  const scritture = soloLettura(page);
+  await entra(page);
+  await vaiA(page, "tonight");
+  await page.locator("#dnaNodes .dna-node").first().waitFor({ state: "visible", timeout: 30_000 });
+
+  await toccaNodo(page, ".dna-node.is-root");
+  const tipi = await page.evaluate(() => {
+    const conta: Record<string, number> = {};
+    for (const n of document.querySelectorAll<HTMLElement>("#dnaNodes .dna-node:not(.is-root)")) {
+      const tipo = [...n.classList].find(c => c.startsWith("dna-node--"))?.slice("dna-node--".length) ?? "?";
+      conta[tipo] = (conta[tipo] || 0) + 1;
+    }
+    return conta;
+  });
+  const totale = Object.values(tipi).reduce((a, b) => a + b, 0);
+
+  expect(totale, `prima apertura quasi vuota: ${JSON.stringify(tipi)}`).toBeGreaterThanOrEqual(3);
+  // Chi ha film amati ha sempre un genere piu' amato: deve esserci, uno solo.
+  expect(tipi.genere ?? 0, `il genere piu' amato manca o e' piu' di uno: ${JSON.stringify(tipi)}`).toBe(1);
+  expect(tipi.regista ?? 0, `troppi registi: ${JSON.stringify(tipi)}`).toBeLessThanOrEqual(2);
+  expect(tipi.attore ?? 0, `troppi attori: ${JSON.stringify(tipi)}`).toBeLessThanOrEqual(1);
+  expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
+  expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
+});
+
 test("toccare un nodo aggiorna sempre il pannello", async ({ page }) => {
   const scritture = soloLettura(page);
   await entra(page);
