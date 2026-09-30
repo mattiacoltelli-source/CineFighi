@@ -20,8 +20,8 @@ const SUPABASE_URL = "https://dxzukpujouayxlomwryc.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_6kaInTs-_PDPHUszpj8N5w_Sb1zCXI9";
 const LIKE_THRESHOLD = 7;
 const STAT_MIN_TITOLI = 3;       // dna-view.js
-const DIRECTOR_MIN_FILMS = 3;    // dna.js
-const ACTOR_MIN_FILMS = 2;       // dna.js
+const DIRECTOR_MIN_FILMS = 2;    // dna.js
+const ACTOR_MIN_FILMS = 4;       // dna.js
 
 type Titolo = { id: string; title: string; director: string | null; genre_names: string[] | null; cast_names: string[] | null };
 type Voto = { title_id: string; user_name: string; vote: string };

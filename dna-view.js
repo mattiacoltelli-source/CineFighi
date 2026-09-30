@@ -342,7 +342,8 @@ let fullViewGeom = null;
 
 // Sotto questo numero di titoli un genere non fa media: un singolo 10 lo
 // porterebbe in cima. È la stessa preoccupazione — e lo stesso numero — del
-// minimo che dna.js chiede a un regista per diventare un nodo.
+// minimo che dna.js chiedeva a un regista (ora 2, vedi DIRECTOR_MIN_FILMS:
+// per una media di genere serve piu' storico che per un nodo).
 const STAT_MIN_TITOLI = 3;
 
 const mediaVoti = (voti) => voti.reduce((s, v) => s + v, 0) / voti.length;
