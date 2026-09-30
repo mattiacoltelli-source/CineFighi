@@ -610,47 +610,107 @@ function setFullViewFit(fit) {
       ? "Tutta in una schermata: lo screenshot la prende intera."
       : "Scorri per vederla tutta, poi fai uno screenshot.";
   }
+  // La forma cambia fra "Adatta" (allargata allo schermo) e "Ingrandita"
+  // (naturale): si ridisegna, poi si applica la scala.
+  if (!el("dnaFullView")?.classList.contains("hidden")) {
+    // Tre passaggi per un motivo: la legenda si legge dagli archi GIA'
+    // disegnati (fullViewLegend), ma una volta scritta cambia l'altezza
+    // lasciata alla rete, da cui dipende l'allargamento. Disegno, legenda,
+    // ridisegno con l'altezza finale.
+    renderFullNetwork();
+    renderFullViewStats();
+    renderFullNetwork();
+  }
   applyFullViewScale();
 }
 
-function openFullNetworkView() {
-  if (!net) return;
-  const edgesEl = el("dnaFullEdges");
-  const nodesEl = el("dnaFullNodes");
-  const overlay = el("dnaFullView");
-  const who = el("dnaFullViewWho");
-  if (!edgesEl || !nodesEl || !overlay) return;
+// In "Adatta" la rete si scala in modo uniforme per stare intera nel riquadro:
+// se ha una forma diversa dallo schermo (tipicamente alta e stretta su un
+// telefono) restano bande vuote ai lati. Prima di scalare si allarga quindi
+// la DISTANZA fra i nodi lungo l'asse corto, cosi' la forma segue quella
+// dello schermo; i nodi non si deformano (locandine quadrate, cerchi tondi)
+// perche' si spostano i centri, non si stira il disegno. Al massimo 1,6x:
+// oltre, le distanze fra nodi collegati diventerebbero troppo false.
+const FULL_VIEW_MAX_STRETCH = 1.6;
 
-  const placed = [...net.nodes.values()].filter(n => n.x !== null);
-  if (!placed.length) return;
-
+function stretchForScreen(placed, scrollBox) {
+  if (placed.length < 2) return;
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   for (const n of placed) {
     minX = Math.min(minX, n.x); maxX = Math.max(maxX, n.x);
     minY = Math.min(minY, n.y); maxY = Math.max(maxY, n.y);
   }
-  fullViewGeom = {
-    left: minX - FULL_VIEW_NODE_HALF,
-    top: minY - FULL_VIEW_NODE_HALF,
-    contentW: maxX - minX + FULL_VIEW_NODE_HALF * 2,
-    contentH: maxY - minY + FULL_VIEW_NODE_HALF * 2,
-    // Baricentro dei nodi (non il centro del riquadro: una rete che si allunga
-    // in diagonale ha il riquadro in gran parte vuoto). Serve a "Ingrandita",
-    // che si apre centrata qui invece che sull'angolo in alto a sinistra.
-    cx: placed.reduce((a, n) => a + n.x, 0) / placed.length,
-    cy: placed.reduce((a, n) => a + n.y, 0) / placed.length
-  };
+  const h2 = FULL_VIEW_NODE_HALF * 2;
+  const spanX = maxX - minX, spanY = maxY - minY;
+  const availW = Math.max(scrollBox.clientWidth - FULL_VIEW_GAP * 2, 1);
+  const availH = Math.max(scrollBox.clientHeight - FULL_VIEW_GAP * 2, 1);
+  const boxAspect = availW / availH;
+  const contentW = spanX + h2, contentH = spanY + h2;
+  let sx = 1, sy = 1;
+  if (contentW / contentH < boxAspect && spanX > 0) {
+    sx = Math.min(FULL_VIEW_MAX_STRETCH, (boxAspect * contentH - h2) / spanX);
+  } else if (contentW / contentH > boxAspect && spanY > 0) {
+    sy = Math.min(FULL_VIEW_MAX_STRETCH, (contentW / boxAspect - h2) / spanY);
+  }
+  sx = Math.max(1, sx); sy = Math.max(1, sy);
+  const mx = (minX + maxX) / 2, my = (minY + maxY) / 2;
+  for (const n of placed) { n.x = mx + (n.x - mx) * sx; n.y = my + (n.y - my) * sy; }
+}
 
-  const hops = hopsFrom(net, focusId);
-  edgesEl.innerHTML = net.edges.map(e => edgeLine(e, hops)).join("");
-  nodesEl.innerHTML = placed.map(n => nodeButton(n, hops)).join("");
+// Disegna nodi e archi della vista completa. In "Adatta" con le posizioni
+// allargate (stretchForScreen), ma SOLO per il tempo del disegno: le
+// posizioni vere della rete, usate dalla schermata DNA, non cambiano mai.
+function renderFullNetwork() {
+  if (!net) return;
+  const edgesEl = el("dnaFullEdges");
+  const nodesEl = el("dnaFullNodes");
+  const overlay = el("dnaFullView");
+  const scrollBox = overlay?.querySelector(".dna-full-view__scroll");
+  if (!edgesEl || !nodesEl || !overlay) return;
+
+  const placed = [...net.nodes.values()].filter(n => n.x !== null);
+  if (!placed.length) return;
+
+  const saved = placed.map(n => [n.x, n.y]);
+  try {
+    if (fullViewFit && scrollBox) stretchForScreen(placed, scrollBox);
+
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const n of placed) {
+      minX = Math.min(minX, n.x); maxX = Math.max(maxX, n.x);
+      minY = Math.min(minY, n.y); maxY = Math.max(maxY, n.y);
+    }
+    fullViewGeom = {
+      left: minX - FULL_VIEW_NODE_HALF,
+      top: minY - FULL_VIEW_NODE_HALF,
+      contentW: maxX - minX + FULL_VIEW_NODE_HALF * 2,
+      contentH: maxY - minY + FULL_VIEW_NODE_HALF * 2,
+      // Baricentro dei nodi (non il centro del riquadro: una rete che si
+      // allunga in diagonale ha il riquadro in gran parte vuoto). Serve a
+      // "Ingrandita", che si apre centrata qui invece che sull'angolo in alto
+      // a sinistra.
+      cx: placed.reduce((a, n) => a + n.x, 0) / placed.length,
+      cy: placed.reduce((a, n) => a + n.y, 0) / placed.length
+    };
+
+    const hops = hopsFrom(net, focusId);
+    edgesEl.innerHTML = net.edges.map(e => edgeLine(e, hops)).join("");
+    nodesEl.innerHTML = placed.map(n => nodeButton(n, hops)).join("");
+  } finally {
+    placed.forEach((n, i) => { n.x = saved[i][0]; n.y = saved[i][1]; });
+  }
+}
+
+function openFullNetworkView() {
+  if (!net) return;
+  const overlay = el("dnaFullView");
+  const who = el("dnaFullViewWho");
+  if (!el("dnaFullEdges") || !el("dnaFullNodes") || !overlay) return;
+  if (![...net.nodes.values()].some(n => n.x !== null)) return;
+
   if (who) who.textContent = peopleLabel();
-  // Prima le righe dei numeri, poi la misura: sono loro a decidere quanta
-  // altezza resta alla rete, e in "Adatta" quell'altezza è la scala.
-  renderFullViewStats();
-
-  // L'overlay va mostrato PRIMA di misurare il riquadro scorrevole: nascosto
-  // misurerebbe 0.
+  // L'overlay va mostrato PRIMA di misurare il riquadro scorrevole (nascosto
+  // misurerebbe 0).
   overlay.classList.remove("hidden");
   setFullViewFit(fullViewFit);
 }

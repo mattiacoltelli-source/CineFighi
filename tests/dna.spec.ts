@@ -255,6 +255,42 @@ test("la vista ingrandita di tutta la rete si apre centrata sui nodi", async ({ 
   expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
 });
 
+// "Adatta" scala la rete in modo uniforme: una rete alta e stretta lasciava
+// bande vuote ai lati. Ora i nodi si allargano lungo l'asse corto fino alla
+// forma dello schermo (al massimo 1,6x, senza deformare i nodi). L'invariante:
+// la rete occupa buona parte del riquadro in entrambe le direzioni, e la
+// legenda degli archi (letta dagli archi disegnati) resta al suo posto.
+test("la vista adatta riempie lo schermo e mantiene la legenda", async ({ page }) => {
+  const guasti = osserva(page);
+  await entra(page);
+  await vaiA(page, "tonight");
+  await page.locator("#dnaNodes .dna-node").first().waitFor({ state: "visible", timeout: 30_000 });
+
+  await esplora(page, 12);
+  await page.locator("#dnaViewAllBtn").click();
+  await page.locator('#dnaFullViewZoom [data-zoom="fit"]').click();
+  await page.locator("#dnaFullNodes .dna-node").first().waitFor({ state: "visible" });
+  await page.waitForTimeout(500);
+
+  const m = await page.evaluate(() => {
+    const box = document.querySelector(".dna-full-view__scroll")!.getBoundingClientRect();
+    const r = [...document.querySelectorAll("#dnaFullNodes .dna-node")].map(n => n.getBoundingClientRect());
+    const l = Math.min(...r.map(x => x.left)), rt = Math.max(...r.map(x => x.right));
+    const t = Math.min(...r.map(x => x.top)), b = Math.max(...r.map(x => x.bottom));
+    return {
+      larghezza: Math.round((rt - l) / box.width * 100),
+      altezza: Math.round((b - t) / box.height * 100),
+      legenda: !!document.querySelector("#dnaFullViewStats .dna-full-legend"),
+      archi: document.querySelectorAll("#dnaFullEdges .dna-edge").length,
+    };
+  });
+  expect(m.archi, "la vista completa non ha disegnato archi").toBeGreaterThan(0);
+  expect(m.legenda, "la legenda degli archi e' sparita").toBe(true);
+  expect(Math.max(m.larghezza, m.altezza), `rete troppo piccola nel riquadro: ${JSON.stringify(m)}`).toBeGreaterThanOrEqual(85);
+  expect(Math.min(m.larghezza, m.altezza), `una direzione e' quasi vuota: ${JSON.stringify(m)}`).toBeGreaterThanOrEqual(60);
+  expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
+});
+
 test("il tasto vedi tutta la rete compare con rete grande in ogni modalita', e mostra ogni nodo aperto", async ({ page }) => {
   const guasti = osserva(page);
   const scritture = soloLettura(page);
