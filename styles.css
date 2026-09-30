@@ -940,6 +940,7 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .dna-full-view .dna-edges .dna-edge { opacity: 1; stroke-width: var(--dna-edge-debole, 1.6px); }
 .dna-full-view .dna-edges .dna-edge--appartiene { stroke: rgba(255,157,77,.24); }
 .dna-full-view .dna-edges .dna-edge--diretto { stroke: rgba(56,189,248,.2); }
+.dna-full-view .dna-edges .dna-edge--recita { stroke: rgba(167,139,250,.2); }
 .dna-full-view .dna-edges .dna-edge--ama {
   stroke: rgba(56,189,248,.45); stroke-width: var(--dna-edge-medio, 2.2px);
 }
@@ -1154,6 +1155,7 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .dna-edge--ama { stroke: rgba(56,189,248,.34); }
 .dna-edge--appartiene { stroke: rgba(255,157,77,.24); }
 .dna-edge--diretto { stroke: rgba(56,189,248,.2); stroke-dasharray:4 6; }
+.dna-edge--recita { stroke: rgba(167,139,250,.22); stroke-dasharray:2 6; }
 
 /* Gli archi del nodo su cui è centrata la camera: stesso colore, solo un po'
    più spessi, così si vede a colpo d'occhio a cosa è attaccato. */
@@ -1221,6 +1223,13 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
   background: var(--surface2); border:1px solid rgba(56,189,248,.4);
   font-family: var(--font-display); font-weight:800; font-size:12px; color: var(--cyan);
 }
+/* L'attore si distingue da genere (tondo arancione) e regista (quadrato
+   ciano): tondo, bordo tratteggiato viola. */
+.dna-node__actor {
+  width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+  background: var(--surface2); border:1px dashed rgba(167,139,250,.6);
+  font-family: var(--font-display); font-weight:800; font-size:12px; color: #a78bfa;
+}
 .dna-node .avatar { border:2px solid var(--surface); }
 
 /* Il nodo su cui è centrata la camera e la radice: due anelli, nessuna
@@ -1228,6 +1237,7 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .dna-node.is-focus .dna-node__poster,
 .dna-node.is-focus .dna-node__genre,
 .dna-node.is-focus .dna-node__director,
+.dna-node.is-focus .dna-node__actor,
 .dna-node.is-focus .avatar { box-shadow: 0 0 0 2px var(--cyan); }
 .dna-node.is-root .avatar { box-shadow: 0 0 0 2px var(--orange); }
 .dna-node.is-focus.is-root .avatar { box-shadow: 0 0 0 2px var(--cyan); }
@@ -1240,7 +1250,8 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
    a dire "è questo che stai guardando". Non può capitare sulla radice: è
    sempre una persona, mai un punto d'incontro (vedi isMeetingPoint). */
 .dna-node.is-shared .dna-node__genre,
-.dna-node.is-shared .dna-node__director { box-shadow: 0 0 0 2px var(--green); }
+.dna-node.is-shared .dna-node__director,
+.dna-node.is-shared .dna-node__actor { box-shadow: 0 0 0 2px var(--green); }
 /* Il film è già il segnale più forte in modalità condivisa: lo ama
    ognuna delle persone che stai guardando, quindi cresce come farebbe un
    "molto amato" di livello forte (stesso 70px di is-loved-2) — non solo
@@ -1317,5 +1328,6 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 }
 .dna-chip--genere { border-radius:50%; color: var(--orange); border-color: rgba(255,157,77,.35); }
 .dna-chip--regista { border-radius:9px; color: var(--cyan); border-color: rgba(56,189,248,.4); }
+.dna-chip--attore { color:#a78bfa; border-color: rgba(167,139,250,.5); }
 .dna-hint { font-size:14px; color: var(--text3); padding:12px 0; }
 .dna-note { font-size:11px; color: var(--text3); margin-top:12px; line-height:1.4; }

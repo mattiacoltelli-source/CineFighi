@@ -52,6 +52,16 @@ export function extractDirector(item) {
   return "";
 }
 
+// I primi 3 attori per ordine di credito (credits.cast e' gia' ordinato da
+// TMDB per importanza). Tetto di 3: oltre, si finisce nei caratteristi e nei
+// cameo, che non dicono niente sui gusti e gonfiano la rete DNA.
+export const CAST_MAX = 3;
+export function extractCast(item) {
+  if (Array.isArray(item.cast_names)) return item.cast_names;
+  const cast = item.credits?.cast || [];
+  return cast.slice(0, CAST_MAX).map(p => p.name).filter(Boolean);
+}
+
 // Trasforma un risultato grezzo TMDB in un oggetto pulito e uniforme
 export function normalizedItem(item) {
   return {
@@ -68,6 +78,7 @@ export function normalizedItem(item) {
     vote_count: item.vote_count || 0,
     genre_names: normalizeGenres(item),
     director: extractDirector(item),
+    cast_names: extractCast(item),
     release_date: item.release_date || "",
     first_air_date: item.first_air_date || ""
   };

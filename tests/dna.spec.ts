@@ -25,7 +25,16 @@ async function esplora(page: import("@playwright/test").Page, passi: number): Pr
   for (let i = 0; i < passi; i++) {
     const prossimo = await page.evaluate((giaVisti: string[]) => {
       const attivo = document.querySelector<HTMLElement>(".dna-node.is-focus")?.dataset.node;
-      return [...document.querySelectorAll<HTMLElement>(".dna-node")]
+      // Solo nodi davvero toccabili: uno finito sotto un controllo
+      // fluttuante (es. il tasto "vedi tutta la rete") non riceverebbe il tap
+      // di un dito, quindi non e' un passo di esplorazione valido.
+      const toccabile = (n: HTMLElement) => {
+        const r = n.getBoundingClientRect();
+        const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        return !!top && n.contains(top);
+      };
+      return [...document.querySelectorAll<HTMLElement>("#dnaNodes .dna-node")]
+        .filter(toccabile)
         .map(n => n.dataset.node!)
         .find(id => id !== attivo && !giaVisti.includes(id));
     }, [...visti]);

@@ -134,6 +134,7 @@ export async function fetchLibrary() {
     overview: t.overview,
     genre_names: t.genre_names || [],
     director: t.director,
+    cast_names: t.cast_names || [],
     status: t.status,          // 'watchlist' | 'seen'
     added_by: t.added_by,
     created_at: t.created_at,
@@ -156,6 +157,7 @@ export async function addTitle(item, status, addedBy) {
       overview: item.overview || "",
       genre_names: item.genre_names || [],
       director: item.director || "",
+      cast_names: item.cast_names || [],
       status,
       added_by: addedBy,
       seen_at: status === "seen" ? new Date().toISOString() : null
@@ -192,6 +194,7 @@ export async function addToWatchlist(item, userName) {
       overview: item.overview || "",
       genre_names: item.genre_names || [],
       director: item.director || "",
+      cast_names: item.cast_names || [],
       status: "watchlist",
       added_by: userName
     })

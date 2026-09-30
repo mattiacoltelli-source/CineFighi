@@ -21,8 +21,9 @@ const SUPABASE_ANON_KEY = "sb_publishable_6kaInTs-_PDPHUszpj8N5w_Sb1zCXI9";
 const LIKE_THRESHOLD = 7;
 const STAT_MIN_TITOLI = 3;       // dna-view.js
 const DIRECTOR_MIN_FILMS = 3;    // dna.js
+const ACTOR_MIN_FILMS = 2;       // dna.js
 
-type Titolo = { id: string; title: string; director: string | null; genre_names: string[] | null };
+type Titolo = { id: string; title: string; director: string | null; genre_names: string[] | null; cast_names: string[] | null };
 type Voto = { title_id: string; user_name: string; vote: string };
 
 async function leggiTabella<T>(request: APIRequestContext, tabella: string, select: string): Promise<T[]> {
@@ -94,7 +95,7 @@ test("i numeri di \"Tutta la rete\" corrispondono ai voti veri", async ({ page, 
   // il gruppo, come lo calcola buildIndex(db, null/users).
   const [persone, titoli, voti] = await Promise.all([
     leggiTabella<{ name: string }>(request, "users", "name").then(r => r.map(u => u.name)),
-    leggiTabella<Titolo>(request, "titles", "id,title,director,genre_names"),
+    leggiTabella<Titolo>(request, "titles", "id,title,director,genre_names,cast_names"),
     leggiTabella<Voto>(request, "votes", "title_id,user_name,vote"),
   ]);
 
@@ -136,6 +137,32 @@ test("i numeri di \"Tutta la rete\" corrispondono ai voti veri", async ({ page, 
 
     const votiDelRegista = delRegista.flatMap(x => x.fan.map(f => Number(f.vote)));
     expect(Number(mediaStr.replace(",", ".")), `media mostrata per "${nomeRegista}" non corrisponde ai voti veri`).toBeCloseTo(media(votiDelRegista), 1);
+  }
+
+  // ─── Attore preferito / più presente ────────────────────────────────────
+  // Stessa impostazione del regista: il vincitore mostrato dev'essere coerente
+  // coi dati veri (conteggio, media, soglia minima). Per "più presente" basta
+  // contare: nessun altro attore deve comparire in piu' film amati.
+  if (righe["Attore preferito"]) {
+    const m = righe["Attore preferito"].match(/^(.+?) \((\d+) film, media ([\d,]+)\)$/);
+    expect(m, `formato inatteso per "Attore preferito": ${righe["Attore preferito"]}`).toBeTruthy();
+    const [, nomeAttore, filmCountStr, mediaStr] = m!;
+
+    const delAttore = amati.filter(x => (x.t.cast_names ?? []).includes(nomeAttore));
+    expect(delAttore.length, `"${nomeAttore}" ha meno di ${ACTOR_MIN_FILMS} film amati, non doveva qualificarsi`).toBeGreaterThanOrEqual(ACTOR_MIN_FILMS);
+    expect(delAttore.length, `conteggio film mostrato per "${nomeAttore}" non corrisponde`).toBe(Number(filmCountStr));
+    expect(Number(mediaStr.replace(",", ".")), `media mostrata per "${nomeAttore}" non corrisponde ai voti veri`).toBeCloseTo(media(delAttore.flatMap(x => x.fan.map(f => Number(f.vote)))), 1);
+  }
+
+  if (righe["Attore più presente"]) {
+    const m = righe["Attore più presente"].match(/^(.+) \((\d+) film\)$/);
+    expect(m, `formato inatteso per "Attore più presente": ${righe["Attore più presente"]}`).toBeTruthy();
+    const [, nomeAttore, filmCountStr] = m!;
+
+    const conteggi = new Map<string, number>();
+    for (const x of amati) for (const a of x.t.cast_names ?? []) conteggi.set(a, (conteggi.get(a) ?? 0) + 1);
+    expect(conteggi.get(nomeAttore), `conteggio film mostrato per "${nomeAttore}" non corrisponde`).toBe(Number(filmCountStr));
+    expect(Math.max(...conteggi.values()), `"${nomeAttore}" non e' l'attore in piu' film amati`).toBe(Number(filmCountStr));
   }
 
   // ─── Voto medio più alto ────────────────────────────────────────────────

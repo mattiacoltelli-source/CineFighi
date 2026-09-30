@@ -54,6 +54,7 @@ export const personId = (name) => `persona:${name}`;
 export const filmId = (id) => `film:${id}`;
 export const genreId = (name) => `genere:${name}`;
 export const directorId = (name) => `regista:${name}`;
+export const actorId = (name) => `attore:${name}`;
 
 export function nodeType(id) {
   const i = id.indexOf(":");
@@ -84,12 +85,14 @@ export function buildIndex(db, users = null) {
   const byGenre = new Map();     // genere  -> [{ id, w }]  film del genere, con il n. di fan come peso
   const genrePop = new Map();    // genere  -> quanti film amati da almeno uno
   const byDirector = new Map();  // regista -> [{ id, w }]  suoi film amati
+  const byActor = new Map();     // attore  -> [{ id, w }]  suoi film amati
   // Chi, fra le persone nell'indice, ama almeno un film di quel genere/
   // regista — popolate solo per calcolare "quanti dei selezionati" in
   // modalità condivisa (vedi sharedCountOf). Per un film basta fans.length,
   // già disponibile: non serve una mappa a parte.
   const genreFans = new Map();   // genere  -> Set(nome)
   const directorFans = new Map(); // regista -> Set(nome)
+  const actorFans = new Map();    // attore  -> Set(nome)
 
   for (const t of db || []) {
     const genres = normalizeGenres(t.genre_names);
@@ -115,6 +118,7 @@ export function buildIndex(db, users = null) {
       poster_path: t.poster_path,
       media_type: t.media_type,
       director: t.director || "",
+      cast: (t.cast_names || []).slice(0, ACTORS_PER_FILM),
       genres,
       fans
     });
@@ -142,9 +146,22 @@ export function buildIndex(db, users = null) {
     }
   }
 
+  for (const [key, film] of films) {
+    for (const a of film.cast) {
+      if (!byActor.has(a)) byActor.set(a, []);
+      byActor.get(a).push({ id: key, w: film.fans.length });
+      if (condivisa) {
+        if (!actorFans.has(a)) actorFans.set(a, new Set());
+        for (const f of film.fans) actorFans.get(a).add(f.name);
+      }
+    }
+  }
+
   const index = {
     films, byPerson, byGenre, genrePop, byDirector, genreFans, directorFans,
-    directors: new Map(), personDirectors: new Map(), shared: condivisa
+    byActor, actorFans,
+    directors: new Map(), personDirectors: new Map(),
+    actors: new Map(), personActors: new Map(), shared: condivisa
   };
   // Solo i registi che superano la soglia diventano nodi: uno con un film solo
   // sarebbe un vicolo cieco, non un pezzo di DNA del gruppo.
@@ -175,6 +192,28 @@ export function buildIndex(db, users = null) {
       .sort((a, b) => b.n - a.n || a.id.localeCompare(b.id));
     if (suoi.length) index.personDirectors.set(name, suoi);
   }
+
+  // Stessa logica per gli attori, ma con al massimo 1-2 collegamenti per
+  // persona (ACTORS_PER_PERSON): con 5+ attori per film la rete si
+  // riempirebbe di nomi. Un attore e' un nodo solo se compare in almeno
+  // ACTOR_MIN_FILMS film amati; per una persona conta solo se l'ha amato in
+  // almeno 2 film suoi (1 in modalita' condivisa, stessa ragione dei registi).
+  for (const a of actorScores(index)) index.actors.set(a.name, a);
+  const sogliaAttore = condivisa ? ACTOR_MIN_PER_PERSON_SHARED : ACTOR_MIN_PER_PERSON;
+  for (const [name, entries] of byPerson) {
+    const tally = new Map();
+    for (const e of entries) {
+      for (const a of films.get(e.id)?.cast || []) {
+        if (index.actors.has(a)) tally.set(a, (tally.get(a) || 0) + 1);
+      }
+    }
+    const suoi = [...tally.entries()]
+      .filter(([, n]) => n >= sogliaAttore)
+      .map(([a, n]) => ({ id: actorId(a), n }))
+      .sort((a, b) => b.n - a.n || a.id.localeCompare(b.id))
+      .slice(0, ACTORS_PER_PERSON);
+    if (suoi.length) index.personActors.set(name, suoi);
+  }
   return index;
 }
 
@@ -191,7 +230,8 @@ export function neighboursOf(index, id) {
       // Peso su scala piu' alta dei voti (7-10) di proposito: tra i candidati
       // di una persona, "tre film dello stesso regista" e' un segnale piu'
       // forte di "un film votato 9".
-      ...(index.personDirectors.get(key) || []).map(d => ({ id: d.id, kind: "diretto", w: 10 + d.n * 10 }))
+      ...(index.personDirectors.get(key) || []).map(d => ({ id: d.id, kind: "diretto", w: 10 + d.n * 10 })),
+      ...(index.personActors.get(key) || []).map(a => ({ id: a.id, kind: "recita", w: 10 + a.n * 10 }))
     ];
   }
 
@@ -209,8 +249,16 @@ export function neighboursOf(index, id) {
       // punteggio, così tra i candidati si piazza tra le persone e i generi.
       ...(index.directors.has(film.director)
         ? [{ id: directorId(film.director), kind: "diretto", w: Math.round(index.directors.get(film.director).score * 10) }]
-        : [])
+        : []),
+      // Solo gli attori sopra soglia (ACTOR_MIN_FILMS), come per il regista.
+      ...film.cast
+        .filter(a => index.actors.has(a))
+        .map(a => ({ id: actorId(a), kind: "recita", w: Math.round(index.actors.get(a).score * 10) }))
     ];
+  }
+
+  if (type === "attore") {
+    return (index.byActor.get(key) || []).map(e => ({ id: e.id, kind: "recita", w: e.w }));
   }
 
   if (type === "regista") {
@@ -252,14 +300,15 @@ function metaFor(index, id) {
     if (!f) return {};
     return {
       id: f.id, year: f.year, poster_path: f.poster_path, media_type: f.media_type,
-      director: f.director, genres: f.genres, fans: f.fans
+      director: f.director, cast: f.cast, genres: f.genres, fans: f.fans
     };
   }
   if (type === "genere") return { count: index.genrePop.get(key) || 0, topFans: topFansOfGenre(index, key) };
   if (type === "persona") return {
     liked: (index.byPerson.get(key) || []).length,
     topGenres: topGenresOfPerson(index, key),
-    topDirectors: (index.personDirectors.get(key) || []).slice(0, 3).map(d => ({ name: d.id.slice(8), film: d.n }))
+    topDirectors: (index.personDirectors.get(key) || []).slice(0, 3).map(d => ({ name: d.id.slice(8), film: d.n })),
+    topActors: (index.personActors.get(key) || []).map(a => ({ name: a.id.slice(7), film: a.n }))
   };
   if (type === "regista") {
     const d = index.directors.get(key);
@@ -268,6 +317,14 @@ function metaFor(index, id) {
       .filter(Boolean)
       .sort((a, b) => b.fans.length - a.fans.length || a.title.localeCompare(b.title));
     return d ? { films: d.films, people: d.people, score: d.score, titoli: films.slice(0, 3).map(f => f.title) } : {};
+  }
+  if (type === "attore") {
+    const a = index.actors.get(key);
+    const films = (index.byActor.get(key) || [])
+      .map(e => index.films.get(e.id))
+      .filter(Boolean)
+      .sort((x, y) => y.fans.length - x.fans.length || x.title.localeCompare(y.title));
+    return a ? { films: a.films, people: a.people, score: a.score, titoli: films.slice(0, 3).map(f => f.title) } : {};
   }
   return {};
 }
@@ -371,6 +428,7 @@ export function sharedCountOf(index, id) {
   if (type === "film") return index.films.get(id)?.fans.length || 0;
   if (type === "genere") return index.genreFans?.get(key)?.size || 0;
   if (type === "regista") return index.directorFans?.get(key)?.size || 0;
+  if (type === "attore") return index.actorFans?.get(key)?.size || 0;
   return 0;
 }
 
@@ -502,25 +560,46 @@ export const DIRECTOR_MIN_PER_PERSON = 2;
 // selezionate): con un conteggio così piccolo un film solo di un regista
 // è già un indizio, vedi il commento in buildIndex.
 export const DIRECTOR_MIN_PER_PERSON_SHARED = 1;
+// Attori: si salvano i primi 3 per film (storage/cine-core), qui si tiene
+// lo stesso tetto. Un attore diventa nodo con almeno 2 film amati; ogni
+// persona ne mostra al massimo 2, se ne ha amati 2+ (1 in modalita'
+// condivisa). Pochi e solo quelli forti: un film ne ha fino a 3.
+export const ACTORS_PER_FILM = 3;
+export const ACTOR_MIN_FILMS = 2;
+export const ACTORS_PER_PERSON = 2;
+export const ACTOR_MIN_PER_PERSON = 2;
+export const ACTOR_MIN_PER_PERSON_SHARED = 1;
 const DIRECTOR_PRIOR_WEIGHT = 5;
 const DIRECTOR_PRIOR_MEAN = 6.84;   // media di tutti i voti del gruppo
 
-export function directorScores(index) {
-  const byDirector = new Map();
+// Punteggio di un regista o di un attore: media dei voti tirata verso quella
+// del gruppo (pochi voti non bastano per un 10) piu' un bonus per quante
+// persone diverse lo amano. `namesOf` dice chi e' accreditato su un film.
+function creditScores(index, namesOf, minFilms) {
+  const byName = new Map();
   for (const film of index.films.values()) {
-    if (!film.director) continue;
-    if (!byDirector.has(film.director)) byDirector.set(film.director, { films: [], votes: [], people: new Set() });
-    const d = byDirector.get(film.director);
-    d.films.push(film.key);
-    for (const f of film.fans) { d.votes.push(f.vote); d.people.add(f.name); }
+    for (const name of namesOf(film)) {
+      if (!byName.has(name)) byName.set(name, { films: [], votes: [], people: new Set() });
+      const d = byName.get(name);
+      d.films.push(film.key);
+      for (const f of film.fans) { d.votes.push(f.vote); d.people.add(f.name); }
+    }
   }
 
-  return [...byDirector.entries()]
-    .filter(([, d]) => d.films.length >= DIRECTOR_MIN_FILMS)
+  return [...byName.entries()]
+    .filter(([, d]) => d.films.length >= minFilms)
     .map(([name, d]) => {
       const sum = d.votes.reduce((a, b) => a + b, 0);
       const shrunk = (sum + DIRECTOR_PRIOR_WEIGHT * DIRECTOR_PRIOR_MEAN) / (d.votes.length + DIRECTOR_PRIOR_WEIGHT);
       return { name, films: d.films.length, people: d.people.size, score: shrunk + 0.10 * (d.people.size - 1) };
     })
     .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
+}
+
+export function directorScores(index) {
+  return creditScores(index, film => (film.director ? [film.director] : []), DIRECTOR_MIN_FILMS);
+}
+
+export function actorScores(index) {
+  return creditScores(index, film => film.cast, ACTOR_MIN_FILMS);
 }

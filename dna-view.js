@@ -420,6 +420,22 @@ function fullViewStats() {
     }
   }
 
+  // Attori: stessi criteri del regista, sugli stessi dati (l'indice contiene
+  // solo film amati). "Più presente" = in più film amati; "preferito" = il
+  // punteggio (media ritirata verso quella del gruppo + persone che lo
+  // amano), quello che decide anche chi diventa nodo.
+  const attori = [...index.actors.values()];
+  const mediaAttore = (a) => mediaVoti((index.byActor.get(a.name) || [])
+    .flatMap(e => (index.films.get(e.id)?.fans || []).map(f => f.vote)));
+  const piuPresente = [...attori].sort((a, b) => b.films - a.films || b.score - a.score || a.name.localeCompare(b.name))[0];
+  if (piuPresente) {
+    righe.push({ label: "Attore più presente", value: `${piuPresente.name} (${piuPresente.films} film)` });
+  }
+  const attorePreferito = attori[0];   // index.actors è già ordinato per punteggio
+  if (attorePreferito) {
+    righe.push({ label: "Attore preferito", value: `${attorePreferito.name} (${attorePreferito.films} film, media ${unaCifra(mediaAttore(attorePreferito))})` });
+  }
+
   // Voto medio più alto: NON sugli "amati" di index/films (fans è filtrato
   // a chi ha dato 7+, quindi lì la media sarebbe sempre alta per
   // costruzione) — sui voti veri, qualunque valore, così un titolo che
@@ -658,10 +674,20 @@ function baseAngleFor(node) {
   return Math.atan2(node.y - p.y, node.x - p.x);
 }
 
+// Oltre alla distanza minima in linea d'aria, un controllo sul rettangolo:
+// i nodi sono piu' alti che larghi (poster + etichetta, fino a ~88px per un
+// film molto amato) e sulla diagonale due nodi a distanza MIN_GAP possono
+// comunque toccarsi. Emerge quando un hub (es. un attore in molti film)
+// riempie il ventaglio e i tentativi cadono vicino al limite.
+const MIN_DX = 66;
+const MIN_DY = 92;
+
 function tooClose(x, y, ignoreId) {
   for (const n of net.nodes.values()) {
     if (n.id === ignoreId || n.x === null) continue;
-    if (Math.hypot(n.x - x, n.y - y) < MIN_GAP) return true;
+    const dx = Math.abs(n.x - x);
+    const dy = Math.abs(n.y - y);
+    if (Math.hypot(dx, dy) < MIN_GAP || (dx < MIN_DX && dy < MIN_DY)) return true;
   }
   return false;
 }
@@ -676,6 +702,19 @@ function place(parent, angle) {
     const x = parent.x + Math.cos(angle + step) * r;
     const y = parent.y + Math.sin(angle + step) * r;
     if (!tooClose(x, y, parent.id)) return { x, y };
+  }
+  // Ultima spiaggia: ventaglio pieno (con hub molto collegati, ad esempio un
+  // attore in molti film, i primi tentativi possono finire tutti occupati).
+  // Si allarga ancora il raggio e si gira tutto attorno al genitore finche'
+  // c'e' posto, invece di piazzare a caso sopra un altro nodo.
+  for (let ring = 1; ring <= 6; ring++) {
+    const r = raggio() + PLACE_TRIES * 3 + ring * 34;
+    for (let k = 0; k < 16; k++) {
+      const a = angle + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * (Math.PI / 8);
+      const x = parent.x + Math.cos(a) * r;
+      const y = parent.y + Math.sin(a) * r;
+      if (!tooClose(x, y, parent.id)) return { x, y };
+    }
   }
   const r = raggio() + PLACE_TRIES * 3;
   return { x: parent.x + Math.cos(angle) * r, y: parent.y + Math.sin(angle) * r };
@@ -744,6 +783,9 @@ function nodeInner(node) {
   if (node.type === "regista") {
     return `<span class="dna-node__director">${escapeHtml(initials(node.label))}</span>`;
   }
+  if (node.type === "attore") {
+    return `<span class="dna-node__actor">${escapeHtml(initials(node.label))}</span>`;
+  }
   return `<span class="dna-node__genre">${escapeHtml(node.label.slice(0, 3).toUpperCase())}</span>`;
 }
 
@@ -754,13 +796,13 @@ function depthClass(h) { return Math.min(h ?? 0, 4); }
 
 // Un nodo è un "punto d'incontro" quando lo amano TUTTE le persone che stai
 // guardando — non una parte di loro. Solo in modalità condivisa (2-3
-// selezionati), e solo film/genere/regista: una persona non può essere un
+// selezionati), e solo film/genere/regista/attore: una persona non può essere un
 // punto d'incontro di se stessa. È lo stesso sharedCountOf che ordina i
 // candidati in dna.js, qui usato per decidere l'evidenza visiva invece
 // dell'ordine — la stessa informazione, letta in due punti diversi.
 function isMeetingPoint(n) {
   if (!index?.shared || !selectedPeople) return false;
-  if (n.type !== "film" && n.type !== "genere" && n.type !== "regista") return false;
+  if (n.type !== "film" && n.type !== "genere" && n.type !== "regista" && n.type !== "attore") return false;
   return sharedCountOf(index, n.id) === selectedPeople.length;
 }
 
@@ -934,6 +976,7 @@ function renderPanel(node) {
 function panelIcon(node) {
   if (node.type === "persona") return avatarHtml(node.label, 30);
   if (node.type === "regista") return `<span class="dna-chip dna-chip--regista">${escapeHtml(initials(node.label))}</span>`;
+  if (node.type === "attore") return `<span class="dna-chip dna-chip--attore">${escapeHtml(initials(node.label))}</span>`;
   if (node.type === "genere") return `<span class="dna-chip dna-chip--genere">${escapeHtml(node.label.slice(0, 3).toUpperCase())}</span>`;
   return "";
 }
@@ -977,10 +1020,14 @@ function panelBody(node) {
     const registi = (m.topDirectors || []).length
       ? `<p class="dna-panel__line">Registi ricorrenti: ${m.topDirectors.map(d => `${escapeHtml(d.name)} (${d.film})`).join(" · ")}.</p>`
       : "";
+    const attori = (m.topActors || []).length
+      ? `<p class="dna-panel__line">Attori ricorrenti: ${m.topActors.map(a => `${escapeHtml(a.name)} (${a.film})`).join(" · ")}.</p>`
+      : "";
     return `
       <p class="dna-panel__line">${io ? "Hai" : "Ha"} amato ${n} ${n === 1 ? "titolo" : "titoli"} (voto 7 o più).</p>
       ${generi}
-      ${registi}`;
+      ${registi}
+      ${attori}`;
   }
 
   if (node.type === "film") {
@@ -990,12 +1037,13 @@ function panelBody(node) {
     return `
       ${incontro}
       <p class="dna-panel__line">${tipo}${regia ? ` · ${regia}` : ""}</p>
+      ${(m.cast || []).length ? `<p class="dna-panel__line">Con ${m.cast.map(a => escapeHtml(a)).join(", ")}</p>` : ""}
       <p class="dna-panel__line dna-panel__label">Chi l'ha amato (${fans.length})</p>
       ${fansHtml(fans)}
       ${(m.genres || []).length ? pillsHtml(m.genres) : ""}`;
   }
 
-  if (node.type === "regista") {
+  if (node.type === "regista" || node.type === "attore") {
     const titoli = (m.titoli || []).length
       ? `<p class="dna-panel__line">Nella rete: ${m.titoli.map(t => escapeHtml(t)).join(" · ")}${m.films > m.titoli.length ? ` e altri ${m.films - m.titoli.length}` : ""}.</p>`
       : "";
