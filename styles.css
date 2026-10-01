@@ -626,6 +626,25 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .vote-slider-row input[type="range"] { flex:1; accent-color: var(--cyan); }
 .vote-slider-value { font-family: var(--font-display); font-weight:900; font-size:22px; color: var(--cyan2); min-width:40px; text-align:right; }
 
+.detail-card__head { display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin-bottom:10px; }
+.detail-card__head .detail-card__title { margin-bottom:0; }
+.detail-card__hint { font-size:12px; color: var(--text3); }
+.detail-card .detail-comment-toggle { margin-top:12px; padding:0; font-size:13px; color: var(--cyan2); text-decoration:none; display:block; }
+.group-votes { padding:0; }
+.group-votes__summary { display:flex; align-items:center; gap:12px; padding:12px 16px; cursor:pointer; list-style:none; }
+.group-votes__summary::-webkit-details-marker { display:none; }
+.group-votes__stack { display:flex; }
+.group-votes__stack .avatar { border:2px solid var(--surface); margin-left:-6px; }
+.group-votes__stack .avatar:first-child { margin-left:0; }
+.group-votes__text { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+.group-votes__title { font-family: var(--font-display); font-weight:700; font-size:14px; }
+.group-votes__sub { font-size:12px; color: var(--text3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.group-votes__chev { font-family: var(--font-display); font-size:16px; color: var(--text3); transition: transform .2s ease; }
+.group-votes[open] .group-votes__chev { transform: rotate(180deg); }
+.group-votes[open] .votes-list { padding:0 16px 16px; }
+.group-votes.is-empty .group-votes__summary { cursor:default; pointer-events:none; }
+.group-votes.is-empty .group-votes__chev, .group-votes.is-empty .group-votes__stack { display:none; }
+
 .detail-actions-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:14px; }
 /* Quando "Rimuovi voto" è nascosto (nessun voto ancora salvato), "Salva
    voto" resterebbe comunque fissato a metà colonna della grid a 2 — questa
