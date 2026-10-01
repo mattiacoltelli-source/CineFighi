@@ -847,7 +847,7 @@ function renderStats() {
     .filter(item => Number.isFinite(item.__score))
     .sort((a, b) => b.__score - a.__score);
 
-  renderRanking(ranked, rankingMedia === "movie" ? "Film" : "Serie TV");
+  renderRanking(ranked, rankingMedia === "movie" ? "Film" : "Serie TV", statsMode !== "me");
 }
 
 // ─── REPORT ───────────────────────────────────────────────────────────────
