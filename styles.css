@@ -308,6 +308,8 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .chip { display:inline-block; padding:4px 10px; background: var(--surface2); border:1px solid var(--border);
   border-radius: var(--radius-pill); font-size:12px; color: var(--text2); }
 .chip--vote { color: var(--cyan2); border-color: rgba(56,189,248,.25); background: var(--cyan-dim); }
+.chip__num { font-family: var(--font-display); font-weight:800; font-variant-numeric: tabular-nums; }
+.chip__lab { font-style:normal; font-size:9px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; opacity:.75; }
 /* Il TUO voto, in modalita' "Io": deve battere a colpo d'occhio la media del
    gruppo che gli sta di fianco, altrimenti filtrare "i miei titoli" e poi
    leggere il voto di tutti sarebbe un controsenso. */
@@ -661,8 +663,6 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .vote-summary__main { min-width:0; flex:1; display:flex; flex-direction:column; gap:2px; }
 .vote-summary__label { margin-bottom:0; }
 .vote-summary__line { display:flex; align-items:flex-end; gap:10px; }
-.vote-summary__line .detail-card__hint { padding-bottom:4px; }
-.vote-summary__line .detail-card__hint:empty { display:none; }
 .vote-summary__num { font-family: var(--font-display); font-weight:900; font-size:40px; line-height:1; color: var(--cyan2); font-variant-numeric: tabular-nums; }
 .vote-summary__comment { margin-top:4px; font-size:12px; font-style:italic; color: var(--text2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .vote-summary__comment:empty { display:none; }
