@@ -313,7 +313,7 @@ Deno.serve(async (req) => {
         role: "user",
         content: `Statistiche di gruppo già calcolate (non ricalcolarle):
 - Persone profilate in questo report (almeno ${MIN_VOTES_FOR_MEMBER_BLURB} voti a testa): ${members.length}, voti totali: ${allVoteValues.length}, media di gruppo: ${avgVote.toFixed(2)}
-- Titoli catalogati: ${allTitles.length}
+- Titoli catalogati: ${allTitles.length}; titoli diversi votati da almeno una persona: ${votesByTitle.size}
 - Titoli votati da tutte e ${members.length} le persone profilate: ${JSON.stringify(allVotedTitles)}
 - Titoli aggiunti per persona: ${JSON.stringify(addedCount)}
 - Primati tra persone, GIÀ VERIFICATI dal codice (per i confronti tra persone usa solo questi, non dedurne altri): ${JSON.stringify(primati)}
@@ -322,7 +322,7 @@ Profilo per persona (n voti, media, deviazione standard dei SUOI voti, genere_pi
 ${JSON.stringify(members, null, 0)}
 
 Scrivi:
-1. "group_profile": 2-3 paragrafi sul gruppo nel suo complesso — quanto guardano insieme davvero (usa i titoli votati da tutte le persone profilate, se ce ne sono), chi si comporta da curatore della collezione (chi ha aggiunto più titoli) vs. chi vota poco ma premia parecchio, o altri contrasti che i numeri suggeriscono. Il gruppo "nel suo complesso" qui significa le persone profilate elencate sotto, NON il numero totale di utenti dell'app — nomina per nome SOLO le persone elencate nel "Profilo per persona", e non dire mai un numero di persone diverso da quello dato sopra. Se vuoi parlare del gruppo senza nominare qualcuno specifico, va bene restare generico ("qualcuno nel gruppo...").
+1. "group_profile": 2-3 paragrafi sul gruppo nel suo complesso. Nel PRIMO paragrafo scrivi sempre due numeri veri presi da sopra: i voti totali dati dal gruppo e quanti titoli diversi sono stati votati; se i voti totali superano i 1000 (o un'altra cifra tonda importante), sottolinealo come un traguardo del gruppo. Poi — quanto guardano insieme davvero (usa i titoli votati da tutte le persone profilate, se ce ne sono), chi si comporta da curatore della collezione (chi ha aggiunto più titoli) vs. chi vota poco ma premia parecchio, o altri contrasti che i numeri suggeriscono. Il gruppo "nel suo complesso" qui significa le persone profilate elencate sotto, NON il numero totale di utenti dell'app — nomina per nome SOLO le persone elencate nel "Profilo per persona", e non dire mai un numero di persone diverso da quello dato sopra. Se vuoi parlare del gruppo senza nominare qualcuno specifico, va bene restare generico ("qualcuno nel gruppo...").
 2. "members": un oggetto {"user", "blurb"} per OGNI persona elencata sopra (stesso identico nome, non tradurlo/abbreviarlo), un paragrafo di 2-4 frasi che ne racconta il gusto personale usando i suoi dati concreti — regista o genere che ama, i titoli a cui ha dato il voto più alto, e se ha una deviazione standard nettamente più alta o più bassa delle altre persone del gruppo fallo emergere (è "costante"/prevedibile oppure "polarizzato"/estremo — ma solo se il dato lo giustifica davvero, non forzarlo per tutti). Se la persona ha attori ricorrenti, cita almeno un attore per nome con il numero di titoli. Non scrivere le soglie minime usate per selezionare i dati (niente "su almeno N titoli"): usa solo i numeri veri.
 
 Termini: chiama "più visti" solo i generi con più titoli e "più amati" solo quello con la media più alta; non chiamare "preferito" un genere solo perché ha molti titoli.
