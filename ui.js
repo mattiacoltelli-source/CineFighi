@@ -7,6 +7,12 @@ import {
   average, voteCount, firstVoter, firstOfNames
 } from "./cine-core.js?v=8f0372b";
 
+// Media voto: numero in ciano con "media" sotto. Stessa forma ovunque
+// (scheda, classifiche, generi, registi); `value` e' gia' formattato.
+function mediaVoteHtml(value) {
+  return `<span class="media-vote"><b>${value}</b><i>media</i></span>`;
+}
+
 // ─── ANIMAZIONI (numeri che contano, barre che si riempiono, tattile) ───────
 
 let _lastHapticAt = 0;
@@ -276,7 +282,7 @@ export function renderGenreBars(entries) {
         <span class="bar-row__name">${escapeHtml(e.label)}</span>
         <span class="bar-row__meta">
           <span class="bar-row__count">${e.value} titol${e.value === 1 ? "o" : "i"}</span>
-          ${e.avgVote != null ? `<span class="bar-row__vote">★ ${e.avgVote.toFixed(1).replace(".", ",")}</span>` : ""}
+          ${e.avgVote != null ? `<span class="bar-row__vote">${mediaVoteHtml(e.avgVote.toFixed(1).replace(".", ","))}</span>` : ""}
         </span>
       </div>
       <div class="bar-track"><div class="bar__fill" data-width="${Math.max(8, (e.value / max) * 100)}"></div></div>
@@ -452,7 +458,7 @@ function rankRowHtml(item, pos, typeLabel) {
         <div class="rank-row__title">${escapeHtml(item.title)}</div>
         <div class="rank-row__meta">${item.year} · ${typeLabel}</div>
       </div>
-      <div class="rank-row__vote">★ ${item.__score.toFixed(1)}</div>
+      <div class="rank-row__vote">${mediaVoteHtml(item.__score.toFixed(1))}</div>
     </div>
   `;
 }
@@ -519,7 +525,7 @@ export function renderRanking(items, typeLabel) {
       <div class="podium-card__poster" style="background-image:url('${posterUrl(item.poster_path)}')"></div>
       <div class="podium-card__title">${escapeHtml(item.title)}</div>
       <div class="podium-card__meta">${item.year} · ${typeLabel}</div>
-      <div class="podium-card__vote">★ ${item.__score.toFixed(1)}</div>
+      <div class="podium-card__vote">${mediaVoteHtml(item.__score.toFixed(1))}</div>
     </div>
   `).join("");
 
@@ -705,7 +711,7 @@ function genreChartHtml(topGenres) {
       <div class="mini-row">
         <div class="mini-row__label">
           <span class="mini-row__name">${escapeHtml(g.name)}</span>
-          <span class="mini-row__meta"><span class="mini-row__count">${g.count} titoli</span><span class="mini-row__vote">★ ${g.avg.toFixed(1).replace(".", ",")}</span></span>
+          <span class="mini-row__meta"><span class="mini-row__count">${g.count} titoli</span><span class="mini-row__vote">${mediaVoteHtml(g.avg.toFixed(1).replace(".", ","))}</span></span>
         </div>
         <div class="mini-track"><div class="mini-fill" style="width:${width}%"></div></div>
       </div>
@@ -874,7 +880,7 @@ export function renderReportContent(report) {
       <div class="director-row">
         <span class="director-row__name">${escapeHtml(d.name)}</span>
         <span class="director-row__n">${d.count} titoli</span>
-        <span class="director-row__avg">★ ${Number(d.avg).toFixed(2)}</span>
+        <span class="director-row__avg">${mediaVoteHtml(Number(d.avg).toFixed(2))}</span>
       </div>
     `).join("")
     : `<p class="empty-hint">Nessun regista visto almeno 2 volte, per ora.</p>`;
@@ -904,7 +910,7 @@ export function renderReportContent(report) {
     </div>
 
     <div class="taste-block">
-      <div class="taste-block__title">Registi che ti fidelizzano<span class="hint">★ media voto</span></div>
+      <div class="taste-block__title">Registi che ti fidelizzano<span class="hint">media voto</span></div>
       ${directorsHtml}
     </div>
 
