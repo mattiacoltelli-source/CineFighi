@@ -326,6 +326,7 @@ test("voto e rimozione voto: giro completo su un titolo già in watchlist", asyn
   expect(patchStatus, "il titolo non è passato a 'seen' dopo il voto (era in watchlist)").toBe("seen");
   await expect(page.locator(".toast.success").last()).toContainText("Voto salvato");
 
+  await page.locator("#detailVoteEditBtn").click();   // dopo il voto la card e' un riepilogo: "Modifica" riapre la barra
   await page.locator("#detailClearVoteBtn").click();
   await page.waitForTimeout(800);
 
