@@ -368,15 +368,18 @@
 
       <div class="detail-body">
         <div class="detail-card" id="detailVoteCard">
-          <div class="detail-card__head">
+          <div class="detail-card__head" id="detailVoteHead">
             <div class="detail-card__title">Il tuo voto</div>
             <span id="detailVoteBadge" class="vote-badge vote-badge--todo">Da votare</span>
           </div>
 
           <div id="detailVoteSummary" class="vote-summary hidden">
-            <div id="detailVoteSummaryNum" class="vote-summary__num">0.0</div>
-            <div class="vote-summary__body">
-              <div id="detailGroupAvg" class="detail-card__hint"></div>
+            <div class="vote-summary__main">
+              <div class="detail-card__title vote-summary__label">Il tuo voto</div>
+              <div class="vote-summary__line">
+                <div id="detailVoteSummaryNum" class="vote-summary__num">0.0</div>
+                <div id="detailGroupAvg" class="detail-card__hint"></div>
+              </div>
               <div id="detailVoteSummaryComment" class="vote-summary__comment"></div>
             </div>
             <button id="detailVoteEditBtn" class="vote-summary__edit" type="button">Modifica</button>

@@ -578,9 +578,10 @@ function fillDetailVotes(votes) {
   document.getElementById("detailGroupSub").textContent = entries.length
     ? entries.slice(0, 3).map(([name, v]) => `${name} ${Number(v.vote).toFixed(1)}`).join(" · ") + (entries.length > 3 ? " …" : "")
     : "";
-  const avg = entries.length ? average(votes) : null;
+  // Con un solo voto la media ripeterebbe quel voto: la mostro da 2 in su.
+  const avg = entries.length >= 2 ? average(votes) : null;
   document.getElementById("detailGroupAvg").textContent =
-    avg === null ? "" : `Gruppo: media ${Number(avg).toFixed(1)}`;
+    avg === null ? "" : `media gruppo ${Number(avg).toFixed(1)}`;
 }
 
 // Il commento resta nascosto finche' non serve: si apre da solo se c'e' gia'
@@ -598,6 +599,8 @@ function setDetailComment(text) {
 function applyVoteState(hasMyVote, editing = false) {
   const showEditor = !hasMyVote || editing;
   document.getElementById("detailVoteSummary").classList.toggle("hidden", showEditor);
+  // Nel riepilogo il titolo "Il tuo voto" sta dentro il riepilogo, sopra il numero.
+  document.getElementById("detailVoteHead").classList.toggle("hidden", !showEditor);
   document.getElementById("detailVoteEditor").classList.toggle("hidden", !showEditor);
   document.getElementById("detailCancelEditBtn").classList.toggle("hidden", !(hasMyVote && editing));
   document.getElementById("detailClearVoteBtn").classList.toggle("hidden", !(hasMyVote && editing));
