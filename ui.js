@@ -5,7 +5,7 @@
 import {
   escapeHtml, mediaLabel, mediaBadgeClass, posterUrl,
   average, voteCount, firstVoter, firstOfNames
-} from "./cine-core.js?v=62c45c8";
+} from "./cine-core.js?v=4212da4";
 
 // Media voto: numero in ciano con "media" sotto. Stessa forma ovunque
 // (scheda, classifiche, generi, registi); `value` e' gia' formattato.
