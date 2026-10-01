@@ -574,7 +574,7 @@ function groupPodiumCardHtml({ medal, title, meta, value, first, openDetailId })
       <div class="podium-card__medal">${medal}</div>
       <div class="podium-card__title">${escapeHtml(title)}</div>
       ${meta ? `<div class="podium-card__meta">${escapeHtml(meta)}</div>` : ""}
-      <div class="podium-card__vote">${value}</div>
+      <div class="podium-card__vote podium-card__vote--pill">${value}</div>
     </div>
   `;
 }
