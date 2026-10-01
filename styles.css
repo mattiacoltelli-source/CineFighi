@@ -503,6 +503,9 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
   display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; min-height:30px; }
 .podium-card__meta { font-size:11px; color: var(--text3); margin-top:3px; }
 .podium-card__vote { display:inline-flex; margin-top:8px; }
+/* Podi del Report di gruppo (voti, ±): testo semplice in pillola. */
+.podium-card__vote--pill { display:inline-block; padding:4px 10px; border-radius: var(--radius-pill);
+  background: var(--cyan-dim); border:1px solid rgba(56,189,248,.22); color: var(--cyan2); font-family: var(--font-display); font-size:12px; font-weight:800; }
 
 .ranking-list { display:flex; flex-direction:column; gap:8px; }
 /* "Mostra tutti" apre la classifica intera in un colpo: senza questo, con
