@@ -9,8 +9,9 @@ import {
 
 // Media voto: numero in ciano con "media" sotto. Stessa forma ovunque
 // (scheda, classifiche, generi, registi); `value` e' gia' formattato.
-function mediaVoteHtml(value) {
-  return `<span class="media-vote"><b>${value}</b><i>media</i></span>`;
+// Senza etichetta (`withLabel` false) e' un voto singolo, non una media.
+function mediaVoteHtml(value, withLabel = true) {
+  return `<span class="media-vote"><b>${value}</b>${withLabel ? "<i>media</i>" : ""}</span>`;
 }
 
 // ─── ANIMAZIONI (numeri che contano, barre che si riempiono, tattile) ───────
@@ -449,7 +450,7 @@ function podiumOrder(items) {
   ].filter(Boolean);
 }
 
-function rankRowHtml(item, pos, typeLabel) {
+function rankRowHtml(item, pos, typeLabel, isGroup) {
   return `
     <div class="rank-row open-detail" data-id="${item.id}">
       <div class="rank-row__pos">${pos}</div>
@@ -458,7 +459,7 @@ function rankRowHtml(item, pos, typeLabel) {
         <div class="rank-row__title">${escapeHtml(item.title)}</div>
         <div class="rank-row__meta">${item.year} · ${typeLabel}</div>
       </div>
-      <div class="rank-row__vote">${mediaVoteHtml(item.__score.toFixed(1))}</div>
+      <div class="rank-row__vote">${mediaVoteHtml(item.__score.toFixed(1), isGroup)}</div>
     </div>
   `;
 }
@@ -478,12 +479,13 @@ const RANKING_LIST_INITIAL = 2;
 // sempre da collassato, mai da dove si era lasciato l'ultima volta.
 let _rankingRest = [];
 let _rankingTypeLabel = "";
+let _rankingIsGroup = true;
 let _rankingExpanded = false;
 
 function renderRankingListRows() {
   const items = _rankingExpanded ? _rankingRest : _rankingRest.slice(0, RANKING_LIST_INITIAL);
   document.getElementById("rankingList").innerHTML =
-    items.map((item, i) => rankRowHtml(item, i + 4, _rankingTypeLabel)).join("");
+    items.map((item, i) => rankRowHtml(item, i + 4, _rankingTypeLabel, _rankingIsGroup)).join("");
 }
 
 function updateExpandBtn() {
@@ -503,13 +505,14 @@ function updateExpandBtn() {
   countEl.classList.toggle("hidden", _rankingExpanded);
 }
 
-export function renderRanking(items, typeLabel) {
+export function renderRanking(items, typeLabel, isGroup = true) {
   const podiumEl = document.getElementById("rankingPodium");
   const badgeEl = document.getElementById("rankingCountBadge");
 
   badgeEl.textContent = String(items.length);
   _rankingRest = items.slice(3);
   _rankingTypeLabel = typeLabel;
+  _rankingIsGroup = isGroup;
   _rankingExpanded = false;
 
   if (!items.length) {
@@ -525,7 +528,7 @@ export function renderRanking(items, typeLabel) {
       <div class="podium-card__poster" style="background-image:url('${posterUrl(item.poster_path)}')"></div>
       <div class="podium-card__title">${escapeHtml(item.title)}</div>
       <div class="podium-card__meta">${item.year} · ${typeLabel}</div>
-      <div class="podium-card__vote">${mediaVoteHtml(item.__score.toFixed(1))}</div>
+      <div class="podium-card__vote">${mediaVoteHtml(item.__score.toFixed(1), isGroup)}</div>
     </div>
   `).join("");
 
