@@ -179,6 +179,31 @@ Deno.serve(async (req) => {
       .sort((a, b) => b.avg - a.avg)
       .slice(0, 8);
 
+    // Attori ricorrenti (solo i primi 3 del cast di ogni titolo, vedi
+    // cine-core.js::extractCast) e decennio: calcolati qui, il modello li
+    // riceve già fatti. Stesse soglie di generate-group-report.
+    const actorVotes: Record<string, number[]> = {};
+    const decadeVotes: Record<string, number[]> = {};
+    for (const item of seen) {
+      const vote = Number(item.vote);
+      if (!Number.isFinite(vote)) continue;
+      for (const a of item.cast_names || []) (actorVotes[a] ||= []).push(vote);
+      const y = Number(item.year);
+      if (Number.isFinite(y) && y > 1880) (decadeVotes[`${Math.floor(y / 10) * 10}s`] ||= []).push(vote);
+    }
+    const minActor = seen.length >= 100 ? 4 : 3;
+    const actors = Object.entries(actorVotes)
+      .filter(([, v]) => v.length >= minActor)
+      .map(([name, v]) => ({ name, count: v.length, avg: Number(average(v).toFixed(2)) }))
+      .sort((a, b) => b.count - a.count || b.avg - a.avg)
+      .slice(0, 5);
+    const minDecade = seen.length >= 100 ? 10 : 5;
+    const decades = Object.entries(decadeVotes)
+      .filter(([, v]) => v.length >= minDecade)
+      .map(([name, v]) => ({ name, count: v.length, avg: Number(average(v).toFixed(2)) }));
+    const decadeMostSeen = [...decades].sort((a, b) => b.count - a.count)[0] || null;
+    const decadeBestRated = [...decades].sort((a, b) => b.avg - a.avg)[0] || null;
+
     // Righe compatte per il prompt: tengono il costo basso anche con centinaia
     // di titoli (niente chiavi JSON ripetute 250+ volte).
     const seenLines = seen
@@ -203,9 +228,11 @@ Deno.serve(async (req) => {
         role: "user",
         content: `Statistiche già calcolate (non ricalcolarle):
 - Titoli visti e votati da questa persona: ${seen.length}, voto medio: ${avgVote !== null ? avgVote.toFixed(2) : "n.d."}
-- Generi più visti: ${JSON.stringify(genresTopCount)}
-- Generi meglio votati (min. 5 titoli): ${JSON.stringify(genresTopAvg)}
+- Generi PIÙ VISTI (per numero di titoli): ${JSON.stringify(genresTopCount)}
+- Generi PIÙ AMATI (per media voto, min. 5 titoli): ${JSON.stringify(genresTopAvg)}
 - Registi con almeno 2 titoli, per media voto: ${JSON.stringify(directors)}
+- Attori ricorrenti (nei primi 3 del cast, almeno ${minActor} titoli): ${JSON.stringify(actors)}
+- Decennio più visto: ${JSON.stringify(decadeMostSeen)}; decennio meglio votato (min. ${minDecade} titoli): ${JSON.stringify(decadeBestRated)}
 
 Libreria vista e votata da questa persona (titolo (anno) | regista | generi | voto):
 ${seenLines}
@@ -213,8 +240,8 @@ ${seenLines}
 In watchlist del gruppo (NON consigliare questi): ${watchlistLine}
 
 Scrivi:
-1. "profile": 2-3 paragrafi che raccontano il profilo di gusti di questa persona, con numeri concreti presi dai dati sopra.
-2. "genres_note": 2-3 frasi su generi più visti vs. meglio votati.
+1. "profile": 2-3 paragrafi che raccontano il profilo di gusti di questa persona, con numeri concreti presi dai dati sopra (se ci sono, anche gli attori ricorrenti e il decennio).
+2. "genres_note": 2-3 frasi su generi più visti vs. più amati. Chiama "più visti" solo i generi con più titoli e "più amati" solo quelli con la media più alta: non scambiare i due termini e non chiamare "preferito" un genere solo perché ha molti titoli.
 3. "recommendations": esattamente ${RECS_REQUESTED} titoli reali (film o serie, indica "media_type" corretto), MAI titoli già presenti nell'elenco dei visti o della watchlist qui sopra (controlla con attenzione, anche eventuali sequel/prequel/remake con lo stesso titolo esatto vanno evitati se il titolo coincide) — ne verranno scartati alcuni per sicurezza, per questo te ne chiediamo ${RECS_REQUESTED} invece di ${RECS_FINAL}. Ogni titolo deve avere una riga di motivazione ("why", almeno una frase completa) legata a un dato concreto sopra (un regista, un genere, una struttura narrativa ricorrente) — non lasciarla mai vuota o generica.
 
 Formattazione: in "profile", "genres_note" e in ogni "why", evidenzia con **doppi asterischi** solo i 2-3 dati o nomi davvero rilevanti per frase (un numero, un genere, un regista) — non l'intera frase, non ogni numero. Es: "con **286 titoli** visti sei un divoratore di **Thriller**". Niente altra formattazione markdown.`,

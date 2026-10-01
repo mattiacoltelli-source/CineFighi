@@ -95,11 +95,44 @@ function memberStats(allTitles: any[], votesByUser: Map<string, { title_id: numb
     return entries[0] || null;
   };
 
+  // Attori ricorrenti (primi 3 del cast di ogni titolo), generi più visti e
+  // decennio: calcolati qui, il modello li riceve già fatti.
+  const actorVotes: Record<string, number[]> = {};
+  const decadeVotes: Record<string, number[]> = {};
+  for (const { item, vote } of voted) {
+    for (const a of item.cast_names || []) (actorVotes[a] ||= []).push(vote);
+    const y = Number(item.year);
+    if (Number.isFinite(y) && y > 1880) (decadeVotes[`${Math.floor(y / 10) * 10}s`] ||= []).push(vote);
+  }
+  const minActor = n >= 100 ? 4 : 3;
+  const topActors = Object.entries(actorVotes)
+    .filter(([, v]) => v.length >= minActor)
+    .map(([name, v]) => ({ name, count: v.length, avg: Number(average(v).toFixed(2)) }))
+    .sort((a, b) => b.count - a.count || b.avg - a.avg)
+    .slice(0, 3);
+  const minDecade = n >= 100 ? 10 : 5;
+  const decades = Object.entries(decadeVotes)
+    .filter(([, v]) => v.length >= minDecade)
+    .map(([name, v]) => ({ name, count: v.length, avg: Number(average(v).toFixed(2)) }));
+  const decadeMostSeen = [...decades].sort((a, b) => b.count - a.count)[0] || null;
+  const decadeBestRated = [...decades].sort((a, b) => b.avg - a.avg)[0] || null;
+  const genresMostSeen = Object.entries(genreVotes)
+    .map(([name, v]) => ({ name, count: v.length, avg: Number(average(v).toFixed(2)) }))
+    .sort((a, b) => b.count - a.count || b.avg - a.avg)
+    .slice(0, 3);
+
   const sorted = [...voted].sort((a, b) => b.vote - a.vote);
   const topFilms = sorted.slice(0, 3).map(({ item, vote }) => ({ title: item.title, vote }));
   const bottomFilms = sorted.slice(-3).reverse().map(({ item, vote }) => ({ title: item.title, vote }));
 
-  return { user, n, avg, sd, topGenre: bestByAvg(genreVotes, minGenreVotes), topDirector: bestByAvg(directorVotes, 2), topFilms, bottomFilms };
+  return {
+    user, n, avg, sd,
+    genere_piu_amato: bestByAvg(genreVotes, minGenreVotes),
+    generi_piu_visti: genresMostSeen,
+    topDirector: bestByAvg(directorVotes, 2),
+    topActors, decadeMostSeen, decadeBestRated,
+    topFilms, bottomFilms,
+  };
 }
 
 const GroupReportContentSchema = z.object({
@@ -249,6 +282,21 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Primati tra persone: calcolati qui, non dedotti dal modello. Così frasi
+    // come "la media più bassa del gruppo" sono sempre vere.
+    const extreme = (key: "n" | "avg" | "sd", dir: "max" | "min") => {
+      if (members.length < 2) return null;
+      const best = members.reduce((a, b) => ((dir === "max" ? b[key] > a[key] : b[key] < a[key]) ? b : a));
+      return { user: best.user, value: Number(best[key].toFixed(2)) };
+    };
+    const primati = {
+      piu_voti: extreme("n", "max"),
+      media_piu_alta: extreme("avg", "max"),
+      media_piu_bassa: extreme("avg", "min"),
+      piu_costante_dev_std_minima: extreme("sd", "min"),
+      piu_polarizzato_dev_std_massima: extreme("sd", "max"),
+    };
+
     // ── 3. Claude: solo il profilo di gruppo e un paragrafo per persona ────
     const client = new Anthropic({ apiKey: ANTHROPIC_KEY });
 
@@ -268,13 +316,16 @@ Deno.serve(async (req) => {
 - Titoli catalogati: ${allTitles.length}
 - Titoli votati da tutte e ${members.length} le persone profilate: ${JSON.stringify(allVotedTitles)}
 - Titoli aggiunti per persona: ${JSON.stringify(addedCount)}
+- Primati tra persone, GIÀ VERIFICATI dal codice (per i confronti tra persone usa solo questi, non dedurne altri): ${JSON.stringify(primati)}
 
-Profilo per persona (n voti, media, deviazione standard dei SUOI voti, genere top con un minimo di voti in quel genere (5 se ha oltre 100 voti, 4 oltre 40, altrimenti 3), regista top con almeno 2 titoli, i suoi 3 voti più alti, i suoi 3 voti più bassi):
+Profilo per persona (n voti, media, deviazione standard dei SUOI voti, genere_piu_amato (per media voto, con un minimo di voti: 5 se ha oltre 100 voti, 4 oltre 40, altrimenti 3), generi_piu_visti (per numero di titoli), regista top con almeno 2 titoli, attori ricorrenti (nei primi 3 del cast), decennio più visto e meglio votato, i suoi 3 voti più alti, i suoi 3 voti più bassi):
 ${JSON.stringify(members, null, 0)}
 
 Scrivi:
 1. "group_profile": 2-3 paragrafi sul gruppo nel suo complesso — quanto guardano insieme davvero (usa i titoli votati da tutte le persone profilate, se ce ne sono), chi si comporta da curatore della collezione (chi ha aggiunto più titoli) vs. chi vota poco ma premia parecchio, o altri contrasti che i numeri suggeriscono. Il gruppo "nel suo complesso" qui significa le persone profilate elencate sotto, NON il numero totale di utenti dell'app — nomina per nome SOLO le persone elencate nel "Profilo per persona", e non dire mai un numero di persone diverso da quello dato sopra. Se vuoi parlare del gruppo senza nominare qualcuno specifico, va bene restare generico ("qualcuno nel gruppo...").
 2. "members": un oggetto {"user", "blurb"} per OGNI persona elencata sopra (stesso identico nome, non tradurlo/abbreviarlo), un paragrafo di 2-4 frasi che ne racconta il gusto personale usando i suoi dati concreti — regista o genere che ama, i titoli a cui ha dato il voto più alto, e se ha una deviazione standard nettamente più alta o più bassa delle altre persone del gruppo fallo emergere (è "costante"/prevedibile oppure "polarizzato"/estremo — ma solo se il dato lo giustifica davvero, non forzarlo per tutti).
+
+Termini: chiama "più visti" solo i generi con più titoli e "più amati" solo quello con la media più alta; non chiamare "preferito" un genere solo perché ha molti titoli.
 
 Formattazione: evidenzia con **doppi asterischi** solo i 2-3 dati o nomi davvero rilevanti per frase (un titolo, un regista, un numero) — non l'intera frase, non ogni numero. Niente altra formattazione markdown.`,
       }],
