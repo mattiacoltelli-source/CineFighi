@@ -642,7 +642,9 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .group-votes__title { font-family: var(--font-display); font-weight:700; font-size:14px; }
 .group-votes__sub { font-size:12px; color: var(--text3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .group-votes__chev { font-family: var(--font-display); font-size:16px; color: var(--text3); transition: transform .2s ease; }
-.group-votes__avg { font-family: var(--font-display); font-weight:700; font-size:13px; color: var(--text); background: var(--surface2); border:1px solid var(--border); border-radius:999px; padding:3px 10px; white-space:nowrap; }
+.group-votes__avg { display:flex; flex-direction:column; align-items:center; gap:3px; line-height:1; }
+.group-votes__avg-num { font-family: var(--font-display); font-weight:800; font-size:20px; color: var(--cyan); font-variant-numeric: tabular-nums; }
+.group-votes__avg-label { font-size:9px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color: var(--text3); }
 .group-votes[open] .group-votes__chev { transform: rotate(180deg); }
 .group-votes[open] .votes-list { padding:0 16px 16px; }
 .group-votes.is-empty .group-votes__summary { cursor:default; pointer-events:none; }
