@@ -644,7 +644,7 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .group-votes__stack .avatar { border:2px solid var(--surface); margin-left:-6px; }
 .group-votes__stack .avatar:first-child { margin-left:0; }
 .group-votes__text { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
-.group-votes__title { font-family: var(--font-display); font-weight:700; font-size:14px; }
+.group-votes__title { font-family: var(--font-display); font-weight:700; font-size:14px; white-space:nowrap; }
 .group-votes__sub { font-size:12px; color: var(--text3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .group-votes__chev { font-family: var(--font-display); font-size:16px; color: var(--text3); transition: transform .2s ease; }
 .group-votes__avg { display:flex; flex-direction:column; align-items:center; gap:3px; line-height:1; }
@@ -666,8 +666,6 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .vote-summary__main { min-width:0; flex:1; display:flex; flex-direction:column; gap:2px; }
 .vote-summary__label { margin-bottom:0; }
 .vote-summary__line { display:flex; align-items:flex-end; gap:10px; }
-.vote-summary__line .detail-card__hint { padding-bottom:4px; }
-.vote-summary__line .detail-card__hint:empty { display:none; }
 .vote-summary__num { font-family: var(--font-display); font-weight:900; font-size:40px; line-height:1; color: var(--cyan2); font-variant-numeric: tabular-nums; }
 .vote-summary__comment { margin-top:4px; font-size:12px; font-style:italic; color: var(--text2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .vote-summary__comment:empty { display:none; }
