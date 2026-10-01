@@ -790,7 +790,7 @@ function renderStats() {
   });
   document.getElementById("genreLegend").textContent = genreView === "bubbles"
     ? "Riempimento = quanti titoli · Colore = quanto piace (azzurro basso → arancione alto)"
-    : "★ media voto";
+    : "media voto";
 
   // Le 4 card numeriche: di gruppo in modalità "Gruppo", personali in "Io".
   // "In watchlist" personale conta i titoli che sono NELLA TUA watchlist ora

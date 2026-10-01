@@ -308,6 +308,10 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .chip { display:inline-block; padding:4px 10px; background: var(--surface2); border:1px solid var(--border);
   border-radius: var(--radius-pill); font-size:12px; color: var(--text2); }
 .chip--vote { color: var(--cyan2); border-color: rgba(56,189,248,.25); background: var(--cyan-dim); }
+/* Media voto: numero ciano con "media" sotto (vedi mediaVoteHtml in ui.js). */
+.media-vote { display:inline-flex; flex-direction:column; align-items:center; gap:2px; line-height:1; }
+.media-vote b { font-family: var(--font-display); font-weight:800; font-size:16px; color: var(--cyan); font-variant-numeric: tabular-nums; }
+.media-vote i { font-style:normal; font-size:9px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color: var(--text3); }
 .chip__num { font-family: var(--font-display); font-weight:800; font-variant-numeric: tabular-nums; }
 .chip__lab { font-style:normal; font-size:9px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; opacity:.75; }
 /* Il TUO voto, in modalita' "Io": deve battere a colpo d'occhio la media del
@@ -438,9 +442,9 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .bar-row { margin-bottom:14px; }
 .bar-row__label { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px; }
 .bar-row__name { font-size:14px; font-weight:600; }
-.bar-row__meta { display:flex; align-items:baseline; gap:8px; }
+.bar-row__meta { display:flex; align-items:center; gap:10px; }
 .bar-row__count { font-family: var(--font-display); font-size:13px; font-weight:600; color: var(--text3); }
-.bar-row__vote { font-family: var(--font-display); font-size:13px; font-weight:800; color: var(--cyan2); }
+.bar-row__vote { display:inline-flex; }
 .bar-track { width:100%; height:6px; background: var(--surface3); border-radius: var(--radius-pill); overflow:hidden; }
 .bar__fill {
   height:100%; width:0%; border-radius: var(--radius-pill);
@@ -495,8 +499,7 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .podium-card__title { font-family: var(--font-display); font-size:12px; font-weight:700; line-height:1.25;
   display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; min-height:30px; }
 .podium-card__meta { font-size:11px; color: var(--text3); margin-top:3px; }
-.podium-card__vote { display:inline-block; margin-top:8px; padding:4px 10px; border-radius: var(--radius-pill);
-  background: var(--cyan-dim); border:1px solid rgba(56,189,248,.22); color: var(--cyan2); font-family: var(--font-display); font-size:12px; font-weight:800; }
+.podium-card__vote { display:inline-flex; margin-top:8px; }
 
 .ranking-list { display:flex; flex-direction:column; gap:8px; }
 /* "Mostra tutti" apre la classifica intera in un colpo: senza questo, con
@@ -515,8 +518,7 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .rank-row__title { font-family: var(--font-display); font-size:14px; font-weight:700; line-height:1.2;
   display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
 .rank-row__meta { font-size:11px; color: var(--text3); margin-top:3px; }
-.rank-row__vote { padding:5px 10px; border-radius: var(--radius-pill); background: var(--cyan-dim); border:1px solid rgba(56,189,248,.2);
-  color: var(--cyan2); font-family: var(--font-display); font-size:12px; font-weight:800; justify-self:end; }
+.rank-row__vote { display:inline-flex; justify-self:end; }
 
 /* Stessa forma di .refresh-btn (Report): pill, icona + testo, superficie
    neutra — qui in tono neutro (text2) invece di arancio, dato che non è
@@ -601,11 +603,10 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
   text-transform:uppercase; letter-spacing:.5px; color: var(--text3); margin-bottom:8px; }
 .mini-row { margin-bottom:7px; }
 .mini-row:last-child { margin-bottom:0; }
-.mini-row__label { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px; font-size:11.5px; }
+.mini-row__label { display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; font-size:11.5px; }
 .mini-row__name { color: var(--text2); font-weight:500; }
-.mini-row__vote { font-family: var(--font-display); font-size:11.5px; font-weight:800; color: var(--cyan2);
-  font-variant-numeric:tabular-nums; }
-.mini-row__meta { display:flex; align-items:baseline; gap:8px; }
+.mini-row__vote { display:inline-flex; }
+.mini-row__meta { display:flex; align-items:center; gap:10px; }
 .mini-row__count { font-family: var(--font-display); font-size:11.5px; font-weight:600; color: var(--text3); }
 .mini-track { width:100%; height:4px; background: var(--surface3); border-radius: var(--radius-pill); overflow:hidden; }
 .mini-fill { height:100%; border-radius: var(--radius-pill); background: linear-gradient(90deg, var(--orange), var(--orange2)); }
@@ -830,10 +831,7 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .director-row:last-child { border-bottom:none; }
 .director-row__name { color: var(--text); font-weight:600; }
 .director-row__n { color: var(--text3); font-size:11px; }
-.director-row__avg {
-  font-family: var(--font-display); font-weight:800; color: var(--cyan2);
-  font-variant-numeric: tabular-nums; min-width:40px; text-align:right;
-}
+.director-row__avg { display:inline-flex; min-width:40px; justify-content:flex-end; }
 
 .rec-shelf { display:flex; gap:10px; overflow-x:auto; padding:2px 2px 6px; margin:0 -2px; }
 .rec-card { flex:none; width:150px; background: var(--surface2); border:1px solid var(--border); border-radius: var(--radius-lg); padding:10px; }
