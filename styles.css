@@ -603,6 +603,7 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .mini-row__name { color: var(--text2); font-weight:500; }
 .mini-row__vote { font-family: var(--font-display); font-size:11.5px; font-weight:800; color: var(--cyan2);
   font-variant-numeric:tabular-nums; }
+.mini-row__avg { font-weight:600; color: var(--text2); }
 .mini-track { width:100%; height:4px; background: var(--surface3); border-radius: var(--radius-pill); overflow:hidden; }
 .mini-fill { height:100%; border-radius: var(--radius-pill); background: linear-gradient(90deg, var(--orange), var(--orange2)); }
 

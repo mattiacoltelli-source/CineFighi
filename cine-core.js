@@ -263,10 +263,14 @@ export function groupMemberProfiles(db, users, { minVotes = 0 } = {}) {
     return {
       user, n, avg, sd,
       topGenre: genreRanking[0] || null,
-      // Fino a 3 generi per il mini-grafico "Generi preferiti" della card
-      // (renderGroupReport in ui.js) — stessa soglia minima (minGenreVotes) sul
-      // genere di topGenre, solo non troncata a un solo risultato.
-      topGenres: genreRanking.slice(0, 3),
+      // I 3 generi piu' visti per il mini-grafico della card (renderGroupReport
+      // in ui.js): stesso criterio delle Statistiche (numero di titoli votati,
+      // a parita' la media piu' alta). Il genere "che ama di piu'" (topGenre
+      // sopra) resta per media voto, con la sua soglia minima.
+      topGenres: Object.entries(genreVotes)
+        .map(([name, votes]) => ({ name, count: votes.length, avg: votes.reduce((a, b) => a + b, 0) / votes.length }))
+        .sort((a, b) => b.count - a.count || b.avg - a.avg)
+        .slice(0, 3),
       topDirector: rankByAvg(directorVotes, 2)[0] || null,
       topFilms, bottomFilms,
       label: null,
