@@ -582,6 +582,12 @@ function fillDetailVotes(votes) {
   const avg = entries.length >= 2 ? average(votes) : null;
   document.getElementById("detailGroupAvg").textContent =
     avg === null ? "" : `media gruppo ${Number(avg).toFixed(1)}`;
+  // Stessa media, in piccolo nella riga "Voti del gruppo": visibile anche
+  // prima di votare (i singoli voti sono già visibili lì sotto, quindi non
+  // aggiunge nessun bias in più). Vale la stessa soglia: da 2 voti in su.
+  const avgPill = document.getElementById("detailGroupAvgPill");
+  avgPill.textContent = avg === null ? "" : `Ø ${Number(avg).toFixed(1)}`;
+  avgPill.classList.toggle("hidden", avg === null);
 }
 
 // Il commento resta nascosto finche' non serve: si apre da solo se c'e' gia'
