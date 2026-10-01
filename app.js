@@ -580,11 +580,8 @@ function fillDetailVotes(votes) {
     : "";
   // Con un solo voto la media ripeterebbe quel voto: la mostro da 2 in su.
   const avg = entries.length >= 2 ? average(votes) : null;
-  document.getElementById("detailGroupAvg").textContent =
-    avg === null ? "" : `media gruppo ${Number(avg).toFixed(1)}`;
-  // Stessa media, in piccolo nella riga "Voti del gruppo": visibile anche
-  // prima di votare (i singoli voti sono già visibili lì sotto, quindi non
-  // aggiunge nessun bias in più). Vale la stessa soglia: da 2 voti in su.
+  // Media nella riga "Voti del gruppo" (numero + "Media"), in ogni stato:
+  // prima e dopo aver votato. Vale la stessa soglia: da 2 voti in su.
   const avgPill = document.getElementById("detailGroupAvgPill");
   avgPill.classList.toggle("hidden", avg === null);
   document.getElementById("detailGroupAvgNum").textContent = avg === null ? "" : Number(avg).toFixed(1);
