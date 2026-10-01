@@ -788,9 +788,12 @@ function renderStats() {
     btn.classList.toggle("active", on);
     btn.setAttribute("aria-pressed", String(on));
   });
-  document.getElementById("genreLegend").textContent = genreView === "bubbles"
+  const legend = document.getElementById("genreLegend");
+  legend.textContent = genreView === "bubbles"
     ? "Riempimento = quanti titoli · Colore = quanto piace (azzurro basso → arancione alto)"
-    : "media voto";
+    : "media";
+  // Nelle barre e' l'intestazione della colonna dei voti (a destra).
+  legend.classList.toggle("taste-block__legend--col", genreView !== "bubbles");
 
   // Le 4 card numeriche: di gruppo in modalità "Gruppo", personali in "Io".
   // "In watchlist" personale conta i titoli che sono NELLA TUA watchlist ora
