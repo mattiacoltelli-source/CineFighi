@@ -793,6 +793,8 @@ function renderStats() {
   document.getElementById("genreLegend").textContent = genreView === "bubbles"
     ? "Riempimento = quanti titoli · Colore = quanto piace (azzurro basso → arancione alto)"
     : "★ media voto";
+  // Nelle barre "★ media voto" intesta la colonna dei voti: a destra, sopra i numeri.
+  document.getElementById("genreLegend").classList.toggle("taste-block__legend--col", genreView !== "bubbles");
 
   // Le 4 card numeriche: di gruppo in modalità "Gruppo", personali in "Io".
   // "In watchlist" personale conta i titoli che sono NELLA TUA watchlist ora

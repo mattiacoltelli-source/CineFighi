@@ -346,6 +346,7 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
   -webkit-tap-highlight-color: transparent; }
 .genre-view-btn.active { background: var(--surface3); color: var(--text); }
 .taste-block__legend--row { display:block; margin-bottom:14px; }
+.taste-block__legend--col { text-align:right; }
 
 /* Toggle Io/Gruppo (watchlist Home, Statistiche, Report): stessa pillola
    compatta del genre-view-toggle, ma con un thumb che scorre dietro la
