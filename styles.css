@@ -519,7 +519,10 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .rank-row__title { font-family: var(--font-display); font-size:14px; font-weight:700; line-height:1.2;
   display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
 .rank-row__meta { font-size:11px; color: var(--text3); margin-top:3px; }
-.rank-row__vote { display:inline-flex; justify-self:end; }
+.rank-row__vote { display:flex; flex-direction:column; align-items:flex-end; gap:3px; line-height:1; justify-self:end; }
+.rank-vote__main { font-family: var(--font-display); font-weight:800; font-size:18px; color: var(--cyan); font-variant-numeric: tabular-nums; }
+.rank-vote__sub { font-size:10.5px; color: var(--text3); }
+.rank-vote__sub b { font-family: var(--font-display); font-weight:700; color: var(--text2); }
 
 /* Stessa forma di .refresh-btn (Report): pill, icona + testo, superficie
    neutra — qui in tono neutro (text2) invece di arancio, dato che non è
@@ -647,9 +650,6 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .group-votes__title { font-family: var(--font-display); font-weight:700; font-size:14px; white-space:nowrap; }
 .group-votes__sub { font-size:12px; color: var(--text3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .group-votes__chev { font-family: var(--font-display); font-size:16px; color: var(--text3); transition: transform .2s ease; }
-.group-votes__avg { display:flex; flex-direction:column; align-items:center; gap:3px; line-height:1; }
-.group-votes__avg-num { font-family: var(--font-display); font-weight:800; font-size:20px; color: var(--cyan); font-variant-numeric: tabular-nums; }
-.group-votes__avg-label { font-size:9px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color: var(--text3); }
 .group-votes[open] .group-votes__chev { transform: rotate(180deg); }
 .group-votes[open] .votes-list { padding:0 16px 16px; }
 .group-votes.is-empty .group-votes__summary { cursor:default; pointer-events:none; }
@@ -665,7 +665,12 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .vote-summary { display:flex; align-items:center; gap:14px; }
 .vote-summary__main { min-width:0; flex:1; display:flex; flex-direction:column; gap:2px; }
 .vote-summary__label { margin-bottom:0; }
-.vote-summary__line { display:flex; align-items:flex-end; gap:10px; }
+.vote-summary__pair { display:flex; align-items:stretch; gap:18px; }
+.vote-summary__col { display:flex; flex-direction:column; gap:2px; }
+.vote-summary__col--avg { padding-left:18px; border-left:1px solid var(--border); }
+.vote-summary__col--avg .vote-summary__num { color: var(--text2); }
+.vote-head-avg { margin-left:auto; font-family: var(--font-display); font-weight:700; font-size:10px; letter-spacing:.6px; text-transform:uppercase; color: var(--text3); white-space:nowrap; }
+.vote-head-avg b { font-size:13px; letter-spacing:0; color: var(--text2); margin-left:3px; }
 .vote-summary__num { font-family: var(--font-display); font-weight:900; font-size:40px; line-height:1; color: var(--cyan2); font-variant-numeric: tabular-nums; }
 .vote-summary__comment { margin-top:4px; font-size:12px; font-style:italic; color: var(--text2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .vote-summary__comment:empty { display:none; }
@@ -861,8 +866,7 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
   .detail-top { grid-template-columns:84px 1fr; }
   .detail-poster { width:84px; height:126px; }
   /* Qui il voto va a capo sotto il poster: riga più alta, 116px di contenuto = 138px. */
-  .rank-row { grid-template-columns:30px 44px 1fr; contain-intrinsic-size:auto 116px; }
-  .rank-row__vote { grid-column:2/4; justify-self:start; margin-top:4px; }
+  .rank-row { grid-template-columns:30px 44px 1fr auto; }
 }
 @media (max-width:560px) { .podium-grid { grid-template-columns:repeat(3,1fr); } }
 

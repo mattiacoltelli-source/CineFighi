@@ -458,7 +458,10 @@ function rankRowHtml(item, pos, typeLabel, isGroup) {
         <div class="rank-row__title">${escapeHtml(item.title)}</div>
         <div class="rank-row__meta">${item.year} · ${typeLabel}</div>
       </div>
-      <div class="rank-row__vote">${mediaVoteHtml(item.__score.toFixed(1), isGroup)}</div>
+      <div class="rank-row__vote">
+        <span class="rank-vote__main">${item.__score.toFixed(1)}</span>
+        ${isGroup && Number.isFinite(item.__mine) ? `<span class="rank-vote__sub">tuo <b>${item.__mine.toFixed(1)}</b></span>` : ""}
+      </div>
     </div>
   `;
 }
