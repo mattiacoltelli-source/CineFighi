@@ -240,7 +240,7 @@ ${seenLines}
 In watchlist del gruppo (NON consigliare questi): ${watchlistLine}
 
 Scrivi:
-1. "profile": 2-3 paragrafi che raccontano il profilo di gusti di questa persona, con numeri concreti presi dai dati sopra (se ci sono, anche gli attori ricorrenti e il decennio).
+1. "profile": 2-3 paragrafi che raccontano il profilo di gusti di questa persona, con numeri concreti presi dai dati sopra. Se nei dati ci sono attori ricorrenti, cita almeno uno o due attori per nome con il numero di titoli e la media (es. "Brad Pitt, 8 titoli, media 7,56"); cita anche il decennio più visto o meglio votato. Racconta i numeri veri (conteggi e medie): non scrivere le soglie minime usate per selezionare i dati (niente "su almeno 10 titoli").
 2. "genres_note": 2-3 frasi su generi più visti vs. più amati. Chiama "più visti" solo i generi con più titoli e "più amati" solo quelli con la media più alta: non scambiare i due termini e non chiamare "preferito" un genere solo perché ha molti titoli.
 3. "recommendations": esattamente ${RECS_REQUESTED} titoli reali (film o serie, indica "media_type" corretto), MAI titoli già presenti nell'elenco dei visti o della watchlist qui sopra (controlla con attenzione, anche eventuali sequel/prequel/remake con lo stesso titolo esatto vanno evitati se il titolo coincide) — ne verranno scartati alcuni per sicurezza, per questo te ne chiediamo ${RECS_REQUESTED} invece di ${RECS_FINAL}. Ogni titolo deve avere una riga di motivazione ("why", almeno una frase completa) legata a un dato concreto sopra (un regista, un genere, una struttura narrativa ricorrente) — non lasciarla mai vuota o generica.
 
