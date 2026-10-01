@@ -249,7 +249,12 @@ export function groupMemberProfiles(db, users, { minVotes = 0 } = {}) {
       entries.sort((a, b) => b.avg - a.avg);
       return entries;
     };
-    const genreRanking = rankByAvg(genreVotes, 3);
+    // Soglia sul genere proporzionale ai voti: 3 titoli su 351 sono rumore
+    // (un genere visto poco batteva quelli guardati davvero). 5 come nel
+    // report personale; scende a 4/3 per chi ha votato poco, cosi' la card
+    // non resta vuota.
+    const minGenreVotes = n >= 100 ? 5 : n >= 40 ? 4 : 3;
+    const genreRanking = rankByAvg(genreVotes, minGenreVotes);
 
     const sorted = [...voted].sort((a, b) => b.vote - a.vote);
     const topFilms = sorted.slice(0, 3).map(({ item, vote }) => ({ title: item.title, vote }));
@@ -259,7 +264,7 @@ export function groupMemberProfiles(db, users, { minVotes = 0 } = {}) {
       user, n, avg, sd,
       topGenre: genreRanking[0] || null,
       // Fino a 3 generi per il mini-grafico "Generi preferiti" della card
-      // (renderGroupReport in ui.js) — stessa soglia minima di 3 voti sul
+      // (renderGroupReport in ui.js) — stessa soglia minima (minGenreVotes) sul
       // genere di topGenre, solo non troncata a un solo risultato.
       topGenres: genreRanking.slice(0, 3),
       topDirector: rankByAvg(directorVotes, 2)[0] || null,
