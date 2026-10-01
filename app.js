@@ -554,6 +554,35 @@ function fillDetailHeader(item) {
   document.getElementById("detailFacts").innerHTML = renderDetailFacts(item);
 }
 
+// Voti del gruppo in una tendina sotto il tuo voto: chiusa mostra solo gli
+// avatar e chi ha votato piu' alto, aperta l'elenco completo.
+function fillDetailVotes(votes) {
+  const entries = Object.entries(votes || {}).sort((a, b) => b[1].vote - a[1].vote);
+  const box = document.getElementById("detailGroupVotes");
+  box.open = false;
+  box.classList.toggle("is-empty", !entries.length);
+  document.getElementById("detailVotesList").innerHTML = renderVotesList(votes || {}, currentUser);
+  document.getElementById("detailGroupStack").innerHTML =
+    entries.slice(0, 5).map(([name]) => avatarHtml(name, 26)).join("");
+  document.getElementById("detailGroupTitle").textContent =
+    entries.length ? `Voti del gruppo · ${entries.length}` : "Nessuno ha ancora votato";
+  document.getElementById("detailGroupSub").textContent = entries.length
+    ? entries.slice(0, 3).map(([name, v]) => `${name} ${Number(v.vote).toFixed(1)}`).join(" · ") + (entries.length > 3 ? " …" : "")
+    : "";
+  const avg = entries.length ? average(votes) : null;
+  document.getElementById("detailGroupAvg").textContent =
+    avg === null ? "" : `Gruppo: media ${Number(avg).toFixed(1)}`;
+}
+
+// Il commento resta nascosto finche' non serve: si apre da solo se c'e' gia'
+// un commento tuo, oppure col link "+ Aggiungi un commento".
+function setDetailComment(text) {
+  const input = document.getElementById("detailCommentInput");
+  input.value = text;
+  input.classList.toggle("hidden", !text);
+  document.getElementById("detailCommentToggle").classList.toggle("hidden", !!text);
+}
+
 async function openPreview(tmdbId, type) {
   const existing = db.find(x => x.tmdb_id === Number(tmdbId) && x.media_type === type);
   if (existing) { openDetail(existing.id); return; }
@@ -567,11 +596,11 @@ async function openPreview(tmdbId, type) {
   haptic(8);
 
   fillDetailHeader(fullItem);
-  document.getElementById("detailVotesList").innerHTML = renderVotesList({}, currentUser);
+  fillDetailVotes({});
 
   document.getElementById("detailVoteSlider").value = 7;
   document.getElementById("detailVoteValue").textContent = "7.0";
-  document.getElementById("detailCommentInput").value = "";
+  setDetailComment("");
 
   document.getElementById("detailSaveVoteBtn").textContent = "✓ Salva voto (segna come visto)";
   document.getElementById("detailSaveVoteBtn").classList.add("btn--full-row");
@@ -1014,13 +1043,13 @@ function openDetail(id, options = {}) {
   }
 
   fillDetailHeader(item);
-  document.getElementById("detailVotesList").innerHTML = renderVotesList(item.votes, currentUser);
+  fillDetailVotes(item.votes);
 
   const myVote = item.votes?.[currentUser]?.vote ?? 7;
   const myComment = item.votes?.[currentUser]?.comment ?? "";
   document.getElementById("detailVoteSlider").value = myVote;
   document.getElementById("detailVoteValue").textContent = Number(myVote).toFixed(1);
-  document.getElementById("detailCommentInput").value = myComment;
+  setDetailComment(myComment);
 
   const hasMyVote = !!item.votes?.[currentUser];
   document.getElementById("detailSaveVoteBtn").textContent = hasMyVote ? "Aggiorna voto" : "Salva voto";
@@ -1419,6 +1448,12 @@ function bindGlobalEvents() {
   document.getElementById("detailBackBtn").addEventListener("click", () => { haptic(8); history.back(); });
   document.getElementById("detailVoteSlider").addEventListener("input", e => {
     document.getElementById("detailVoteValue").textContent = Number(e.target.value).toFixed(1);
+  });
+  document.getElementById("detailCommentToggle").addEventListener("click", () => {
+    document.getElementById("detailCommentToggle").classList.add("hidden");
+    const input = document.getElementById("detailCommentInput");
+    input.classList.remove("hidden");
+    input.focus();
   });
   document.getElementById("detailSaveVoteBtn").addEventListener("click", handleSaveVote);
   document.getElementById("detailClearVoteBtn").addEventListener("click", handleClearVote);
