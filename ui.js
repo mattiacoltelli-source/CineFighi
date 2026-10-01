@@ -5,7 +5,7 @@
 import {
   escapeHtml, mediaLabel, mediaBadgeClass, posterUrl,
   average, voteCount, firstVoter, firstOfNames
-} from "./cine-core.js?v=9b63273";
+} from "./cine-core.js?v=6aee327";
 
 // Media voto nelle locandine della classifica: numero in ciano con "media"
 // sotto. Senza etichetta (`withLabel` false) e' un voto singolo, non una media.
