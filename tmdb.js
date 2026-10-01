@@ -1,7 +1,7 @@
 // ─── tmdb.js ─────────────────────────────────────────────────────────────────
 // Tutte le chiamate a TMDB: ricerca e dettaglio titolo.
 
-import { normalizedItem } from "./cine-core.js?v=16ed3cc";
+import { normalizedItem } from "./cine-core.js?v=0866083";
 
 const API_KEY = "c9ebaca404bbc26bad39cce1c3aa9677";
 const BASE_URL = "https://api.themoviedb.org/3";
