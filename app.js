@@ -580,12 +580,13 @@ function fillDetailVotes(votes) {
     : "";
   // Con un solo voto la media ripeterebbe quel voto: la mostro da 2 in su.
   const avg = entries.length >= 2 ? average(votes) : null;
-  // Media nella riga "Voti del gruppo": visibile anche prima di votare (i
-  // singoli voti sono già visibili lì sotto, quindi non aggiunge nessun bias
-  // in più). Vale la stessa soglia: da 2 voti in su.
-  const avgPill = document.getElementById("detailGroupAvgPill");
-  avgPill.classList.toggle("hidden", avg === null);
-  document.getElementById("detailGroupAvgNum").textContent = avg === null ? "" : Number(avg).toFixed(1);
+  // Media insieme al tuo voto, in testata (non votato) e nel riepilogo (votato):
+  // la riga "Voti del gruppo" resta libera per titolo e nomi.
+  const avgText = avg === null ? "" : Number(avg).toFixed(1);
+  document.getElementById("detailHeadAvg").classList.toggle("hidden", avg === null);
+  document.getElementById("detailHeadAvgNum").textContent = avgText;
+  document.getElementById("detailSummaryAvg").classList.toggle("hidden", avg === null);
+  document.getElementById("detailSummaryAvgNum").textContent = avgText;
 }
 
 // Il commento resta nascosto finche' non serve: si apre da solo se c'e' gia'
@@ -843,7 +844,8 @@ function renderStats() {
     .filter(item => item.media_type === rankingMedia)
     .map(item => {
       const score = statsMode === "me" ? item.votes[currentUser].vote : average(item.votes);
-      return { ...item, __score: score };
+      const mine = statsMode === "me" ? NaN : Number(item.votes?.[currentUser]?.vote);
+      return { ...item, __score: score, __mine: mine };
     })
     .filter(item => Number.isFinite(item.__score))
     .sort((a, b) => b.__score - a.__score);

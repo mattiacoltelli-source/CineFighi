@@ -370,14 +370,21 @@
         <div class="detail-card" id="detailVoteCard">
           <div class="detail-card__head" id="detailVoteHead">
             <div class="detail-card__title">Il tuo voto</div>
+            <span id="detailHeadAvg" class="vote-head-avg hidden">Media <b id="detailHeadAvgNum"></b></span>
             <span id="detailVoteBadge" class="vote-badge vote-badge--todo">Da votare</span>
           </div>
 
           <div id="detailVoteSummary" class="vote-summary hidden">
             <div class="vote-summary__main">
-              <div class="detail-card__title vote-summary__label">Il tuo voto</div>
-              <div class="vote-summary__line">
-                <div id="detailVoteSummaryNum" class="vote-summary__num">0.0</div>
+              <div class="vote-summary__pair">
+                <div class="vote-summary__col">
+                  <div class="detail-card__title vote-summary__label">Il tuo voto</div>
+                  <div id="detailVoteSummaryNum" class="vote-summary__num">0.0</div>
+                </div>
+                <div id="detailSummaryAvg" class="vote-summary__col vote-summary__col--avg hidden">
+                  <div class="detail-card__title vote-summary__label">Media</div>
+                  <div id="detailSummaryAvgNum" class="vote-summary__num vote-summary__num--avg"></div>
+                </div>
               </div>
               <div id="detailVoteSummaryComment" class="vote-summary__comment"></div>
             </div>
@@ -405,10 +412,6 @@
             <span class="group-votes__text">
               <span id="detailGroupTitle" class="group-votes__title">Voti del gruppo</span>
               <span id="detailGroupSub" class="group-votes__sub"></span>
-            </span>
-            <span id="detailGroupAvgPill" class="group-votes__avg hidden" title="Media del gruppo">
-              <span id="detailGroupAvgNum" class="group-votes__avg-num"></span>
-              <span class="group-votes__avg-label">Media</span>
             </span>
             <span class="group-votes__chev" aria-hidden="true">⌄</span>
           </summary>
