@@ -846,13 +846,12 @@ function renderStats() {
     .filter(item => item.media_type === rankingMedia)
     .map(item => {
       const score = statsMode === "me" ? item.votes[currentUser].vote : average(item.votes);
-      const mine = statsMode === "me" ? NaN : Number(item.votes?.[currentUser]?.vote);
-      return { ...item, __score: score, __mine: mine };
+      return { ...item, __score: score };
     })
     .filter(item => Number.isFinite(item.__score))
     .sort((a, b) => b.__score - a.__score);
 
-  renderRanking(ranked, rankingMedia === "movie" ? "Film" : "Serie TV", statsMode !== "me");
+  renderRanking(ranked, rankingMedia === "movie" ? "Film" : "Serie TV");
 }
 
 // ─── REPORT ───────────────────────────────────────────────────────────────
