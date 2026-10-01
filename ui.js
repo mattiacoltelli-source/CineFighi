@@ -7,17 +7,10 @@ import {
   average, voteCount, firstVoter, firstOfNames
 } from "./cine-core.js?v=1749255";
 
-// Media voto: numero in ciano con "media" sotto. Stessa forma ovunque
-// (scheda, classifiche, generi, registi); `value` e' gia' formattato.
-// Senza etichetta (`withLabel` false) e' un voto singolo, non una media.
+// Media voto nelle locandine della classifica: numero in ciano con "media"
+// sotto. Senza etichetta (`withLabel` false) e' un voto singolo, non una media.
 function mediaVoteHtml(value, withLabel = true) {
   return `<span class="media-vote"><b>${value}</b>${withLabel ? "<i>media</i>" : ""}</span>`;
-}
-
-// Media dentro una tabella di righe (generi, registi): solo il numero, perche'
-// l'etichetta "media" sta una volta sola nell'intestazione della colonna.
-function mediaNumHtml(value) {
-  return `<span class="media-num">${value}</span>`;
 }
 
 // ─── ANIMAZIONI (numeri che contano, barre che si riempiono, tattile) ───────
@@ -253,7 +246,7 @@ export function renderLibraryList(items, mioNome = null) {
             ${item.status === "watchlist" ? `<span class="chip chip--watchlist">♡ In watchlist</span>` : ""}
             ${(item.genre_names || []).map(g => `<span class="chip">${escapeHtml(g)}</span>`).join("")}
             ${hoVotato ? `<span class="chip chip--mine">Tu ${mio.toFixed(1)}</span>` : ""}
-            ${avg !== null ? `<span class="chip chip--vote"><b class="chip__num">${avg.toFixed(1)}</b> <i class="chip__lab">media</i> · ${count}</span>` : ""}
+            ${avg !== null ? `<span class="chip chip--vote">${hoVotato ? `gruppo ${avg.toFixed(1)} (${count})` : `★ ${avg.toFixed(1)} (${count})`}</span>` : ""}
             ${item.director ? `<span class="chip">🎬 ${escapeHtml(item.director)}</span>` : ""}
           </div>
         </div>
@@ -289,7 +282,7 @@ export function renderGenreBars(entries) {
         <span class="bar-row__name">${escapeHtml(e.label)}</span>
         <span class="bar-row__meta">
           <span class="bar-row__count">${e.value} titol${e.value === 1 ? "o" : "i"}</span>
-          ${e.avgVote != null ? `<span class="bar-row__vote">${mediaNumHtml(e.avgVote.toFixed(1).replace(".", ","))}</span>` : ""}
+          ${e.avgVote != null ? `<span class="bar-row__vote">★ ${e.avgVote.toFixed(1).replace(".", ",")}</span>` : ""}
         </span>
       </div>
       <div class="bar-track"><div class="bar__fill" data-width="${Math.max(8, (e.value / max) * 100)}"></div></div>
@@ -720,7 +713,7 @@ function genreChartHtml(topGenres) {
       <div class="mini-row">
         <div class="mini-row__label">
           <span class="mini-row__name">${escapeHtml(g.name)}</span>
-          <span class="mini-row__meta"><span class="mini-row__count">${g.count} titoli</span><span class="mini-row__vote">${mediaNumHtml(g.avg.toFixed(1).replace(".", ","))}</span></span>
+          <span class="mini-row__meta"><span class="mini-row__count">${g.count} titoli</span><span class="mini-row__vote">★ ${g.avg.toFixed(1).replace(".", ",")}</span></span>
         </div>
         <div class="mini-track"><div class="mini-fill" style="width:${width}%"></div></div>
       </div>
@@ -728,7 +721,7 @@ function genreChartHtml(topGenres) {
   }).join("");
   return `
     <div class="genre-block">
-      <div class="genre-block__label"><span>Generi più visti</span><span>media</span></div>
+      <div class="genre-block__label">Generi più visti</div>
       ${rows}
     </div>
   `;
@@ -889,7 +882,7 @@ export function renderReportContent(report) {
       <div class="director-row">
         <span class="director-row__name">${escapeHtml(d.name)}</span>
         <span class="director-row__n">${d.count} titoli</span>
-        <span class="director-row__avg">${mediaNumHtml(Number(d.avg).toFixed(2))}</span>
+        <span class="director-row__avg">★ ${Number(d.avg).toFixed(2)}</span>
       </div>
     `).join("")
     : `<p class="empty-hint">Nessun regista visto almeno 2 volte, per ora.</p>`;
@@ -919,7 +912,7 @@ export function renderReportContent(report) {
     </div>
 
     <div class="taste-block">
-      <div class="taste-block__title">Registi che ti fidelizzano<span class="hint">media</span></div>
+      <div class="taste-block__title">Registi che ti fidelizzano<span class="hint">★ media voto</span></div>
       ${directorsHtml}
     </div>
 

@@ -580,8 +580,11 @@ function fillDetailVotes(votes) {
     : "";
   // Con un solo voto la media ripeterebbe quel voto: la mostro da 2 in su.
   const avg = entries.length >= 2 ? average(votes) : null;
-  // Media nella riga "Voti del gruppo" (numero + "Media"), in ogni stato:
-  // prima e dopo aver votato. Vale la stessa soglia: da 2 voti in su.
+  document.getElementById("detailGroupAvg").textContent =
+    avg === null ? "" : `media gruppo ${Number(avg).toFixed(1)}`;
+  // Stessa media, in piccolo nella riga "Voti del gruppo": visibile anche
+  // prima di votare (i singoli voti sono già visibili lì sotto, quindi non
+  // aggiunge nessun bias in più). Vale la stessa soglia: da 2 voti in su.
   const avgPill = document.getElementById("detailGroupAvgPill");
   avgPill.classList.toggle("hidden", avg === null);
   document.getElementById("detailGroupAvgNum").textContent = avg === null ? "" : Number(avg).toFixed(1);
@@ -788,13 +791,9 @@ function renderStats() {
     btn.classList.toggle("active", on);
     btn.setAttribute("aria-pressed", String(on));
   });
-  // Barre: "media" e' l'intestazione della colonna dei voti, a destra del
-  // titolo. Bolle: nessuna colonna, al suo posto una frase di legenda.
-  const isBubbles = genreView === "bubbles";
-  document.getElementById("genreLegend").hidden = isBubbles;
-  const hint = document.getElementById("genreHint");
-  hint.hidden = !isBubbles;
-  hint.textContent = "Riempimento = quanti titoli · Colore = quanto piace (azzurro basso → arancione alto)";
+  document.getElementById("genreLegend").textContent = genreView === "bubbles"
+    ? "Riempimento = quanti titoli · Colore = quanto piace (azzurro basso → arancione alto)"
+    : "★ media voto";
 
   // Le 4 card numeriche: di gruppo in modalità "Gruppo", personali in "Io".
   // "In watchlist" personale conta i titoli che sono NELLA TUA watchlist ora
