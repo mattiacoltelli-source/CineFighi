@@ -494,14 +494,8 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .podium-card__title { font-family: var(--font-display); font-size:12px; font-weight:700; line-height:1.25;
   display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; min-height:30px; }
 .podium-card__meta { font-size:11px; color: var(--text3); margin-top:3px; }
-.podium-card__vote { display:inline-flex; margin-top:8px; }
-/* Podi del Report di gruppo (voti, ±): testo semplice in pillola. */
-.podium-card__vote--pill { display:inline-block; padding:4px 10px; border-radius: var(--radius-pill);
+.podium-card__vote { display:inline-block; margin-top:8px; padding:4px 10px; border-radius: var(--radius-pill);
   background: var(--cyan-dim); border:1px solid rgba(56,189,248,.22); color: var(--cyan2); font-family: var(--font-display); font-size:12px; font-weight:800; }
-/* Media voto nelle locandine della classifica (vedi mediaVoteHtml in ui.js). */
-.media-vote { display:inline-flex; flex-direction:column; align-items:center; gap:2px; line-height:1; }
-.media-vote b { font-family: var(--font-display); font-weight:800; font-size:16px; color: var(--cyan); font-variant-numeric: tabular-nums; }
-.media-vote i { font-style:normal; font-size:9px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color: var(--text3); }
 
 .ranking-list { display:flex; flex-direction:column; gap:8px; }
 /* "Mostra tutti" apre la classifica intera in un colpo: senza questo, con
@@ -520,10 +514,8 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .rank-row__title { font-family: var(--font-display); font-size:14px; font-weight:700; line-height:1.2;
   display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
 .rank-row__meta { font-size:11px; color: var(--text3); margin-top:3px; }
-.rank-row__vote { display:flex; flex-direction:column; align-items:flex-end; gap:3px; line-height:1; justify-self:end; }
-.rank-vote__main { font-family: var(--font-display); font-weight:800; font-size:18px; color: var(--cyan); font-variant-numeric: tabular-nums; }
-.rank-vote__sub { font-size:10.5px; color: var(--text3); }
-.rank-vote__sub b { font-family: var(--font-display); font-weight:700; color: var(--text2); }
+.rank-row__vote { padding:5px 10px; border-radius: var(--radius-pill); background: var(--cyan-dim); border:1px solid rgba(56,189,248,.2);
+  color: var(--cyan2); font-family: var(--font-display); font-size:12px; font-weight:800; justify-self:end; }
 
 /* Stessa forma di .refresh-btn (Report): pill, icona + testo, superficie
    neutra — qui in tono neutro (text2) invece di arancio, dato che non è

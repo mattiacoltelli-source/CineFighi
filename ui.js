@@ -7,12 +7,6 @@ import {
   average, voteCount, firstVoter, firstOfNames
 } from "./cine-core.js?v=ae8138c";
 
-// Media voto nelle locandine della classifica: numero in ciano con "media"
-// sotto. Senza etichetta (`withLabel` false) e' un voto singolo, non una media.
-function mediaVoteHtml(value, withLabel = true) {
-  return `<span class="media-vote"><b>${value}</b>${withLabel ? "<i>media</i>" : ""}</span>`;
-}
-
 // ─── ANIMAZIONI (numeri che contano, barre che si riempiono, tattile) ───────
 
 let _lastHapticAt = 0;
@@ -449,7 +443,7 @@ function podiumOrder(items) {
   ].filter(Boolean);
 }
 
-function rankRowHtml(item, pos, typeLabel, isGroup) {
+function rankRowHtml(item, pos, typeLabel) {
   return `
     <div class="rank-row open-detail" data-id="${item.id}">
       <div class="rank-row__pos">${pos}</div>
@@ -458,10 +452,7 @@ function rankRowHtml(item, pos, typeLabel, isGroup) {
         <div class="rank-row__title">${escapeHtml(item.title)}</div>
         <div class="rank-row__meta">${item.year} · ${typeLabel}</div>
       </div>
-      <div class="rank-row__vote">
-        <span class="rank-vote__main">${item.__score.toFixed(1)}</span>
-        ${isGroup && Number.isFinite(item.__mine) ? `<span class="rank-vote__sub">tuo <b>${item.__mine.toFixed(1)}</b></span>` : ""}
-      </div>
+      <div class="rank-row__vote">★ ${item.__score.toFixed(1)}</div>
     </div>
   `;
 }
@@ -481,13 +472,12 @@ const RANKING_LIST_INITIAL = 2;
 // sempre da collassato, mai da dove si era lasciato l'ultima volta.
 let _rankingRest = [];
 let _rankingTypeLabel = "";
-let _rankingIsGroup = true;
 let _rankingExpanded = false;
 
 function renderRankingListRows() {
   const items = _rankingExpanded ? _rankingRest : _rankingRest.slice(0, RANKING_LIST_INITIAL);
   document.getElementById("rankingList").innerHTML =
-    items.map((item, i) => rankRowHtml(item, i + 4, _rankingTypeLabel, _rankingIsGroup)).join("");
+    items.map((item, i) => rankRowHtml(item, i + 4, _rankingTypeLabel)).join("");
 }
 
 function updateExpandBtn() {
@@ -507,14 +497,13 @@ function updateExpandBtn() {
   countEl.classList.toggle("hidden", _rankingExpanded);
 }
 
-export function renderRanking(items, typeLabel, isGroup = true) {
+export function renderRanking(items, typeLabel) {
   const podiumEl = document.getElementById("rankingPodium");
   const badgeEl = document.getElementById("rankingCountBadge");
 
   badgeEl.textContent = String(items.length);
   _rankingRest = items.slice(3);
   _rankingTypeLabel = typeLabel;
-  _rankingIsGroup = isGroup;
   _rankingExpanded = false;
 
   if (!items.length) {
@@ -530,7 +519,7 @@ export function renderRanking(items, typeLabel, isGroup = true) {
       <div class="podium-card__poster" style="background-image:url('${posterUrl(item.poster_path)}')"></div>
       <div class="podium-card__title">${escapeHtml(item.title)}</div>
       <div class="podium-card__meta">${item.year} · ${typeLabel}</div>
-      <div class="podium-card__vote">${mediaVoteHtml(item.__score.toFixed(1), isGroup)}</div>
+      <div class="podium-card__vote">★ ${item.__score.toFixed(1)}</div>
     </div>
   `).join("");
 
@@ -570,7 +559,7 @@ function groupPodiumCardHtml({ medal, title, meta, value, first, openDetailId })
       <div class="podium-card__medal">${medal}</div>
       <div class="podium-card__title">${escapeHtml(title)}</div>
       ${meta ? `<div class="podium-card__meta">${escapeHtml(meta)}</div>` : ""}
-      <div class="podium-card__vote podium-card__vote--pill">${value}</div>
+      <div class="podium-card__vote">${value}</div>
     </div>
   `;
 }
@@ -915,7 +904,7 @@ export function renderReportContent(report) {
     </div>
 
     <div class="taste-block">
-      <div class="taste-block__title">Registi che ti fidelizzano<span class="hint">★ media voto</span></div>
+      <div class="taste-block__title">Registi che ti fidelizzano</div>
       ${directorsHtml}
     </div>
 
