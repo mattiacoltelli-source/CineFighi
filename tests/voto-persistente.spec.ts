@@ -86,6 +86,7 @@ test("un voto dato con la tabella votes oltre le 1000 righe si rilegge dopo il r
   await page.waitForSelector("#screen-detail:not(.hidden)", { timeout: 10_000 });
 
   await expect(page.locator("#detailVoteSlider"), "il voto dato non si rilegge dopo il ricaricamento (la lettura taglia a 1000 righe?)").toHaveValue("9");
-  await expect(page.locator("#detailClearVoteBtn"), "dopo il ricaricamento l'app non riconosce il voto dato").toBeVisible();
+  await expect(page.locator("#detailVoteSummary"), "dopo il ricaricamento l'app non riconosce il voto dato").toBeVisible();
+  await expect(page.locator("#detailVoteSummaryNum")).toHaveText("9.0");
   expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
 });

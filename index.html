@@ -367,21 +367,35 @@
       </div>
 
       <div class="detail-body">
-        <div class="detail-card">
+        <div class="detail-card" id="detailVoteCard">
           <div class="detail-card__head">
             <div class="detail-card__title">Il tuo voto</div>
-            <div id="detailGroupAvg" class="detail-card__hint"></div>
+            <span id="detailVoteBadge" class="vote-badge vote-badge--todo">Da votare</span>
           </div>
-          <div class="vote-slider-row">
-            <input id="detailVoteSlider" type="range" min="0" max="10" step="0.5" value="7" />
-            <span id="detailVoteValue" class="vote-slider-value">7.0</span>
+
+          <div id="detailVoteSummary" class="vote-summary hidden">
+            <div id="detailVoteSummaryNum" class="vote-summary__num">0.0</div>
+            <div class="vote-summary__body">
+              <div>il tuo voto</div>
+              <div id="detailGroupAvg" class="detail-card__hint"></div>
+              <div id="detailVoteSummaryComment" class="vote-summary__comment"></div>
+            </div>
+            <button id="detailVoteEditBtn" class="vote-summary__edit" type="button">Modifica</button>
           </div>
-          <textarea id="detailCommentInput" class="hidden" placeholder="Un commento? (facoltativo)"></textarea>
-          <div class="detail-actions-row">
-            <button id="detailSaveVoteBtn" class="btn btn--ok">Salva voto</button>
-            <button id="detailClearVoteBtn" class="btn btn--ghost hidden">Rimuovi voto</button>
+
+          <div id="detailVoteEditor">
+            <div class="vote-slider-row">
+              <input id="detailVoteSlider" type="range" min="0" max="10" step="0.5" value="7" />
+              <span id="detailVoteValue" class="vote-slider-value">7.0</span>
+            </div>
+            <textarea id="detailCommentInput" class="hidden" placeholder="Un commento? (facoltativo)"></textarea>
+            <div class="detail-actions-row">
+              <button id="detailSaveVoteBtn" class="btn btn--ok">Salva voto</button>
+              <button id="detailCancelEditBtn" class="btn btn--ghost hidden" type="button">Annulla</button>
+              <button id="detailClearVoteBtn" class="btn-link-danger detail-clear hidden" type="button">Rimuovi</button>
+            </div>
+            <button id="detailCommentToggle" class="btn-link-quiet detail-comment-toggle" type="button">+ Aggiungi un commento</button>
           </div>
-          <button id="detailCommentToggle" class="btn-link-quiet detail-comment-toggle" type="button">+ Aggiungi un commento</button>
         </div>
 
         <details id="detailGroupVotes" class="detail-card group-votes">

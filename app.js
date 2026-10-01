@@ -586,6 +586,26 @@ function setDetailComment(text) {
   document.getElementById("detailCommentToggle").classList.toggle("hidden", !!text);
 }
 
+// Stato della card "Il tuo voto": non votato (barra aperta + "Da votare"),
+// votato in riepilogo (numero + "Modifica") o votato in modifica (barra con
+// Annulla/Rimuovi). Gli id degli elementi del voto restano gli stessi.
+function applyVoteState(hasMyVote, editing = false) {
+  const showEditor = !hasMyVote || editing;
+  document.getElementById("detailVoteSummary").classList.toggle("hidden", showEditor);
+  document.getElementById("detailVoteEditor").classList.toggle("hidden", !showEditor);
+  document.getElementById("detailCancelEditBtn").classList.toggle("hidden", !(hasMyVote && editing));
+  document.getElementById("detailClearVoteBtn").classList.toggle("hidden", !(hasMyVote && editing));
+  const badge = document.getElementById("detailVoteBadge");
+  badge.textContent = hasMyVote ? "✓ Votato" : "Da votare";
+  badge.classList.toggle("vote-badge--done", hasMyVote);
+  badge.classList.toggle("vote-badge--todo", !hasMyVote);
+}
+
+function fillVoteSummary(vote, comment) {
+  document.getElementById("detailVoteSummaryNum").textContent = Number(vote).toFixed(1);
+  document.getElementById("detailVoteSummaryComment").textContent = comment ? `“${comment}”` : "";
+}
+
 async function openPreview(tmdbId, type) {
   const existing = db.find(x => x.tmdb_id === Number(tmdbId) && x.media_type === type);
   if (existing) { openDetail(existing.id); return; }
@@ -607,8 +627,7 @@ async function openPreview(tmdbId, type) {
   setDetailComment("");
 
   document.getElementById("detailSaveVoteBtn").textContent = "✓ Salva voto (segna come visto)";
-  document.getElementById("detailSaveVoteBtn").classList.add("btn--full-row");
-  document.getElementById("detailClearVoteBtn").classList.add("hidden");
+  applyVoteState(false);
   const previewStatusBtn = document.getElementById("detailStatusBtn");
   previewStatusBtn.textContent = "Aggiungi a watchlist";
   previewStatusBtn.classList.add("btn");
@@ -1058,9 +1077,9 @@ function openDetail(id, options = {}) {
   setDetailComment(myComment);
 
   const hasMyVote = !!item.votes?.[currentUser];
-  document.getElementById("detailSaveVoteBtn").textContent = hasMyVote ? "Aggiorna voto" : "Salva voto";
-  document.getElementById("detailSaveVoteBtn").classList.toggle("btn--full-row", !hasMyVote);
-  document.getElementById("detailClearVoteBtn").classList.toggle("hidden", !hasMyVote);
+  document.getElementById("detailSaveVoteBtn").textContent = "Salva voto";
+  fillVoteSummary(myVote, myComment);
+  applyVoteState(hasMyVote);
 
   const isSeen = item.status !== "watchlist";
   const statusBtn = document.getElementById("detailStatusBtn");
@@ -1466,6 +1485,16 @@ function bindGlobalEvents() {
   });
   document.getElementById("detailSaveVoteBtn").addEventListener("click", handleSaveVote);
   document.getElementById("detailClearVoteBtn").addEventListener("click", handleClearVote);
+  document.getElementById("detailVoteEditBtn").addEventListener("click", () => applyVoteState(true, true));
+  document.getElementById("detailCancelEditBtn").addEventListener("click", () => {
+    const mine = byId(currentDetailId)?.votes?.[currentUser];
+    if (mine) {
+      document.getElementById("detailVoteSlider").value = mine.vote;
+      document.getElementById("detailVoteValue").textContent = Number(mine.vote).toFixed(1);
+      setDetailComment(mine.comment ?? "");
+    }
+    applyVoteState(true, false);
+  });
   document.getElementById("detailStatusBtn").addEventListener("click", handleToggleStatus);
   document.getElementById("detailRemoveBtn").addEventListener("click", handleRemove);
 }
