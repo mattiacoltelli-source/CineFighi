@@ -727,6 +727,14 @@ function renderStats() {
     ? "Riempimento = quanti titoli · Colore = quanto piace (azzurro basso → arancione alto)"
     : "★ media voto";
 
+  // Barra film/serie: stessi elementi, cambia solo la larghezza (transizione CSS).
+  const setStatBar = (movies, series) => {
+    const tot = movies + series;
+    const f = document.getElementById("statBarMovies"), s = document.getElementById("statBarSeries");
+    f.style.width = tot ? `calc((100% - 2px) * ${movies / tot})` : "0";
+    s.style.width = tot ? `calc((100% - 2px) * ${series / tot})` : "0";
+  };
+
   // Le 4 card numeriche: di gruppo in modalità "Gruppo", personali in "Io".
   // "In watchlist" personale conta i titoli che sono NELLA TUA watchlist ora
   // (watchlist_by, non added_by — vedi storage.js: chi l'ha catalogato per
@@ -738,14 +746,18 @@ function renderStats() {
     animateValue(document.getElementById("statSeen"), myVoted.length);
     animateValue(document.getElementById("statWatch"), myWatch.length);
     animateValue(document.getElementById("statMovies"), myVoted.filter(x => x.media_type === "movie").length);
-    animateValue(document.getElementById("statSeries"), myVoted.filter(x => x.media_type === "tv").length);
+    const nSeries = myVoted.filter(x => x.media_type === "tv").length;
+    animateValue(document.getElementById("statSeries"), nSeries);
+    setStatBar(myVoted.length - nSeries, nSeries);
   } else {
     const seenAll = db.filter(x => x.status === "seen");
     const watchAll = db.filter(x => x.status === "watchlist");
     animateValue(document.getElementById("statSeen"), seenAll.length);
     animateValue(document.getElementById("statWatch"), watchAll.length);
     animateValue(document.getElementById("statMovies"), seenAll.filter(x => x.media_type === "movie").length);
-    animateValue(document.getElementById("statSeries"), seenAll.filter(x => x.media_type === "tv").length);
+    const nSeries = seenAll.filter(x => x.media_type === "tv").length;
+    animateValue(document.getElementById("statSeries"), nSeries);
+    setStatBar(seenAll.length - nSeries, nSeries);
   }
 
   const relevant = statsMode === "me"
