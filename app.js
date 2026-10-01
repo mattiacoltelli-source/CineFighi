@@ -792,8 +792,9 @@ function renderStats() {
   legend.textContent = genreView === "bubbles"
     ? "Riempimento = quanti titoli · Colore = quanto piace (azzurro basso → arancione alto)"
     : "media";
-  // Nelle barre e' l'intestazione della colonna dei voti (a destra).
-  legend.classList.toggle("taste-block__legend--col", genreView !== "bubbles");
+  // Nelle barre e' l'intestazione della colonna dei voti (a destra, sulla riga
+  // del toggle); nelle bolle e' una frase lunga, su una riga a parte.
+  legend.classList.toggle("taste-block__legend--long", genreView === "bubbles");
 
   // Le 4 card numeriche: di gruppo in modalità "Gruppo", personali in "Io".
   // "In watchlist" personale conta i titoli che sono NELLA TUA watchlist ora
