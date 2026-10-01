@@ -705,7 +705,7 @@ function genreChartHtml(topGenres) {
       <div class="mini-row">
         <div class="mini-row__label">
           <span class="mini-row__name">${escapeHtml(g.name)}</span>
-          <span class="mini-row__vote">${g.count} titoli · <span class="mini-row__avg">★ ${g.avg.toFixed(1).replace(".", ",")}</span></span>
+          <span class="mini-row__meta"><span class="mini-row__count">${g.count} titoli</span><span class="mini-row__vote">★ ${g.avg.toFixed(1).replace(".", ",")}</span></span>
         </div>
         <div class="mini-track"><div class="mini-fill" style="width:${width}%"></div></div>
       </div>
