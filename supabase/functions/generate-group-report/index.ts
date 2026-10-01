@@ -84,6 +84,9 @@ function memberStats(allTitles: any[], votesByUser: Map<string, { title_id: numb
     for (const g of item.genre_names || []) (genreVotes[g] ||= []).push(vote);
     if (item.director) (directorVotes[item.director] ||= []).push(vote);
   }
+  // Stessa soglia proporzionale ai voti di cine-core.js::groupMemberProfiles
+  // (5 oltre 100 voti, 4 da 40, 3 sotto): 3 titoli su 351 sono rumore.
+  const minGenreVotes = n >= 100 ? 5 : n >= 40 ? 4 : 3;
   const bestByAvg = (acc: Record<string, number[]>, minCount: number) => {
     const entries = Object.entries(acc)
       .filter(([, v]) => v.length >= minCount)
@@ -96,7 +99,7 @@ function memberStats(allTitles: any[], votesByUser: Map<string, { title_id: numb
   const topFilms = sorted.slice(0, 3).map(({ item, vote }) => ({ title: item.title, vote }));
   const bottomFilms = sorted.slice(-3).reverse().map(({ item, vote }) => ({ title: item.title, vote }));
 
-  return { user, n, avg, sd, topGenre: bestByAvg(genreVotes, 3), topDirector: bestByAvg(directorVotes, 2), topFilms, bottomFilms };
+  return { user, n, avg, sd, topGenre: bestByAvg(genreVotes, minGenreVotes), topDirector: bestByAvg(directorVotes, 2), topFilms, bottomFilms };
 }
 
 const GroupReportContentSchema = z.object({
@@ -266,7 +269,7 @@ Deno.serve(async (req) => {
 - Titoli votati da tutte e ${members.length} le persone profilate: ${JSON.stringify(allVotedTitles)}
 - Titoli aggiunti per persona: ${JSON.stringify(addedCount)}
 
-Profilo per persona (n voti, media, deviazione standard dei SUOI voti, genere top con almeno 3 voti in quel genere, regista top con almeno 2 titoli, i suoi 3 voti più alti, i suoi 3 voti più bassi):
+Profilo per persona (n voti, media, deviazione standard dei SUOI voti, genere top con un minimo di voti in quel genere (5 se ha oltre 100 voti, 4 oltre 40, altrimenti 3), regista top con almeno 2 titoli, i suoi 3 voti più alti, i suoi 3 voti più bassi):
 ${JSON.stringify(members, null, 0)}
 
 Scrivi:
