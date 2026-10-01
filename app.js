@@ -49,6 +49,7 @@ let genreView = getGenreView(); // bars | bubbles — preferenza di vista dei Ge
 let currentDetailId = null;
 let previewItem = null;    // titolo TMDB non ancora salvato, aperto solo per consultazione
 let detailReturnScreen = "home";
+let detailReturnScrollY = 0;
 let currentType = "multi"; // per la ricerca
 let confirmYesAction = null;
 let reportTapCount = 0;   // gesto nascosto "7 tap sul titolo Report" per forzare una rigenerazione
@@ -152,6 +153,8 @@ async function init() {
     const wasDetail = getVisibleScreen() === "detail";
     haptic(8);
     goToScreen(screen);
+    // Tornando indietro dalla scheda si ritrova l'elenco dove era rimasto.
+    if (wasDetail && screen !== "detail") window.scrollTo(0, detailReturnScrollY);
     if (screen === "stats") {
       renderStats();
       if (wasDetail) restoreRankingScrollPosition(currentDetailId);
@@ -593,6 +596,7 @@ async function openPreview(tmdbId, type) {
   currentDetailId = null;
   previewItem = fullItem;
   detailReturnScreen = getVisibleScreen();
+  detailReturnScrollY = window.scrollY;
   haptic(8);
 
   fillDetailHeader(fullItem);
@@ -613,6 +617,7 @@ async function openPreview(tmdbId, type) {
   document.getElementById("detailPrimaryActions").classList.remove("detail-primary-actions--secondary");
 
   goToScreen("detail");
+  window.scrollTo(0, 0);
   pushHistoryState("detail");
 }
 
@@ -1039,6 +1044,7 @@ function openDetail(id, options = {}) {
   currentDetailId = id;
   if (push) {
     detailReturnScreen = getVisibleScreen();
+    detailReturnScrollY = window.scrollY;
     haptic(8);
   }
 
@@ -1072,6 +1078,9 @@ function openDetail(id, options = {}) {
   document.getElementById("detailPrimaryActions").classList.add("detail-primary-actions--secondary");
 
   goToScreen("detail");
+  // Una scheda si apre sempre dall'inizio, non dove si era scorso l'elenco di
+  // partenza. Il refresh dati (push=false, es. dopo un voto) non sposta nulla.
+  if (push) window.scrollTo(0, 0);
   if (push) pushHistoryState("detail");
 }
 
