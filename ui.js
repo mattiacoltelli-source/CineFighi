@@ -690,20 +690,22 @@ function userCardHtml(m, blurb) {
   `;
 }
 
-// Mini-grafico "Generi preferiti" nella card di ogni utente — stesso
+// Mini-grafico "Generi più visti" nella card di ogni utente — stesso
 // linguaggio visivo di .bar-row/.bar-track/.bar__fill già usato per i
 // generi nel report personale (vedi renderTasteReport), solo in versione
-// compatta. Puramente aggiuntivo: non tocca né sostituisce il testo sopra
-// (templato o scritto da Claude), che resta invariato.
+// compatta. La barra segue il numero di titoli (come in Statistiche), il
+// testo aggiunge la media voto. Puramente aggiuntivo: non tocca né sostituisce
+// il testo sopra (templato o scritto da Claude), che resta invariato.
 function genreChartHtml(topGenres) {
   if (!topGenres || !topGenres.length) return "";
+  const maxCount = Math.max(...topGenres.map(g => g.count));
   const rows = topGenres.map(g => {
-    const width = Math.max(4, Math.min(100, Math.round(g.avg * 10)));
+    const width = Math.max(4, Math.min(100, Math.round((g.count / maxCount) * 100)));
     return `
       <div class="mini-row">
         <div class="mini-row__label">
           <span class="mini-row__name">${escapeHtml(g.name)}</span>
-          <span class="mini-row__vote">${g.avg.toFixed(2).replace(".", ",")}</span>
+          <span class="mini-row__vote">${g.count} titoli · <span class="mini-row__avg">★ ${g.avg.toFixed(1).replace(".", ",")}</span></span>
         </div>
         <div class="mini-track"><div class="mini-fill" style="width:${width}%"></div></div>
       </div>
@@ -711,7 +713,7 @@ function genreChartHtml(topGenres) {
   }).join("");
   return `
     <div class="genre-block">
-      <div class="genre-block__label">Generi preferiti</div>
+      <div class="genre-block__label">Generi più visti</div>
       ${rows}
     </div>
   `;
