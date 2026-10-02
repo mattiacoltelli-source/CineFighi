@@ -346,7 +346,8 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
   -webkit-tap-highlight-color: transparent; }
 .genre-view-btn.active { background: var(--surface3); color: var(--text); }
 .taste-block__legend--row { display:block; margin-bottom:14px; }
-#genreLegend[hidden] { display:none; }
+/* Nelle barre: a destra, piccola, sotto il titolo. */
+.taste-block__legend--col { text-align:right; font-weight:600; font-size:11px; margin:-6px 0 10px; }
 
 /* Toggle Io/Gruppo (watchlist Home, Statistiche, Report): stessa pillola
    compatta del genre-view-toggle, ma con un thumb che scorre dietro la
@@ -596,8 +597,9 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
    Gruppo (vedi genreChartHtml in ui.js) — stessa palette di .bar-row/
    .bar-track/.bar__fill dei Generi nel report personale, in scala ridotta. */
 .genre-block { margin-top: 11px; }
-.genre-block__label { font-family: var(--font-display); font-weight:700; font-size:10px;
+.genre-block__label { display:flex; justify-content:space-between; align-items:baseline; font-family: var(--font-display); font-weight:700; font-size:10px;
   text-transform:uppercase; letter-spacing:.5px; color: var(--text3); margin-bottom:8px; }
+.genre-block__label .hint { text-transform:none; letter-spacing:0; font-weight:600; font-size:10.5px; opacity:.8; }
 .mini-row { margin-bottom:7px; }
 .mini-row:last-child { margin-bottom:0; }
 .mini-row__label { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px; font-size:11.5px; }
