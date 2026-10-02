@@ -329,7 +329,7 @@ export function groupProfileStats(db, users) {
     const parts = allVotedTitles.map((t, i) => {
       const highlight = i === bestIdx && allVotedTitles.length > 1
         ? ", il più amato tra quelli visti davvero insieme" : "";
-      return `<b>${escapeHtml(t.title)}</b> (media ${t.avg.toFixed(1).replace(".", ",")}${highlight})`;
+      return `<b>${escapeHtml(t.title)}</b> (media ${t.avg.toFixed(1)}${highlight})`;
     });
     const list = parts.length > 1
       ? `${parts.slice(0, -1).join(", ")} e ${parts[parts.length - 1]}`
@@ -359,7 +359,7 @@ export function groupProfileStats(db, users) {
     const topAdderVotes = (votesByUser[topAdderUser] || []).length;
     contributionNote = `<b>${escapeHtml(topAdderUser)}</b> è il motore assoluto: ha aggiunto ${topAdderCount} dei ${db.length} titoli (${pct}%) ed espresso ${topAdderVotes} dei ${allVotes.length} voti — è il curatore della collezione.`;
     if (mostGenerous && mostGenerous.user !== topAdderUser) {
-      contributionNote += ` <b>${escapeHtml(mostGenerous.user)}</b> è all'opposto: vota poco (${mostGenerous.n} volte) ma quando lo fa premia quasi sempre, con la media più alta e generosa del gruppo (${mostGenerous.avg.toFixed(2).replace(".", ",")}).`;
+      contributionNote += ` <b>${escapeHtml(mostGenerous.user)}</b> è all'opposto: vota poco (${mostGenerous.n} volte) ma quando lo fa premia quasi sempre, con la media più alta e generosa del gruppo (${mostGenerous.avg.toFixed(2)}).`;
     }
   }
 

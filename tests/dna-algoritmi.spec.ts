@@ -122,8 +122,8 @@ test("i numeri di \"Tutta la rete\" corrispondono ai voti veri", async ({ page, 
 
   // ─── Genere preferito ───────────────────────────────────────────────────
   if (righe["Genere preferito"]) {
-    const nomeGenere = righe["Genere preferito"].replace(/\s*\(media [\d,]+\)$/, "");
-    const conMedia = righe["Genere preferito"].match(/media ([\d,]+)/)?.[1]?.replace(",", ".");
+    const nomeGenere = righe["Genere preferito"].replace(/\s*\(media [\d.,]+\)$/, "");
+    const conMedia = righe["Genere preferito"].match(/media ([\d.,]+)/)?.[1]?.replace(",", ".");
     expect(conMedia, `formato inatteso per "Genere preferito": ${righe["Genere preferito"]}`).toBeTruthy();
 
     const delGenere = amati.filter(x => (x.t.genre_names ?? []).includes(nomeGenere));
@@ -136,7 +136,7 @@ test("i numeri di \"Tutta la rete\" corrispondono ai voti veri", async ({ page, 
 
   // ─── Regista preferito ──────────────────────────────────────────────────
   if (righe["Regista preferito"]) {
-    const m = righe["Regista preferito"].match(/^(.+?) \((\d+) film, media ([\d,]+)\)$/);
+    const m = righe["Regista preferito"].match(/^(.+?) \((\d+) film, media ([\d.,]+)\)$/);
     expect(m, `formato inatteso per "Regista preferito": ${righe["Regista preferito"]}`).toBeTruthy();
     const [, nomeRegista, filmCountStr, mediaStr] = m!;
 
@@ -153,7 +153,7 @@ test("i numeri di \"Tutta la rete\" corrispondono ai voti veri", async ({ page, 
   // coi dati veri (conteggio, media, soglia minima). Per "più presente" basta
   // contare: nessun altro attore deve comparire in piu' film amati.
   if (righe["Attore preferito"]) {
-    const m = righe["Attore preferito"].match(/^(.+?) \((\d+) film, media ([\d,]+)\)$/);
+    const m = righe["Attore preferito"].match(/^(.+?) \((\d+) film, media ([\d.,]+)\)$/);
     expect(m, `formato inatteso per "Attore preferito": ${righe["Attore preferito"]}`).toBeTruthy();
     const [, nomeAttore, filmCountStr, mediaStr] = m!;
 
@@ -176,7 +176,7 @@ test("i numeri di \"Tutta la rete\" corrispondono ai voti veri", async ({ page, 
 
   // ─── Voto medio più alto ────────────────────────────────────────────────
   if (righe["Voto medio più alto"]) {
-    const m = righe["Voto medio più alto"].match(/^(.+) \(([\d,]+)\)$/);
+    const m = righe["Voto medio più alto"].match(/^(.+) \(([\d.,]+)\)$/);
     expect(m, `formato inatteso per "Voto medio più alto": ${righe["Voto medio più alto"]}`).toBeTruthy();
     const [, titoloMostrato, mediaStr] = m!;
 

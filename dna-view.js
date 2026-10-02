@@ -347,7 +347,7 @@ let fullViewGeom = null;
 const STAT_MIN_TITOLI = 3;
 
 const mediaVoti = (voti) => voti.reduce((s, v) => s + v, 0) / voti.length;
-const unaCifra = (n) => n.toFixed(1).replace(".", ",");
+const unaCifra = (n) => n.toFixed(1);
 
 // Quante delle persone selezionate devono avere VISTO (votato, qualunque
 // voto) un titolo perché la sua media conti per "Voto medio più alto" più

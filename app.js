@@ -849,11 +849,14 @@ function renderStats() {
     .filter(item => item.media_type === rankingMedia)
     .map(item => {
       const score = statsMode === "me" ? item.votes[currentUser].vote : average(item.votes);
-      return { ...item, __score: score };
+      // In Gruppo la media va letta insieme a quanti voti la fanno (1 voto = 1 persona).
+      const count = statsMode === "me" ? null : Object.keys(item.votes || {}).length;
+      return { ...item, __score: score, __count: count };
     })
     .filter(item => Number.isFinite(item.__score))
     .sort((a, b) => b.__score - a.__score);
 
+  document.getElementById("rankingLegend").textContent = statsMode === "me" ? "I tuoi voti" : "Media del gruppo";
   renderRanking(ranked, rankingMedia === "movie" ? "Film" : "Serie TV");
 }
 
