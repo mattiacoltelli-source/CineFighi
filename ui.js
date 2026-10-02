@@ -240,7 +240,7 @@ export function renderLibraryList(items, mioNome = null) {
             ${item.status === "watchlist" ? `<span class="chip chip--watchlist">♡ In watchlist</span>` : ""}
             ${(item.genre_names || []).map(g => `<span class="chip">${escapeHtml(g)}</span>`).join("")}
             ${hoVotato ? `<span class="chip chip--mine">Tu ${mio.toFixed(1)}</span>` : ""}
-            ${avg !== null ? `<span class="chip chip--vote">${hoVotato ? `gruppo ${avg.toFixed(1)} (${count})` : `★ ${avg.toFixed(1)} (${count})`}</span>` : ""}
+            ${avg !== null ? `<span class="chip chip--vote">★ ${avg.toFixed(1)} · ${count} vot${count === 1 ? "o" : "i"}</span>` : ""}
             ${item.director ? `<span class="chip">🎬 ${escapeHtml(item.director)}</span>` : ""}
           </div>
         </div>
