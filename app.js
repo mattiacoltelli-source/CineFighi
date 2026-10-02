@@ -790,11 +790,14 @@ function renderStats() {
     btn.classList.toggle("active", on);
     btn.setAttribute("aria-pressed", String(on));
   });
-  // La legenda serve solo nelle bolle (spiega riempimento e colore); nelle barre
-  // la media e' chiara dai numeri e la riga sparisce.
+  // Barre: "★ media voto" in piccolo a destra, come in Registi e nel Report di
+  // gruppo. Bolle: la legenda e' la frase che spiega riempimento e colore.
   const legend = document.getElementById("genreLegend");
-  legend.hidden = genreView !== "bubbles";
-  legend.textContent = "Riempimento = quanti titoli · Colore = quanto piace (azzurro basso → arancione alto)";
+  const isBubbles = genreView === "bubbles";
+  legend.textContent = isBubbles
+    ? "Riempimento = quanti titoli · Colore = quanto piace (azzurro basso → arancione alto)"
+    : "★ media voto";
+  legend.classList.toggle("taste-block__legend--col", !isBubbles);
 
   // Le 4 card numeriche: di gruppo in modalità "Gruppo", personali in "Io".
   // "In watchlist" personale conta i titoli che sono NELLA TUA watchlist ora

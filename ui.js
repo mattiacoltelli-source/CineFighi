@@ -713,7 +713,7 @@ function genreChartHtml(topGenres) {
   }).join("");
   return `
     <div class="genre-block">
-      <div class="genre-block__label">Generi più visti</div>
+      <div class="genre-block__label"><span>Generi più visti</span><span class="hint">★ media voto</span></div>
       ${rows}
     </div>
   `;
@@ -904,7 +904,7 @@ export function renderReportContent(report) {
     </div>
 
     <div class="taste-block">
-      <div class="taste-block__title">Registi che ti fidelizzano</div>
+      <div class="taste-block__title">Registi che ti fidelizzano<span class="hint">★ media voto</span></div>
       ${directorsHtml}
     </div>
 
