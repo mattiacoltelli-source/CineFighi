@@ -345,9 +345,9 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
   cursor:pointer; transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
   -webkit-tap-highlight-color: transparent; }
 .genre-view-btn.active { background: var(--surface3); color: var(--text); }
-.taste-block__legend--row { display:block; margin-bottom:14px; }
-/* Nelle barre: a destra, piccola, sotto il titolo. */
-.taste-block__legend--col { text-align:right; font-weight:600; font-size:11px; margin:-6px 0 10px; }
+.taste-block__legend--foot { display:block; margin-top:-6px; }
+/* Nelle barre: nota a destra, piccola, sotto l'ultima riga. */
+.taste-block__legend--col { text-align:right; font-weight:600; font-size:11px; }
 
 /* Toggle Io/Gruppo (watchlist Home, Statistiche, Report): stessa pillola
    compatta del genre-view-toggle, ma con un thumb che scorre dietro la

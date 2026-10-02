@@ -790,8 +790,8 @@ function renderStats() {
     btn.classList.toggle("active", on);
     btn.setAttribute("aria-pressed", String(on));
   });
-  // Barre: "★ media voto" in piccolo a destra, come in Registi e nel Report di
-  // gruppo. Bolle: la legenda e' la frase che spiega riempimento e colore.
+  // Barre: "★ media voto" come nota a destra in fondo al blocco. Bolle: la
+  // legenda e' la frase che spiega riempimento e colore.
   const legend = document.getElementById("genreLegend");
   const isBubbles = genreView === "bubbles";
   legend.textContent = isBubbles
