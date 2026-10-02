@@ -155,7 +155,7 @@ export function renderShelf(containerId, items, lastSeenAt, showAdder = false) {
                   ${voter.others > 0 ? `<span class="shelf-card__voter-count">+${voter.others}</span>` : ""}
                 </span>
               ` : ""}
-              <span class="shelf-card__vote">★ ${avg.toFixed(1)}</span>
+              <span class="shelf-card__vote">${avg.toFixed(1)}</span>
             </div>
           ` : (adder ? `
             <div class="shelf-card__bottom">
@@ -452,7 +452,7 @@ function rankRowHtml(item, pos, typeLabel) {
         <div class="rank-row__title">${escapeHtml(item.title)}</div>
         <div class="rank-row__meta">${item.year} · ${typeLabel}</div>
       </div>
-      <div class="rank-row__vote">★ ${item.__score.toFixed(1)}</div>
+      <div class="rank-row__vote">${item.__score.toFixed(1)}</div>
     </div>
   `;
 }
@@ -519,7 +519,7 @@ export function renderRanking(items, typeLabel) {
       <div class="podium-card__poster" style="background-image:url('${posterUrl(item.poster_path)}')"></div>
       <div class="podium-card__title">${escapeHtml(item.title)}</div>
       <div class="podium-card__meta">${item.year} · ${typeLabel}</div>
-      <div class="podium-card__vote">★ ${item.__score.toFixed(1)}</div>
+      <div class="podium-card__vote">${item.__score.toFixed(1)}</div>
     </div>
   `).join("");
 
