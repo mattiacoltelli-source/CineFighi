@@ -223,7 +223,7 @@ Deno.serve(async (req) => {
         format: zodOutputFormat(ReportContentSchema),
       },
       system:
-        "Sei l'analista personale di un'app di tracking film/serie TV. Scrivi in italiano, in seconda persona, tono diretto e colloquiale, mai da comunicato stampa. Basati SOLO sui dati numerici forniti nel messaggio, non inventare cifre. Per le raccomandazioni usa la tua conoscenza di film/serie realmente esistenti, e non proporre MAI un titolo già presente tra i visti o nella watchlist elencati.",
+        "Sei l'analista personale di un'app di tracking film/serie TV. Scrivi in italiano, in seconda persona, tono diretto e colloquiale, mai da comunicato stampa. Basati SOLO sui dati numerici forniti nel messaggio, non inventare cifre. Per le raccomandazioni usa la tua conoscenza di film/serie realmente esistenti, e non proporre MAI un titolo già presente tra i visti o nella watchlist elencati. Scrivi i numeri decimali sempre con il punto (7.4, 8.25), mai con la virgola.",
       messages: [{
         role: "user",
         content: `Statistiche già calcolate (non ricalcolarle):
@@ -240,7 +240,7 @@ ${seenLines}
 In watchlist del gruppo (NON consigliare questi): ${watchlistLine}
 
 Scrivi:
-1. "profile": 2-3 paragrafi che raccontano il profilo di gusti di questa persona, con numeri concreti presi dai dati sopra. Se nei dati ci sono attori ricorrenti, cita almeno uno o due attori per nome con il numero di titoli e la media (es. "Brad Pitt, 8 titoli, media 7,56"); cita anche il decennio più visto o meglio votato. Racconta i numeri veri (conteggi e medie): non scrivere le soglie minime usate per selezionare i dati (niente "su almeno 10 titoli").
+1. "profile": 2-3 paragrafi che raccontano il profilo di gusti di questa persona, con numeri concreti presi dai dati sopra. Se nei dati ci sono attori ricorrenti, cita almeno uno o due attori per nome con il numero di titoli e la media (es. "Brad Pitt, 8 titoli, media 7.56"); cita anche il decennio più visto o meglio votato. Racconta i numeri veri (conteggi e medie): non scrivere le soglie minime usate per selezionare i dati (niente "su almeno 10 titoli").
 2. "genres_note": 2-3 frasi su generi più visti vs. più amati. Chiama "più visti" solo i generi con più titoli e "più amati" solo quelli con la media più alta: non scambiare i due termini e non chiamare "preferito" un genere solo perché ha molti titoli.
 3. "recommendations": esattamente ${RECS_REQUESTED} titoli reali (film o serie, indica "media_type" corretto), MAI titoli già presenti nell'elenco dei visti o della watchlist qui sopra (controlla con attenzione, anche eventuali sequel/prequel/remake con lo stesso titolo esatto vanno evitati se il titolo coincide) — ne verranno scartati alcuni per sicurezza, per questo te ne chiediamo ${RECS_REQUESTED} invece di ${RECS_FINAL}. Ogni titolo deve avere una riga di motivazione ("why", almeno una frase completa) legata a un dato concreto sopra (un regista, un genere, una struttura narrativa ricorrente) — non lasciarla mai vuota o generica.
 
