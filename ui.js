@@ -843,7 +843,12 @@ export function renderGroupReportMeta(report) {
 // non c'è HTML arbitrario da interpretare, solo questa singola sostituzione
 // controllata su testo già sicuro.
 function mdBold(escapedText) {
-  return escapedText.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+  return escapedText
+    .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+    // I testi dei report li scrive Claude e spesso usano la virgola decimale
+    // ("7,42"): nell'app i decimali sono col punto, quindi si uniformano qui
+    // (vale anche per i report gia' salvati). Solo cifra,cifra.
+    .replace(/(\d),(\d)/g, "$1.$2");
 }
 
 export function renderReportGate(votedCount, min) {
