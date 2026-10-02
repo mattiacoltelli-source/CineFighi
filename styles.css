@@ -515,8 +515,14 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .rank-row__title { font-family: var(--font-display); font-size:14px; font-weight:700; line-height:1.2;
   display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
 .rank-row__meta { font-size:11px; color: var(--text3); margin-top:3px; }
+/* Toggle Film/Serie a sinistra, legenda ("Media del gruppo" / "I tuoi voti") a destra. */
+.ranking-bar { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:16px; }
+.ranking-legend { font-family: var(--font-display); font-weight:600; font-size:11px; color: var(--text3); white-space:nowrap; }
+.rank-row__side { display:flex; flex-direction:column; align-items:flex-end; gap:4px; justify-self:end; }
+.rank-count { font-size:10px; color: var(--text3); white-space:nowrap; }
+.podium-card .rank-count { margin-top:4px; }
 .rank-row__vote { padding:5px 10px; border-radius: var(--radius-pill); background: var(--cyan-dim); border:1px solid rgba(56,189,248,.2);
-  color: var(--cyan2); font-family: var(--font-display); font-size:12px; font-weight:800; justify-self:end; }
+  color: var(--cyan2); font-family: var(--font-display); font-size:12px; font-weight:800; }
 
 /* Stessa forma di .refresh-btn (Report): pill, icona + testo, superficie
    neutra — qui in tono neutro (text2) invece di arancio, dato che non è

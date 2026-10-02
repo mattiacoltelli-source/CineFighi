@@ -276,7 +276,7 @@ export function renderGenreBars(entries) {
         <span class="bar-row__name">${escapeHtml(e.label)}</span>
         <span class="bar-row__meta">
           <span class="bar-row__count">${e.value} titol${e.value === 1 ? "o" : "i"}</span>
-          ${e.avgVote != null ? `<span class="bar-row__vote">★ ${e.avgVote.toFixed(1).replace(".", ",")}</span>` : ""}
+          ${e.avgVote != null ? `<span class="bar-row__vote">★ ${e.avgVote.toFixed(1)}</span>` : ""}
         </span>
       </div>
       <div class="bar-track"><div class="bar__fill" data-width="${Math.max(8, (e.value / max) * 100)}"></div></div>
@@ -366,7 +366,7 @@ export function renderGenreBubbles(entries) {
     const low = Math.max(0, boundary - 27), high = Math.min(100, boundary + 27);
     const fillGradient = `linear-gradient(to top, ${CYAN} 0%, ${CYAN} ${low.toFixed(1)}%, ${NEUTRAL} ${boundary.toFixed(1)}%, ${ORANGE} ${high.toFixed(1)}%, ${ORANGE} 100%)`;
     const pos = GENRE_BUBBLE_LAYOUT[i] || { left: (i * 20) % 60, top: (i * 25) % 60 };
-    const voteText = hasAvg ? `★ ${g.avgVote.toFixed(1).replace(".", ",")}` : "";
+    const voteText = hasAvg ? `★ ${g.avgVote.toFixed(1)}` : "";
 
     const el = document.createElement("div");
     el.className = "genre-bubble";
@@ -443,6 +443,11 @@ function podiumOrder(items) {
   ].filter(Boolean);
 }
 
+// "5 voti" sotto il numero in classifica Gruppo (in Io __count e' null).
+function voteCountLabel(item) {
+  return item.__count == null ? "" : `<div class="rank-count">${item.__count} vot${item.__count === 1 ? "o" : "i"}</div>`;
+}
+
 function rankRowHtml(item, pos, typeLabel) {
   return `
     <div class="rank-row open-detail" data-id="${item.id}">
@@ -452,7 +457,7 @@ function rankRowHtml(item, pos, typeLabel) {
         <div class="rank-row__title">${escapeHtml(item.title)}</div>
         <div class="rank-row__meta">${item.year} · ${typeLabel}</div>
       </div>
-      <div class="rank-row__vote">${item.__score.toFixed(1)}</div>
+      <div class="rank-row__side"><div class="rank-row__vote">${item.__score.toFixed(1)}</div>${voteCountLabel(item)}</div>
     </div>
   `;
 }
@@ -520,6 +525,7 @@ export function renderRanking(items, typeLabel) {
       <div class="podium-card__title">${escapeHtml(item.title)}</div>
       <div class="podium-card__meta">${item.year} · ${typeLabel}</div>
       <div class="podium-card__vote">${item.__score.toFixed(1)}</div>
+      ${voteCountLabel(item)}
     </div>
   `).join("");
 
@@ -570,7 +576,7 @@ function affinityCalloutHtml(label, pair, { soli = false } = {}) {
       <div class="curiosita-stack__label">${escapeHtml(label)}</div>
       <div class="affinity-callout">
         <div class="affinity-callout__names">${escapeHtml(pair.a)} &amp; ${escapeHtml(pair.b)}</div>
-        <div class="affinity-callout__detail">Differenza media di ${soli ? "soli " : ""}<b>${pair.avgDiff.toFixed(2).replace(".", ",")} punti</b> sui <b>${pair.sharedCount} titoli</b> votati da entrambi.</div>
+        <div class="affinity-callout__detail">Differenza media di ${soli ? "soli " : ""}<b>${pair.avgDiff.toFixed(2)} punti</b> sui <b>${pair.sharedCount} titoli</b> votati da entrambi.</div>
       </div>
     </div>
   `;
@@ -580,7 +586,7 @@ function extremesPodiumHtml(items) {
   return podiumOrder(items).map(({ item, medal, first }) =>
     groupPodiumCardHtml({
       medal, title: item.title, meta: `${item.year} · ${item.count} voti`,
-      value: `±${item.sd.toFixed(1).replace(".", ",")}`, first, openDetailId: item.id,
+      value: `±${item.sd.toFixed(1)}`, first, openDetailId: item.id,
     })
   ).join("");
 }
@@ -603,7 +609,7 @@ function memberBarRowHtml(m) {
     <div class="bar-row">
       <div class="bar-row__label">
         <span class="bar-row__name"><span class="bar-row__dot" style="background:${color}"></span>${escapeHtml(m.user)}</span>
-        <span class="bar-row__meta"><span class="bar-row__vote">${m.avg.toFixed(2).replace(".", ",")}</span></span>
+        <span class="bar-row__meta"><span class="bar-row__vote">${m.avg.toFixed(2)}</span></span>
       </div>
       <div class="bar-track"><div class="bar__fill" style="width:${width}%; background:${color}"></div></div>
     </div>
@@ -631,9 +637,9 @@ function userCardHtml(m, blurb) {
     `;
   }
 
-  const statsParts = [`${m.n} voti`, `media ${m.avg.toFixed(2).replace(".", ",")}`];
-  if (m.label === "costante") statsParts.push(`il più costante (dev.st. ${m.sd.toFixed(2).replace(".", ",")})`);
-  else if (m.label === "polarizzato") statsParts.push(`il più polarizzato (dev.st. ${m.sd.toFixed(2).replace(".", ",")})`);
+  const statsParts = [`${m.n} voti`, `media ${m.avg.toFixed(2)}`];
+  if (m.label === "costante") statsParts.push(`il più costante (dev.st. ${m.sd.toFixed(2)})`);
+  else if (m.label === "polarizzato") statsParts.push(`il più polarizzato (dev.st. ${m.sd.toFixed(2)})`);
 
   let factHtml, plainLength;
   if (blurb) {
@@ -641,21 +647,21 @@ function userCardHtml(m, blurb) {
     plainLength = blurb.length;
   } else {
     const factParts = [];
-    if (m.topDirector) factParts.push(`Regista top: <b>${escapeHtml(m.topDirector.name)}</b> (${m.topDirector.avg.toFixed(2).replace(".", ",")}).`);
+    if (m.topDirector) factParts.push(`Regista top: <b>${escapeHtml(m.topDirector.name)}</b> (${m.topDirector.avg.toFixed(2)}).`);
     if (m.topFilms.length) {
       const top = m.topFilms[0];
       const ties = m.topFilms.filter(f => f.vote === top.vote).slice(0, 2).map(f => `<b>${escapeHtml(f.title)}</b>`);
       const list = ties.length > 1 ? ties.join(" e ") : ties[0];
-      factParts.push(`Voto più alto: ${list} (${top.vote.toFixed(1).replace(".", ",")}).`);
+      factParts.push(`Voto più alto: ${list} (${top.vote.toFixed(1)}).`);
     }
     if (m.label === "polarizzato" && m.bottomFilms.length) {
       const low = m.bottomFilms[0];
-      factParts.push(`Ma stronca senza pietà: <b>${escapeHtml(low.title)}</b> (${low.vote.toFixed(1).replace(".", ",")}).`);
+      factParts.push(`Ma stronca senza pietà: <b>${escapeHtml(low.title)}</b> (${low.vote.toFixed(1)}).`);
     }
     // Riga di chiusura sui gusti personali, presente su ogni card indipendentemente
     // dagli altri fatti sopra (regista/voto più alto): il genere che premia di
     // più, quando ne ha votati abbastanza da non essere un dato isolato.
-    if (m.topGenre) factParts.push(`Il genere che ama di più è <b>${escapeHtml(m.topGenre.name)}</b> (media ${m.topGenre.avg.toFixed(2).replace(".", ",")}).`);
+    if (m.topGenre) factParts.push(`Il genere che ama di più è <b>${escapeHtml(m.topGenre.name)}</b> (media ${m.topGenre.avg.toFixed(2)}).`);
     factHtml = factParts.join(" ");
     plainLength = factParts.join(" ").length;
   }
@@ -705,7 +711,7 @@ function genreChartHtml(topGenres) {
       <div class="mini-row">
         <div class="mini-row__label">
           <span class="mini-row__name">${escapeHtml(g.name)}</span>
-          <span class="mini-row__meta"><span class="mini-row__count">${g.count} titoli</span><span class="mini-row__vote">★ ${g.avg.toFixed(1).replace(".", ",")}</span></span>
+          <span class="mini-row__meta"><span class="mini-row__count">${g.count} titoli</span><span class="mini-row__vote">★ ${g.avg.toFixed(1)}</span></span>
         </div>
         <div class="mini-track"><div class="mini-fill" style="width:${width}%"></div></div>
       </div>
@@ -874,7 +880,7 @@ export function renderReportContent(report) {
       <div class="director-row">
         <span class="director-row__name">${escapeHtml(d.name)}</span>
         <span class="director-row__n">${d.count} titoli</span>
-        <span class="director-row__avg">★ ${Number(d.avg).toFixed(2)}</span>
+        <span class="director-row__avg">★ ${Number(d.avg).toFixed(1)}</span>
       </div>
     `).join("")
     : `<p class="empty-hint">Nessun regista visto almeno 2 volte, per ora.</p>`;
