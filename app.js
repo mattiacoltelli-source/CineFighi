@@ -574,7 +574,7 @@ function fillDetailVotes(votes) {
   document.getElementById("detailGroupStack").innerHTML =
     entries.slice(0, 5).map(([name]) => avatarHtml(name, 26)).join("");
   document.getElementById("detailGroupTitle").textContent =
-    entries.length ? `Voti del gruppo · ${entries.length}` : "Nessuno ha ancora votato";
+    entries.length ? `Voti del gruppo · ${entries.length} vot${entries.length === 1 ? "o" : "i"}` : "Nessuno ha ancora votato";
   document.getElementById("detailGroupSub").textContent = entries.length
     ? entries.slice(0, 3).map(([name, v]) => `${name} ${Number(v.vote).toFixed(1)}`).join(" · ") + (entries.length > 3 ? " …" : "")
     : "";
@@ -856,6 +856,9 @@ function renderStats() {
     .filter(item => Number.isFinite(item.__score))
     .sort((a, b) => b.__score - a.__score);
 
+  // Colore dei numeri: cyan = mio (Io), arancione = gruppo (vedi styles.css, [data-mode]).
+  document.getElementById("classificaSection").dataset.mode = statsMode === "me" ? "me" : "group";
+  document.getElementById("genreBars").dataset.mode = statsMode === "me" ? "me" : "group";
   document.getElementById("rankingLegend").textContent = statsMode === "me" ? "I tuoi voti" : "Media del gruppo";
   renderRanking(ranked, rankingMedia === "movie" ? "Film" : "Serie TV");
 }
