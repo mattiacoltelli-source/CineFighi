@@ -518,10 +518,10 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 /* Toggle Film/Serie a sinistra, legenda ("Media del gruppo" / "I tuoi voti") a destra. */
 .ranking-bar { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:16px; }
 .ranking-legend { font-family: var(--font-display); font-weight:600; font-size:11px; color: var(--text3); white-space:nowrap; }
-.rank-row__side { display:flex; flex-direction:column; align-items:flex-end; gap:4px; justify-self:end; }
+.rank-row__side { display:flex; flex-direction:column; align-items:center; gap:4px; justify-self:end; min-width:60px; }
 .rank-count { font-size:10px; color: var(--text3); white-space:nowrap; }
 .podium-card .rank-count { margin-top:4px; }
-.rank-row__vote { padding:5px 10px; border-radius: var(--radius-pill); background: var(--cyan-dim); border:1px solid rgba(56,189,248,.2);
+.rank-row__vote { min-width:54px; text-align:center; padding:5px 10px; border-radius: var(--radius-pill); background: var(--cyan-dim); border:1px solid rgba(56,189,248,.2);
   color: var(--cyan2); font-family: var(--font-display); font-size:12px; font-weight:800; }
 
 /* Stessa forma di .refresh-btn (Report): pill, icona + testo, superficie
