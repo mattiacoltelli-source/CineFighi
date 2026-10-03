@@ -2,7 +2,7 @@
 // Funzioni "di servizio": formattazioni, calcoli, normalizzazione dati TMDB.
 // Non parlano né con Supabase né con TMDB direttamente: sono utility pure.
 
-const IMG = "https://image.tmdb.org/t/p/w500";
+const IMG = "https://image.tmdb.org/t/p/";
 
 const GENRE_MAP = {
   28: "Azione", 12: "Avventura", 16: "Animazione", 35: "Commedia",
@@ -30,7 +30,9 @@ export function normalizeGenres(item) {
   return [];
 }
 
-export function posterUrl(path) { return path ? `${IMG}${path}` : ""; }
+// Taglia TMDB per uso: w185 per le miniature (<= 72px), w342 di default
+// (locandine da ~100-130px, anche a 3x), w500 solo dove serve la grande.
+export function posterUrl(path, size = "w342") { return path ? `${IMG}${size}${path}` : ""; }
 
 export function yearOf(item) {
   const d = item.release_date || item.first_air_date || "";

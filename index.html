@@ -21,8 +21,10 @@
        organizzazioni con residenza dati in Europa come questa (de.sentry.io) —
        restituisce sempre uno stub "not working anymore", verificato con curl
        diretto. Il bundle qui sotto non dipende da quel meccanismo. -->
-  <script src="https://browser.sentry-cdn.com/10.75.0/bundle.min.js" crossorigin="anonymous"></script>
-  <script>
+  <script defer src="https://browser.sentry-cdn.com/10.75.0/bundle.min.js" crossorigin="anonymous"></script>
+  <!-- defer + module: il bundle non blocca piu' il primo render; lo script
+       module parte dopo di lui e prima di app.js (ordine del documento). -->
+  <script type="module">
     // Solo il sito vero manda errori. Senza questo filtro finiscono qui dentro
     // anche i test automatici e le prove in locale (server statico su
     // localhost, Chromium headless): e' gia' successo, e su un progetto usato

@@ -3,7 +3,7 @@
 // richiama storage.js (Supabase) e tmdb.js, e passa i dati a ui.js per disegnare.
 
 import {
-  average, escapeHtml,
+  average, escapeHtml, posterUrl,
   votingLeaderboard, mostAffinePair, mostDivergentPair, mostDivisive, mostUnanimous,
   groupMemberProfiles, groupProfileStats
 } from "./cine-core.js?v=7a54f46";
@@ -555,7 +555,7 @@ async function handleAddFromSearch(tmdbId, type, status) {
 // tipo, trama, dati) — condivisa sia da openPreview (titolo non ancora
 // salvato) che da openDetail (titolo già in libreria).
 function fillDetailHeader(item) {
-  document.getElementById("detailPoster").style.backgroundImage = item.poster_path ? `url('https://image.tmdb.org/t/p/w500${item.poster_path}')` : "";
+  document.getElementById("detailPoster").style.backgroundImage = item.poster_path ? `url('${posterUrl(item.poster_path, "w500")}')` : "";
   document.getElementById("detailTitle").textContent = item.title;
   document.getElementById("detailYear").textContent = item.year;
   document.getElementById("detailType").textContent = item.media_type === "movie" ? "Film" : "Serie TV";
