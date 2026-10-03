@@ -230,7 +230,7 @@ export function renderLibraryList(items, mioNome = null) {
     const hoVotato = Number.isFinite(mio);
     return `
       <div class="list-item open-detail" data-id="${item.id}">
-        <div class="list-item__thumb" style="background-image:url('${posterUrl(item.poster_path)}')">
+        <div class="list-item__thumb" style="background-image:url('${posterUrl(item.poster_path, "w185")}')">
           <span class="badge badge--sm ${mediaBadgeClass(item)}">${mediaLabel(item)}</span>
         </div>
         <div class="list-item__body">
@@ -452,7 +452,7 @@ function rankRowHtml(item, pos, typeLabel) {
   return `
     <div class="rank-row open-detail" data-id="${item.id}">
       <div class="rank-row__pos">${pos}</div>
-      <div class="rank-row__poster" style="background-image:url('${posterUrl(item.poster_path)}')"></div>
+      <div class="rank-row__poster" style="background-image:url('${posterUrl(item.poster_path, "w185")}')"></div>
       <div class="rank-row__info">
         <div class="rank-row__title">${escapeHtml(item.title)}</div>
         <div class="rank-row__meta">${item.year} · ${typeLabel}</div>
