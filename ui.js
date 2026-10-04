@@ -183,11 +183,10 @@ export function renderSearchResults(items, libraryMap, currentUser) {
     const lib = libraryMap.get(key);
     // "già mio" = l'ho già visto/votato, oppure è già nella mia watchlist.
     // Se invece è in watchlist di qualcun altro ma non ancora mia, resta
-    // agganciabile: i due bottoni restano attivi (♡ mi unisce alla stessa
-    // watchlist condivisa, vedi addToWatchlist in storage.js) invece del
-    // tag bloccante "già in libreria".
+    // agganciabile: i due bottoni restano attivi (♡ Watchlist mi unisce alla
+    // stessa watchlist condivisa, vedi addToWatchlist in storage.js) invece
+    // del tag bloccante "già in libreria".
     const alreadyMine = !!lib && (lib.status === "seen" || !!lib.watchlist_by?.includes(currentUser));
-    const canJoinWatchlist = !!lib && !alreadyMine && lib.status === "watchlist";
     const showTag = !!lib && alreadyMine;
     return `
       <div class="poster-card">
@@ -199,7 +198,7 @@ export function renderSearchResults(items, libraryMap, currentUser) {
             : `
               <div class="poster-card__actions">
                 <button class="poster-btn poster-btn--watch action-add" data-id="${item.id}" data-type="${item.media_type}" data-status="watchlist">
-                  ♡ ${canJoinWatchlist ? "Anche a me" : "Lista"}
+                  ♡ Watchlist
                 </button>
                 <button class="poster-btn poster-btn--seen action-add" data-id="${item.id}" data-type="${item.media_type}" data-status="seen">
                   ✓ Visto
