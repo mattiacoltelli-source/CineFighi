@@ -301,6 +301,21 @@ function labelFor(index, id) {
   return key;
 }
 
+// Gli attori che ricorrono tra i film amati di una persona (almeno
+// ACTOR_MIN_PER_PERSON), per il solo testo del pannello. Non passa dai nodi
+// della rete: un attore qui non deve essere anche un nodo.
+function panelActorsOfPerson(index, key) {
+  const tally = new Map();
+  for (const e of index.byPerson.get(key) || []) {
+    for (const a of index.films.get(e.id)?.cast || []) tally.set(a, (tally.get(a) || 0) + 1);
+  }
+  return [...tally.entries()]
+    .filter(([, n]) => n >= ACTOR_MIN_PER_PERSON)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, PANEL_MAX_ACTORS)
+    .map(([name, n]) => ({ name, film: n }));
+}
+
 function metaFor(index, id) {
   const type = nodeType(id);
   const key = id.slice(type.length + 1);
@@ -316,8 +331,8 @@ function metaFor(index, id) {
   if (type === "persona") return {
     liked: (index.byPerson.get(key) || []).length,
     topGenres: topGenresOfPerson(index, key),
-    topDirectors: (index.personDirectors.get(key) || []).map(d => ({ name: d.id.slice(8), film: d.n })),
-    topActors: (index.personActors.get(key) || []).map(a => ({ name: a.id.slice(7), film: a.n }))
+    topDirectors: (index.personDirectors.get(key) || []).slice(0, PANEL_MAX_DIRECTORS).map(d => ({ name: d.id.slice(8), film: d.n })),
+    topActors: panelActorsOfPerson(index, key)
   };
   if (type === "regista") {
     const d = index.directors.get(key);
@@ -606,6 +621,12 @@ export const ACTOR_MIN_FILMS = 4;
 export const ACTORS_PER_PERSON = 1;
 export const ACTOR_MIN_PER_PERSON = 3;
 export const ACTOR_MIN_PER_PERSON_SHARED = 1;
+// Solo per il TESTO del pannello di una persona ("Registi/Attori ricorrenti"):
+// non cambiano la rete, che continua a usare ACTORS_PER_PERSON e le soglie
+// qui sopra. Tetti scelti per non allungare il blocco: qualche regista in meno
+// e qualche attore in più, a parità di righe.
+export const PANEL_MAX_DIRECTORS = 19;
+export const PANEL_MAX_ACTORS = 5;
 const DIRECTOR_PRIOR_WEIGHT = 5;
 const DIRECTOR_PRIOR_MEAN = 6.84;   // media di tutti i voti del gruppo
 
