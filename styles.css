@@ -166,6 +166,8 @@ button:active { transform: scale(.96); }
 }
 .btn--ghost { background: var(--surface2); color: var(--text2); border:1px solid var(--border); box-shadow:none; }
 .btn--ok { background: linear-gradient(160deg,#5ce89a,#2eb866); color:#05190d; }
+/* Watchlist: stesso aspetto di .poster-btn--watch nella ricerca (scuro, bordo arancione). */
+.btn--watch { background: rgba(17,24,32,.92); color:#dbe6f0; border:1.5px solid rgba(255,157,77,.55); box-shadow:none; }
 .btn--danger { background: linear-gradient(160deg,#ff8080,#e84040); color:#1a0505; }
 
 input, textarea {
