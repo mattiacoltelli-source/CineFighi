@@ -157,7 +157,6 @@ async function init() {
   window.addEventListener("popstate", e => {
     const screen = (e.state && e.state.screen) || "home";
     const wasDetail = getVisibleScreen() === "detail";
-    haptic(8);
     goToScreen(screen);
     // Tornando indietro dalla scheda si ritrova l'elenco dove era rimasto.
     if (wasDetail && screen !== "detail") jumpScroll(detailReturnScrollY);
@@ -519,7 +518,7 @@ async function addItemFromCache(containerId, tmdbId, type, status) {
     return null;
   }
 
-  haptic(12);
+  haptic("ok");
   if (res.joined) {
     // Titolo già esistente in watchlist (di qualcun altro): ci siamo solo
     // uniti, non è un nuovo titolo — aggiorna l'item già presente in db
@@ -631,7 +630,6 @@ async function openPreview(tmdbId, type) {
   previewItem = fullItem;
   detailReturnScreen = getVisibleScreen();
   detailReturnScrollY = window.scrollY;
-  haptic(8);
 
   fillDetailHeader(fullItem);
   fillDetailVotes({});
@@ -1089,7 +1087,6 @@ function openDetail(id, options = {}) {
   if (push) {
     detailReturnScreen = getVisibleScreen();
     detailReturnScrollY = window.scrollY;
-    haptic(8);
   }
 
   fillDetailHeader(item);
@@ -1200,7 +1197,7 @@ async function handleSaveVote() {
       showToast("Errore nel salvare il voto, riprova", "error");
       return;
     }
-    haptic(12);
+    haptic("ok");
     showToast("Voto salvato", "success");
     previewItem = null;
     const saved = byId(savedId);
@@ -1220,7 +1217,7 @@ async function handleSaveVote() {
     const statusRes = await updateTitleStatus(item.id, "seen");
     if (statusRes.ok) { item.status = "seen"; item.seen_at = new Date().toISOString(); }
   }
-  haptic(12);
+  haptic("ok");
   showToast("Voto salvato", "success");
   item.votes = item.votes || {};
   item.votes[currentUser] = { vote, comment, at: item.votes[currentUser]?.at || new Date().toISOString() };
@@ -1233,7 +1230,7 @@ async function handleClearVote() {
   if (!item) return;
   const res = await removeVote(item.id, currentUser);
   if (!res.ok) { showToast("Errore, riprova", "error"); return; }
-  haptic(10);
+  haptic("remove");
   showToast("Voto rimosso", "success");
   if (item.votes) delete item.votes[currentUser];
   renderAfterLocalChange();
@@ -1245,7 +1242,7 @@ async function handleToggleStatus() {
     // Modalità consultazione: unico pulsante disponibile è "Aggiungi alla watchlist"
     const promosso = await promotePreviewItem("watchlist");
     if (!promosso) { showToast("Errore, riprova", "error"); return; }
-    haptic(12);
+    haptic("ok");
     showToast(`${previewItem.title} aggiunto alla watchlist`, "success");
     previewItem = null;
     renderAfterLocalChange();
@@ -1258,7 +1255,7 @@ async function handleToggleStatus() {
   const nextStatus = item.status === "watchlist" ? "seen" : "watchlist";
   const res = await updateTitleStatus(item.id, nextStatus);
   if (!res.ok) { showToast("Errore, riprova", "error"); return; }
-  haptic(12);
+  haptic("ok");
   item.status = nextStatus;
   item.seen_at = nextStatus === "seen" ? new Date().toISOString() : null;
   // Tornando in watchlist da "visto", assicuriamoci che chi ha appena
@@ -1292,7 +1289,7 @@ async function handleRemove() {
   if (item.status === "watchlist") {
     const res = await removeFromWatchlist(item.id, currentUser);
     if (!res.ok) { showToast("Errore, riprova", "error"); return; }
-    haptic(12);
+    haptic("remove");
     showToast("Rimosso dalla tua watchlist", "success");
     currentDetailId = null;
     if (res.deleted) {
@@ -1314,7 +1311,7 @@ async function handleRemove() {
     async () => {
       const res = await removeTitle(item.id);
       if (!res.ok) { showToast("Errore, riprova", "error"); return; }
-      haptic(16);
+      haptic("remove");
       showToast("Rimosso dalla libreria", "success");
       currentDetailId = null;
       db = db.filter(x => x.id !== item.id);
@@ -1384,7 +1381,7 @@ function bindGlobalEvents() {
     btn.addEventListener("click", () => {
       const already = getVisibleScreen() === btn.dataset.screen;
       goToScreen(btn.dataset.screen);
-      if (!already) { pushHistoryState(btn.dataset.screen); haptic(8); }
+      if (!already) { pushHistoryState(btn.dataset.screen); }
       if (btn.dataset.screen === "stats") renderStats();
       if (btn.dataset.screen === "report") renderReport();
     });
@@ -1393,15 +1390,13 @@ function bindGlobalEvents() {
   document.getElementById("openWatchAll").addEventListener("click", () => { openLibrarySection("watchlist", "all"); pushHistoryState("library"); });
   document.getElementById("openSeenMovies").addEventListener("click", () => { openLibrarySection("seen", "movie"); pushHistoryState("library"); });
   document.getElementById("openSeenSeries").addEventListener("click", () => { openLibrarySection("seen", "tv"); pushHistoryState("library"); });
-  document.getElementById("libraryBackBtn").addEventListener("click", () => { haptic(8); history.back(); });
+  document.getElementById("libraryBackBtn").addEventListener("click", () => { history.back(); });
 
   document.getElementById("searchBtn").addEventListener("click", () => {
-    haptic(8);
     doSearch(document.getElementById("searchInput").value.trim());
   });
   document.getElementById("searchInput").addEventListener("keydown", e => {
     if (e.key !== "Enter") return;
-    haptic(8);
     doSearch(document.getElementById("searchInput").value.trim());
   });
 
@@ -1413,7 +1408,6 @@ function bindGlobalEvents() {
     const searchClearBtn = document.getElementById("searchClearBtn");
     searchInput.addEventListener("input", syncSearchClearBtn);
     searchClearBtn.addEventListener("click", () => {
-      haptic(8);
       searchInput.value = "";
       syncSearchClearBtn();
       doSearch("");
@@ -1441,7 +1435,7 @@ function bindGlobalEvents() {
     const previewBtn = e.target.closest(".open-preview");
     if (previewBtn) { openPreview(previewBtn.dataset.id, previewBtn.dataset.type); return; }
     const expandBtn = e.target.closest("[data-expand-fact]");
-    if (expandBtn) { haptic(6); toggleUserCardFact(expandBtn); return; }
+    if (expandBtn) { toggleUserCardFact(expandBtn); return; }
   });
 
   document.querySelectorAll(".filter-pill[data-filter]").forEach(btn => {
@@ -1466,28 +1460,27 @@ function bindGlobalEvents() {
   });
 
   document.querySelectorAll("#watchlistModeToggle .io-gruppo-btn").forEach(btn => {
-    btn.addEventListener("click", () => { haptic(8); watchlistMode = btn.dataset.mode; renderHome(); });
+    btn.addEventListener("click", () => { watchlistMode = btn.dataset.mode; renderHome(); });
   });
   document.querySelectorAll("#statsIoGruppoToggle .io-gruppo-btn").forEach(btn => {
     btn.addEventListener("click", () => { statsMode = btn.dataset.mode; renderStats(); });
   });
   document.querySelectorAll("#reportIoGruppoToggle .io-gruppo-btn").forEach(btn => {
-    btn.addEventListener("click", () => { haptic(8); reportMode = btn.dataset.mode; renderReportScreen(); });
+    btn.addEventListener("click", () => { reportMode = btn.dataset.mode; renderReportScreen(); });
   });
   document.querySelectorAll("#rankingMediaToggle .genre-view-btn").forEach(btn => {
     btn.addEventListener("click", () => { rankingMedia = btn.dataset.media; renderStats(); });
   });
   document.querySelectorAll("#genreViewToggle .genre-view-btn").forEach(btn => {
     btn.addEventListener("click", () => {
-      haptic(8);
       genreView = btn.dataset.genreView;
       setGenreView(genreView);
       renderStats();
     });
   });
-  document.getElementById("rankingExpandBtn").addEventListener("click", () => { haptic(8); toggleRankingList(); });
+  document.getElementById("rankingExpandBtn").addEventListener("click", () => { toggleRankingList(); });
 
-  document.getElementById("reportRefreshBtn").addEventListener("click", () => { haptic(8); handleReportRefresh(); });
+  document.getElementById("reportRefreshBtn").addEventListener("click", () => { handleReportRefresh(); });
 
   // DNA (la schermata che prima era "Stasera"). Il tap sui nodi lo gestisce
   // dna-view.js in delega; qui resta solo il "Ricomincia da me", che ha
@@ -1498,7 +1491,7 @@ function bindGlobalEvents() {
     showDna({ db, users, currentUser });
   });
 
-  document.getElementById("detailBackBtn").addEventListener("click", () => { haptic(8); history.back(); });
+  document.getElementById("detailBackBtn").addEventListener("click", () => { history.back(); });
   document.getElementById("detailVoteSlider").addEventListener("input", e => {
     document.getElementById("detailVoteValue").textContent = Number(e.target.value).toFixed(1);
   });
