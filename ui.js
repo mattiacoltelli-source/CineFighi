@@ -183,7 +183,7 @@ export function renderSearchResults(items, libraryMap, currentUser) {
     const lib = libraryMap.get(key);
     // "già mio" = l'ho già visto/votato, oppure è già nella mia watchlist.
     // Se invece è in watchlist di qualcun altro ma non ancora mia, resta
-    // agganciabile: i due bottoni restano attivi (♡ Watchlist mi unisce alla
+    // agganciabile: i due bottoni restano attivi (il pulsante Watchlist mi unisce alla
     // stessa watchlist condivisa, vedi addToWatchlist in storage.js) invece
     // del tag bloccante "già in libreria".
     const alreadyMine = !!lib && (lib.status === "seen" || !!lib.watchlist_by?.includes(currentUser));
@@ -198,7 +198,7 @@ export function renderSearchResults(items, libraryMap, currentUser) {
             : `
               <div class="poster-card__actions">
                 <button class="poster-btn poster-btn--watch action-add" data-id="${item.id}" data-type="${item.media_type}" data-status="watchlist">
-                  ♡ Watchlist
+                  Watchlist
                 </button>
                 <button class="poster-btn poster-btn--seen action-add" data-id="${item.id}" data-type="${item.media_type}" data-status="seen">
                   ✓ Visto
@@ -236,7 +236,7 @@ export function renderLibraryList(items, mioNome = null) {
           <div class="list-item__title">${escapeHtml(item.title)}</div>
           <div class="list-item__meta">${item.year} · ${mediaLabel(item)}</div>
           <div class="chip-row">
-            ${item.status === "watchlist" ? `<span class="chip chip--watchlist">♡ In watchlist</span>` : ""}
+            ${item.status === "watchlist" ? `<span class="chip chip--watchlist">In watchlist</span>` : ""}
             ${(item.genre_names || []).map(g => `<span class="chip">${escapeHtml(g)}</span>`).join("")}
             ${hoVotato ? `<span class="chip chip--mine">Tu ${mio.toFixed(1)}</span>` : ""}
             ${avg !== null ? `<span class="chip chip--vote">★ ${avg.toFixed(1)} · ${count} vot${count === 1 ? "o" : "i"}</span>` : ""}

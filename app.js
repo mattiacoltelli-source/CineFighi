@@ -643,7 +643,7 @@ async function openPreview(tmdbId, type) {
   document.getElementById("detailSaveVoteBtn").textContent = "Salva voto";
   applyVoteState(false);
   const previewStatusBtn = document.getElementById("detailStatusBtn");
-  previewStatusBtn.textContent = "♡ Aggiungi a watchlist";
+  previewStatusBtn.textContent = "Aggiungi alla watchlist";
   previewStatusBtn.classList.add("btn", "btn--watch");
   previewStatusBtn.classList.remove("btn-link-quiet", "hidden");
   document.getElementById("detailRemoveBtn").classList.add("hidden");
@@ -1242,7 +1242,7 @@ async function handleClearVote() {
 
 async function handleToggleStatus() {
   if (previewItem) {
-    // Modalità consultazione: unico pulsante disponibile è "Aggiungi a watchlist"
+    // Modalità consultazione: unico pulsante disponibile è "Aggiungi alla watchlist"
     const promosso = await promotePreviewItem("watchlist");
     if (!promosso) { showToast("Errore, riprova", "error"); return; }
     haptic(12);
