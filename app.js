@@ -643,8 +643,8 @@ async function openPreview(tmdbId, type) {
   document.getElementById("detailSaveVoteBtn").textContent = "Salva voto";
   applyVoteState(false);
   const previewStatusBtn = document.getElementById("detailStatusBtn");
-  previewStatusBtn.textContent = "Aggiungi a watchlist";
-  previewStatusBtn.classList.add("btn", "btn--ghost");
+  previewStatusBtn.textContent = "♡ Aggiungi a watchlist";
+  previewStatusBtn.classList.add("btn", "btn--watch");
   previewStatusBtn.classList.remove("btn-link-quiet", "hidden");
   document.getElementById("detailRemoveBtn").classList.add("hidden");
   document.getElementById("detailPrimaryActions").classList.remove("detail-primary-actions--secondary");
@@ -1113,7 +1113,7 @@ function openDetail(id, options = {}) {
   // bottone per segnarlo visto senza votare, non serve. Una volta visto,
   // "Segna come non visto" resta per correggere un errore.
   statusBtn.classList.toggle("hidden", !isSeen);
-  statusBtn.classList.remove("btn", "btn--ghost");
+  statusBtn.classList.remove("btn", "btn--watch");
   statusBtn.classList.add("btn-link-quiet");
   statusBtn.textContent = "Segna come non visto";
   document.getElementById("detailRemoveBtn").textContent =
