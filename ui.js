@@ -13,7 +13,8 @@ import {
 // (mai per navigare, aprire, chiudere o cambiare vista). Due sole "sensazioni":
 //   "ok"     -> salvato / aggiunto / cambiato di stato (un tocco breve)
 //   "remove" -> rimosso / eliminato (due tocchi brevi)
-const HAPTIC = { ok: 12, remove: [10, 50, 10] };
+//   "select" -> cambio di valore in un selettore (Io/Gruppo, Barre/Bolle): un tic appena percettibile
+const HAPTIC = { ok: 12, remove: [10, 50, 10], select: 5 };
 
 let _lastHapticAt = 0;
 export function haptic(kind = "ok") {

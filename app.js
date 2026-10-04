@@ -1459,6 +1459,15 @@ function bindGlobalEvents() {
     if (btn) { libraryGenre = btn.dataset.genreFilter; renderLibraryScreen(); }
   });
 
+  // Tic leggero quando un selettore (Io/Gruppo, Barre/Bolle, Film/Serie) cambia
+  // davvero valore. In fase di cattura, cosi' guarda lo stato PRIMA che il
+  // gestore del selettore aggiorni la classe "active": toccare il valore già
+  // attivo non vibra.
+  document.addEventListener("click", e => {
+    const btn = e.target.closest?.(".io-gruppo-btn, .genre-view-btn");
+    if (btn && !btn.classList.contains("active")) haptic("select");
+  }, true);
+
   document.querySelectorAll("#watchlistModeToggle .io-gruppo-btn").forEach(btn => {
     btn.addEventListener("click", () => { watchlistMode = btn.dataset.mode; renderHome(); });
   });
