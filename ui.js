@@ -9,8 +9,15 @@ import {
 
 // ─── ANIMAZIONI (numeri che contano, barre che si riempiono, tattile) ───────
 
+// Vibrazione leggera, solo per l'esito di un'azione che CAMBIA dei dati
+// (mai per navigare, aprire, chiudere o cambiare vista). Due sole "sensazioni":
+//   "ok"     -> salvato / aggiunto / cambiato di stato (un tocco breve)
+//   "remove" -> rimosso / eliminato (due tocchi brevi)
+const HAPTIC = { ok: 12, remove: [10, 50, 10] };
+
 let _lastHapticAt = 0;
-export function haptic(pattern = 10) {
+export function haptic(kind = "ok") {
+  const pattern = HAPTIC[kind] ?? kind;
   const now = Date.now();
   if (now - _lastHapticAt < 60) return;
   _lastHapticAt = now;

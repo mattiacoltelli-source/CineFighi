@@ -13,7 +13,7 @@ import {
   buildIndex, createNetwork, expand, collapse, hopsFrom, sharedCountOf, LIKE_THRESHOLD
 } from "./dna.js?v=b3a3ad7";
 import { escapeHtml } from "./cine-core.js?v=b3a3ad7";
-import { avatarHtml, haptic } from "./ui.js?v=b3a3ad7";
+import { avatarHtml } from "./ui.js?v=b3a3ad7";
 
 // Quanti vicini apre un tap, e a che distanza dal genitore. Il tetto e' sempre
 // stato una questione di spazio, non di gusto: con cinque figli su un ventaglio
@@ -720,12 +720,11 @@ function closeFullNetworkView() {
 }
 
 function bindFullView() {
-  el("dnaViewAllBtn")?.addEventListener("click", () => { haptic(8); openFullNetworkView(); });
-  el("dnaFullViewCloseBtn")?.addEventListener("click", () => { haptic(8); closeFullNetworkView(); });
+  el("dnaViewAllBtn")?.addEventListener("click", () => { openFullNetworkView(); });
+  el("dnaFullViewCloseBtn")?.addEventListener("click", () => { closeFullNetworkView(); });
   el("dnaFullViewZoom")?.addEventListener("click", e => {
     const btn = e.target.closest("[data-zoom]");
     if (!btn) return;
-    haptic(8);
     setFullViewFit(btn.dataset.zoom === "fit");
   });
 }
@@ -1159,7 +1158,6 @@ export function initDnaView() {
       const node = net?.nodes.get(id);
       if (!node) return;
       if (dragged) return;   // era un trascinamento, non un tocco
-      haptic(8);
       // Un tap su un nodo che non è quello attivo lo SELEZIONA soltanto: serve
       // a leggerne il pannello (chi l'ha votato, i generi, la regia) senza
       // toccare la rete. Apre o richiude solo il nodo già attivo, cioè quello
@@ -1241,13 +1239,12 @@ function bindPeople() {
   const done = el("dnaPeopleDoneBtn");
   const lista = el("dnaPeopleList");
 
-  btn?.addEventListener("click", () => { haptic(8); openSheet(!sheetOpen); });
-  done?.addEventListener("click", () => { haptic(8); openSheet(false); });
+  btn?.addEventListener("click", () => { openSheet(!sheetOpen); });
+  done?.addEventListener("click", () => { openSheet(false); });
 
   lista?.addEventListener("click", e => {
     const riga = e.target.closest(".dna-sheet__row");
     if (!riga || !ctx) return;
-    haptic(8);
     togglePerson(riga.dataset.user);
     // Il foglio resta aperto: scegliere più persone è la cosa normale, e
     // richiuderlo ad ogni spunta obbligherebbe a riaprirlo ogni volta.
