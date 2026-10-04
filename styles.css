@@ -189,6 +189,15 @@ button:active { transform: scale(.96); }
 .btn--ok { background: linear-gradient(160deg,#5ce89a,#2eb866); color:#05190d; }
 /* Watchlist: stesso aspetto di .poster-btn--watch nella ricerca (scuro, bordo arancione). */
 .btn--watch { background: var(--glass); color:var(--on-dark); border:1.5px solid var(--orange-a3); box-shadow:none; }
+/* Famiglia "pillola": azioni compatte (Mostra tutti, Aggiorna, Indietro, filtro
+   persone). Stessa altezza, stesso testo, stesso raggio; ogni classe sotto
+   aggiunge solo cio' che la distingue (larghezza, colore del testo, margini). */
+.rank-expand-btn, .refresh-btn, .detail-back-btn, .dna-people-btn {
+  display:inline-flex; align-items:center; justify-content:center; gap:6px;
+  min-height:36px; padding:0 14px; border-radius: var(--radius-pill);
+  background: var(--surface2); border:1px solid var(--border2);
+  color: var(--text2); font-family: var(--font-display); font-size: var(--fs-md); font-weight:700;
+}
 .btn--danger { background: linear-gradient(160deg,#ff8080,#e84040); color:#1a0505; }
 
 input, textarea {
@@ -550,11 +559,7 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 /* Stessa forma di .refresh-btn (Report): pill, icona + testo, superficie
    neutra — qui in tono neutro (text2) invece di arancio, dato che non è
    un'azione "primaria" come Aggiorna, solo mostrare righe già pronte. */
-.rank-expand-btn {
-  width:100%; margin-top:10px; display:flex; align-items:center; justify-content:center; gap:7px;
-  padding:11px 16px; border-radius: var(--radius-pill); background: var(--surface2); border:1px solid var(--border2);
-  color: var(--text2); font-family: var(--font-display); font-size:var(--fs-md); font-weight:700;
-}
+.rank-expand-btn { width:100%; margin-top:10px; display:flex; gap:7px; }
 .rank-expand-btn svg { width:14px; height:14px; stroke:currentColor; transition: transform var(--t-mid) var(--ease); }
 .rank-expand-btn.is-up svg { transform: rotate(180deg); }
 .rank-expand-btn__count { color: var(--text3); font-weight:600; }
@@ -642,8 +647,7 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 
 /* DETAIL */
 #screen-detail { padding-bottom:20px; }
-.detail-back-btn { display:inline-flex; align-items:center; gap:8px; padding:10px 16px; background: var(--surface);
-  border:1px solid var(--border); border-radius: var(--radius-pill); color: var(--text2); font-size:var(--fs-base); font-weight:600; margin-bottom:16px; }
+.detail-back-btn { margin-bottom:16px; }
 .detail-top { display:grid; grid-template-columns:100px 1fr; gap:16px; align-items:end; margin-bottom:16px; }
 .detail-poster { width:100px; height:150px; border-radius: var(--radius-md); background: var(--surface2) center/cover no-repeat; border:1px solid var(--border); }
 .detail-title { font-family: var(--font-display); font-size:var(--fs-xl); font-weight:900; line-height:1.05; margin-bottom:4px; }
@@ -825,11 +829,7 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .report-head .section__title { font-size:var(--fs-2xl); font-weight:800; }
 #reportTitleTap { padding: 10px 8px; margin: -10px -8px; }
 
-.refresh-btn {
-  flex:none; display:inline-flex; align-items:center; gap:6px; padding:8px 13px;
-  border-radius: var(--radius-pill); background: var(--surface); border:1px solid var(--border2);
-  color: var(--orange); font-family: var(--font-display); font-size:var(--fs-md); font-weight:700;
-}
+.refresh-btn { flex:none; color: var(--orange); }
 .refresh-btn svg { width:13px; height:13px; stroke:currentColor; }
 .refresh-btn:disabled { opacity:.55; pointer-events:none; }
 .refresh-btn.spinning svg { animation: refreshSpin 900ms linear infinite; }
@@ -925,13 +925,7 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
    riga del titolo per non aggiungere una riga alla pagina, e l'etichetta è
    già lo stato ("Tutti", un nome, oppure "2 persone"), così non serve un
    secondo indicatore da nessun'altra parte. */
-.dna-people-btn {
-  flex-shrink:0; display:inline-flex; align-items:center; gap:6px;
-  min-height:32px; padding:0 11px; border-radius:999px;
-  background: var(--surface2); border:1px solid var(--surface3);
-  color: var(--text2); font-family: var(--font-display); font-weight:700; font-size:var(--fs-sm);
-  cursor:pointer; -webkit-tap-highlight-color: transparent; max-width:46%;
-}
+.dna-people-btn { flex-shrink:0; cursor:pointer; -webkit-tap-highlight-color: transparent; max-width:46%; }
 .dna-people-btn svg { width:13px; height:13px; flex-shrink:0; }
 .dna-people-btn span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .dna-people-btn.is-active { border-color: var(--cyan-a3); color: var(--cyan); background: var(--cyan-dim); }
