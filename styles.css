@@ -1235,7 +1235,13 @@ body:has(.app.dna-schermo-intero #screen-tonight:not(.hidden)) .bottom-nav {
 .app.dna-schermo-intero:has(#screen-tonight:not(.hidden)) .dna-panel {
   position: absolute; left: 16px; right: 16px;
   bottom: calc(12px + env(safe-area-inset-bottom, 0px));
-  margin-top: 0; padding: 0; border-radius: var(--radius-md); overflow: hidden;
+  /* .dna-panel ha min-height:88px per il riquadro normale, dove serve a non
+     far "saltare" la pagina mentre i dati arrivano. Qui invece il pannello
+     galleggia sopra la rete e, da chiuso, è solo la riga del peek: senza
+     azzerarlo restava comunque alto 88px anche quando dentro c'era una riga
+     sola — mezzo vuoto, verificato dal vivo (peek ~54px contro un riquadro
+     forzato a 88px). */
+  margin-top: 0; min-height: 0; padding: 0; border-radius: var(--radius-md); overflow: hidden;
   background: rgba(10,13,19,.94); backdrop-filter: blur(10px);
   border: 1px solid var(--surface3); box-shadow: var(--shadow-lg);
 }

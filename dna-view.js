@@ -1271,6 +1271,10 @@ function bindPan() {
     if (!net || pid !== null || e.button > 0) return;
     // Il selettore è dentro al riquadro: lì i tocchi sono suoi, non della rete.
     if (e.target.closest(".dna-sheet")) return;
+    // Un solo nodo (il tuo, ancora chiuso) sta sempre fermo al centro: non
+    // c'è niente da scoprire trascinandolo, solo PAN_MARGIN di gioco a vuoto
+    // che lo spostava via dal centro senza motivo. Si sblocca al primo tap.
+    if (net.nodes.size <= 1) return;
     pid = e.pointerId;
     dragged = false;
     x0 = e.clientX; y0 = e.clientY;
