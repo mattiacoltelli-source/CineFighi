@@ -1030,11 +1030,23 @@ function render() {
       // pesata della vecchia centraSuiFigli) è il punto: una media si sposta
       // verso dove i nodi sono più fitti, un riquadro resta simmetrico
       // sull'ingombro vero anche quando il ventaglio è sbilanciato.
+      //
+      // Un vicino che place() ha dovuto spingere molto oltre raggio() (posto
+      // vicino già occupato, tocca allargare l'anello) non conta per questo
+      // calcolo: trascinerebbe la camera verso di lui invece di inquadrare
+      // bene il resto del ventaglio, lasciando tutto il resto peggio
+      // centrato per un nodo che comunque resterebbe ai margini — meglio
+      // lui solo raggiungibile trascinando (come ogni nodo ai bordi), non
+      // storcere l'inquadratura per inseguirlo. Verificato dal vivo: un
+      // ventaglio di 5 film su "Dramma" ne spingeva uno (Truman Show) ben
+      // oltre raggio() e tagliava mezzo poster fuori schermo.
+      const distanzaNormale = raggio() * 1.3;
       let minX = focus.x, maxX = focus.x, minY = focus.y, maxY = focus.y;
       for (const [id, h] of hops) {
         if (h > 1) continue;
         const n = net.nodes.get(id);
         if (!n || n.x === null) continue;
+        if (Math.hypot(n.x - focus.x, n.y - focus.y) > distanzaNormale) continue;
         minX = Math.min(minX, n.x); maxX = Math.max(maxX, n.x);
         minY = Math.min(minY, n.y); maxY = Math.max(maxY, n.y);
       }
