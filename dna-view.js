@@ -30,7 +30,22 @@ const STAGE_FOR_WIDE = 340;   // altezza del riquadro che serve al ventaglio da 
 function ramiPerTap() {
   return (el("dnaStage")?.clientHeight || 0) >= STAGE_FOR_WIDE ? NEIGHBOURS_WIDE : NEIGHBOURS_NARROW;
 }
+// A schermo intero (schermoIntero, vedi bindFullscreenToggle) il riquadro è
+// sempre abbastanza alto per i 5 rami di NEIGHBOURS_WIDE, e c'è anche più
+// posto per allargarli: lo stesso ventaglio respira di più invece di
+// restare compresso al raggio tarato sul riquadro piccolo.
+//
+// Ma non troppo: il riquadro a schermo intero è stretto (è il lato corto
+// del telefono), e un figlio piazzato esattamente in orizzontale finisce
+// con l'etichetta (fino a 88px, più larga del nodo stesso) a metà fuori
+// schermo se il raggio supera metà larghezza del riquadro meno quel
+// margine — verificato dal vivo (154px era troppo su un riquadro da 358px).
+// 154 resta il tetto per i riquadri molto larghi.
 function raggio() {
+  if (schermoIntero) {
+    const w = el("dnaStage")?.clientWidth || 358;
+    return Math.max(110, Math.min(154, w / 2 - 54));
+  }
   return ramiPerTap() === NEIGHBOURS_WIDE ? 126 : 112;
 }
 
@@ -69,6 +84,18 @@ let bound = false;
 // è proprio un'altra rete, costruita dallo stesso identico motore.
 let selectedPeople = null;
 
+// Schermo intero: stessa esplorazione di sempre, solo con tutto lo schermo
+// al posto del riquadro — vedi bindFullscreenToggle e la classe
+// "dna-schermo-intero" in styles.css. Falso di default: finché non lo tocchi
+// il comportamento è identico a prima di questo interruttore.
+let schermoIntero = false;
+
+// A schermo intero il pannello nasce "chiuso" (solo il titolo, vedi
+// renderPanel): si espande SOLO quando lo tocchi tu. Si azzera ad ogni tap su
+// un nodo, come panX/panY — toccare qualcosa di nuovo riparte sempre da capo,
+// non trascina dietro lo stato di apertura del nodo precedente.
+let panelExpanded = false;
+
 // L'ultimo contesto passato da app.js, così il selettore può ridisegnare da
 // solo senza farsi ripassare db/users/currentUser ad ogni interazione.
 let ctx = null;
@@ -80,6 +107,19 @@ let sheetOpen = false;
 let panX = 0;
 let panY = 0;
 let shownIds = [];          // i nodi davvero nel DOM all'ultimo render
+
+// Dopo un'apertura la camera non deve centrarsi con la media pesata della
+// vecchia centraSuiFigli (genitore + figli): una media si sposta verso dove
+// i nodi sono più fitti, e con un ventaglio sbilanciato lasciava vuoto
+// l'emicerchio opposto — verificato dal vivo, non un'ipotesi ("spesso mi
+// ritrovo con un sacco di schermo vuoto"). Il render ricentra invece sul
+// riquadro d'ingombro di focus + SOLO i figli appena nati (vedi più sotto),
+// non tutto il vicinato: un genitore già aperto da prima (quindi già visto)
+// non deve più contare nel calcolo e tirare la camera verso di sé — meglio
+// che resti lui ai bordi piuttosto che il ramo appena toccato, stesso
+// principio della vecchia centraSuiFigli ma con un riquadro invece di una
+// media (quella si spostava verso dove i nodi erano più fitti).
+let pendingNewIds = null;
 
 // Oltre questa distanza in pixel un trascinamento non è più un tap. Sotto,
 // il dito che si muove di poco mentre tocca non deve aprire niente per
@@ -177,6 +217,11 @@ export function showDna({ db, users, currentUser }) {
     net = createNetwork(index, radice);
     focusId = net.rootId;
     panX = 0; panY = 0;
+    // Ogni rete nuova riparte da schermo normale: lo schermo intero è una
+    // scelta per QUESTA esplorazione (si riaccende da sola al primo tocco,
+    // vedi il click handler più sotto), non una preferenza che sopravvive a
+    // un "Ricomincia" o a un cambio di persone selezionate.
+    setSchermoIntero(false);
     const root = net.nodes.get(net.rootId);
     root.x = 0;
     root.y = 0;
@@ -729,6 +774,35 @@ function bindFullView() {
   });
 }
 
+// Schermo intero: stessa esplorazione di sempre (stesso tocco, stesso
+// ventaglio radiale, stesso pannello), solo con tutto lo schermo invece del
+// riquadro — vedi .dna-schermo-intero in styles.css per il resto. Non è
+// "vedi tutta la rete" qui sopra (quella è una foto di sola lettura, pensata
+// per lo screenshot): qui si continua a toccare ed esplorare, proprio come
+// nel riquadro piccolo.
+// Accende/spegne lo schermo intero senza ridisegnare: la usano sia il tasto
+// dedicato sia l'apertura automatica al primo tocco su un nodo (vedi il
+// click handler più sotto), così i due punti non si disallineano mai su
+// cosa vuol dire "acceso" (classe su #app + aria-pressed sul tasto).
+function setSchermoIntero(value) {
+  schermoIntero = value;
+  el("dnaFullscreenBtn")?.setAttribute("aria-pressed", schermoIntero ? "true" : "false");
+  el("app")?.classList.toggle("dna-schermo-intero", schermoIntero);
+}
+
+function bindFullscreenToggle() {
+  const btn = el("dnaFullscreenBtn");
+  if (!btn) return;
+  btn.addEventListener("click", () => {
+    setSchermoIntero(!schermoIntero);
+    panelExpanded = false;
+    // La misura del riquadro è appena cambiata di scatto (niente transizione
+    // lì, vedi CSS): ricentra subito, non al prossimo tocco — altrimenti per
+    // un istante la rete resterebbe disegnata sulla misura vecchia.
+    if (net) { panX = 0; panY = 0; render(); }
+  });
+}
+
 function renderMessage(text) {
   const nodes = el("dnaNodes");
   const edges = el("dnaEdges");
@@ -822,23 +896,6 @@ function expandNode(id, focus = true) {
   layoutChildren(id, added);
   if (focus) focusId = id;
   return added;
-}
-
-// Aprendo un nodo la camera non si ferma sul nodo ma sul baricentro fra lui e
-// i figli appena nati: così i nuovi nodi entrano nell'inquadratura invece di
-// spuntare mezzi fuori dal bordo. Lo spostamento è al massimo un raggio, e la
-// prima trascinata dell'utente riparte semplicemente da qui.
-function centraSuiFigli(id, added) {
-  const p = net.nodes.get(id);
-  if (!p || !added.length) { panX = 0; panY = 0; return; }
-  let sx = p.x, sy = p.y, n = 1;
-  for (const c of added) {
-    const nodo = net.nodes.get(c);
-    if (!nodo || nodo.x === null) continue;
-    sx += nodo.x; sy += nodo.y; n++;
-  }
-  panX = p.x - sx / n;
-  panY = p.y - sy / n;
 }
 
 // ─── RENDER ──────────────────────────────────────────────────────────────────
@@ -976,6 +1033,41 @@ function render() {
   nodesEl.innerHTML = visible.map(n => nodeButton(n, hops)).join("");
 
   shownIds = visible.map(n => n.id);
+
+  if (pendingNewIds) {
+    const nuoviIds = pendingNewIds;
+    pendingNewIds = null;
+    const focus = net.nodes.get(focusId);
+    if (focus) {
+      // Solo focus + figli appena nati: un genitore già aperto da prima (e
+      // quindi già visto) non deve contare qui, altrimenti tira la camera
+      // verso di sé e peggiora la vista sul ramo che hai appena toccato —
+      // segnalato dal vivo ("mi basterebbe che quello che esce non sia
+      // tagliato, le parti aperte in precedenza possono esserlo").
+      //
+      // Un figlio che place() ha dovuto spingere molto oltre raggio() (posto
+      // vicino già occupato, tocca allargare l'anello) non conta nemmeno
+      // lui: trascinerebbe la camera verso di lui invece di inquadrare bene
+      // il resto del ventaglio, per un nodo che comunque resterebbe ai
+      // margini — meglio lui solo raggiungibile trascinando.
+      const distanzaNormale = raggio() * 1.3;
+      let minX = focus.x, maxX = focus.x, minY = focus.y, maxY = focus.y;
+      for (const id of nuoviIds) {
+        const n = net.nodes.get(id);
+        if (!n || n.x === null) continue;
+        if (Math.hypot(n.x - focus.x, n.y - focus.y) > distanzaNormale) continue;
+        minX = Math.min(minX, n.x); maxX = Math.max(maxX, n.x);
+        minY = Math.min(minY, n.y); maxY = Math.max(maxY, n.y);
+      }
+      // Spostamento comunque limitato a un raggio: un riquadro d'ingombro,
+      // a differenza della media pesata della vecchia centraSuiFigli, non ha
+      // da solo un limite naturale a quanto può spingere la camera.
+      const maxShift = raggio();
+      panX = Math.max(-maxShift, Math.min(maxShift, focus.x - (minX + maxX) / 2));
+      panY = Math.max(-maxShift, Math.min(maxShift, focus.y - (minY + maxY) / 2));
+    }
+  }
+
   applyCamera();
 
   // Con un nodo solo il riquadro sarebbe una scatola quasi vuota: finche' non
@@ -1000,6 +1092,13 @@ function render() {
 // Unico punto in cui si muove la camera: posizione del nodo attivo più lo
 // spostamento manuale. È una sola translate sul contenitore, non un
 // riposizionamento dei nodi, quindi il telefono la anima sul compositor.
+//
+// Una prima versione aggiungeva anche uno zoom automatico a schermo intero
+// (si allontanava quando i nodi aperti non ci stavano più): provata dal vivo,
+// rimpiccioliva le locandine anche con poche aperture (0,87x con soli 6 nodi)
+// e lasciava vuoti sopra la rete senza un vero motivo — tolta. A schermo
+// intero lo spazio in più arriva da raggio() e dal riquadro grande, non da
+// uno zoom: stesso identico comportamento della camera di sempre.
 function applyCamera(animata = true) {
   const canvas = el("dnaCanvas");
   if (!canvas || !net) return;
@@ -1042,6 +1141,33 @@ function renderPanel(node) {
     ? `<button type="button" class="dna-panel__scheda open-detail" data-id="${escapeHtml(node.meta.id)}">Scheda →</button>`
     : "";
 
+  // A schermo intero il pannello galleggia SOPRA la rete (vedi
+  // .dna-schermo-intero in styles.css): disteso come nel riquadro normale
+  // finiva per coprire nodi veri, rendendoli intoccabili (verificato dal
+  // vivo). Qui nasce come una striscia col solo titolo — "a comparsa" — e il
+  // corpo intero si vede solo se la tocchi (panelExpanded, azzerato ad ogni
+  // nuovo tap su un nodo). Fuori da schermo intero il pannello resta quello
+  // di sempre, nel flusso della pagina: lì non copre niente, non serve.
+  if (schermoIntero) {
+    panel.classList.toggle("is-compact", !panelExpanded);
+    panel.innerHTML = `
+      <button type="button" class="dna-panel__peek" id="dnaPanelPeek">
+        ${panelIcon(node)}<strong>${escapeHtml(panelTitle(node))}</strong>
+        <span class="dna-panel__peek-hint">${panelExpanded ? "▾" : "Dettagli →"}</span>
+      </button>
+      <div class="dna-panel__full"${panelExpanded ? "" : " hidden"}>
+        ${scheda}
+        ${panelBody(node)}
+        ${chiudi}
+      </div>`;
+    el("dnaPanelPeek")?.addEventListener("click", () => {
+      panelExpanded = !panelExpanded;
+      renderPanel(node);
+    });
+    return;
+  }
+
+  panel.classList.remove("is-compact");
   panel.innerHTML = `
     <div class="dna-panel__head">${panelIcon(node)}<strong>${escapeHtml(panelTitle(node))}</strong>${scheda}</div>
     ${panelBody(node)}
@@ -1148,6 +1274,7 @@ export function initDnaView() {
   bindPeople();
   bindIntroToggle();
   bindFullView();
+  bindFullscreenToggle();
 
   const nodesEl = el("dnaNodes");
   if (nodesEl) {
@@ -1158,6 +1285,15 @@ export function initDnaView() {
       const node = net?.nodes.get(id);
       if (!node) return;
       if (dragged) return;   // era un trascinamento, non un tocco
+      // Il primissimo tocco (un solo nodo in rete, quello che stai per
+      // espandere) accende da solo lo schermo intero: è il momento in cui lo
+      // spazio comincia davvero a servire, e chiedere di premere un tasto a
+      // parte prima è un passo in più che quasi nessuno farebbe mai. Va
+      // acceso PRIMA di espandere, non dopo: layoutChildren usa raggio(), e
+      // una volta piazzato un nodo non si muove più — acceso dopo, il primo
+      // giro di nodi resterebbe piazzato piccolo. Il tasto in alto resta per
+      // chi lo vuole spento, o acceso subito anche prima di toccare nulla.
+      if (net.nodes.size === 1 && !schermoIntero) setSchermoIntero(true);
       // Un tap su un nodo che non è quello attivo lo SELEZIONA soltanto: serve
       // a leggerne il pannello (chi l'ha votato, i generi, la regia) senza
       // toccare la rete. Apre o richiude solo il nodo già attivo, cioè quello
@@ -1171,9 +1307,11 @@ export function initDnaView() {
         nuovi = expandNode(id, false);
       }
       focusId = id;
-      // Toccare un nodo ricentra sempre; se ha appena figliato, la camera si
-      // sposta quel tanto che basta a far entrare i nuovi nodi.
-      if (nuovi) centraSuiFigli(id, nuovi);
+      panelExpanded = false;
+      // Toccare un nodo ricentra sempre; se ha appena figliato, il render che
+      // segue ricentra sul riquadro d'ingombro di focus + figli nuovi (vedi
+      // pendingNewIds più sopra nel file).
+      if (nuovi) pendingNewIds = nuovi;
       else { panX = 0; panY = 0; }
       render();
     });
@@ -1197,6 +1335,10 @@ function bindPan() {
     if (!net || pid !== null || e.button > 0) return;
     // Il selettore è dentro al riquadro: lì i tocchi sono suoi, non della rete.
     if (e.target.closest(".dna-sheet")) return;
+    // Un solo nodo (il tuo, ancora chiuso) sta sempre fermo al centro: non
+    // c'è niente da scoprire trascinandolo, solo PAN_MARGIN di gioco a vuoto
+    // che lo spostava via dal centro senza motivo. Si sblocca al primo tap.
+    if (net.nodes.size <= 1) return;
     pid = e.pointerId;
     dragged = false;
     x0 = e.clientX; y0 = e.clientY;

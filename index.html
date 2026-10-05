@@ -247,6 +247,13 @@
         <button id="dnaViewAllBtn" type="button" class="dna-view-all-btn hidden" aria-label="Vedi tutta la rete">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
         </button>
+        <!-- Schermo intero: stessa esplorazione di sempre (stesso tocco, stesso
+             ventaglio, stesso pannello), solo con tutto lo schermo invece del
+             riquadro. Icona sola come dnaViewAllBtn qui sopra; cambia aspetto
+             con aria-pressed, vedi bindFullscreenToggle in dna-view.js. -->
+        <button id="dnaFullscreenBtn" type="button" class="dna-view-all-btn dna-fullscreen-btn" aria-pressed="false" aria-label="Schermo intero">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+        </button>
         <button id="dnaResetBtn" type="button" class="btn-link-quiet dna-reset-btn">Ricomincia</button>
       </div>
       <button type="button" id="dnaIntroToggle" class="dna-intro" aria-expanded="false" aria-controls="dnaIntroFull">

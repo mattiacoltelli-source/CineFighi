@@ -57,7 +57,11 @@ export async function vaiA(page: Page, schermata: string): Promise<void> {
 export async function tuttoRaggiungibile(page: Page): Promise<{ ok: boolean; dettaglio: string }> {
   return page.evaluate(() => {
     const nav = document.querySelector(".bottom-nav");
-    const navTop = nav ? nav.getBoundingClientRect().top : window.innerHeight;
+    // A schermo intero la nav e' nascosta apposta (vedi dna-schermo-intero in
+    // styles.css): non c'e' niente da cui il contenuto debba restare
+    // raggiungibile scorrendo, stesso caso di quando la nav non c'e' proprio.
+    const navVisibile = !!nav && getComputedStyle(nav).display !== "none";
+    const navTop = navVisibile ? nav!.getBoundingClientRect().top : window.innerHeight;
     const doc = document.documentElement;
     const scrollDisponibile = doc.scrollHeight - doc.clientHeight;
 
