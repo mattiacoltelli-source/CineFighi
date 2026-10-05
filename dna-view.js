@@ -34,8 +34,18 @@ function ramiPerTap() {
 // sempre abbastanza alto per i 5 rami di NEIGHBOURS_WIDE, e c'è anche più
 // posto per allargarli: lo stesso ventaglio respira di più invece di
 // restare compresso al raggio tarato sul riquadro piccolo.
+//
+// Ma non troppo: il riquadro a schermo intero è stretto (è il lato corto
+// del telefono), e un figlio piazzato esattamente in orizzontale finisce
+// con l'etichetta (fino a 88px, più larga del nodo stesso) a metà fuori
+// schermo se il raggio supera metà larghezza del riquadro meno quel
+// margine — verificato dal vivo (154px era troppo su un riquadro da 358px).
+// 154 resta il tetto per i riquadri molto larghi.
 function raggio() {
-  if (schermoIntero) return 154;
+  if (schermoIntero) {
+    const w = el("dnaStage")?.clientWidth || 358;
+    return Math.max(110, Math.min(154, w / 2 - 54));
+  }
   return ramiPerTap() === NEIGHBOURS_WIDE ? 126 : 112;
 }
 
@@ -103,9 +113,13 @@ let shownIds = [];          // i nodi davvero nel DOM all'ultimo render
 // i nodi sono più fitti, e con un ventaglio sbilanciato lasciava vuoto
 // l'emicerchio opposto — verificato dal vivo, non un'ipotesi ("spesso mi
 // ritrovo con un sacco di schermo vuoto"). Il render ricentra invece sul
-// riquadro d'ingombro del vicinato immediato (vedi più sotto): resta
-// simmetrico sull'ingombro vero anche quando il ventaglio è sbilanciato.
-let recenterPending = false;
+// riquadro d'ingombro di focus + SOLO i figli appena nati (vedi più sotto),
+// non tutto il vicinato: un genitore già aperto da prima (quindi già visto)
+// non deve più contare nel calcolo e tirare la camera verso di sé — meglio
+// che resti lui ai bordi piuttosto che il ramo appena toccato, stesso
+// principio della vecchia centraSuiFigli ma con un riquadro invece di una
+// media (quella si spostava verso dove i nodi erano più fitti).
+let pendingNewIds = null;
 
 // Oltre questa distanza in pixel un trascinamento non è più un tap. Sotto,
 // il dito che si muove di poco mentre tocca non deve aprire niente per
@@ -1020,44 +1034,34 @@ function render() {
 
   shownIds = visible.map(n => n.id);
 
-  if (recenterPending) {
-    recenterPending = false;
+  if (pendingNewIds) {
+    const nuoviIds = pendingNewIds;
+    pendingNewIds = null;
     const focus = net.nodes.get(focusId);
     if (focus) {
-      // Solo il vicinato immediato (focus + genitore + figli, hop<=1): un
-      // ramo lungo più hop potrebbe sforare il riquadro e portare fuori
-      // schermo il nodo appena toccato. Il riquadro d'ingombro (non la media
-      // pesata della vecchia centraSuiFigli) è il punto: una media si sposta
-      // verso dove i nodi sono più fitti, un riquadro resta simmetrico
-      // sull'ingombro vero anche quando il ventaglio è sbilanciato.
+      // Solo focus + figli appena nati: un genitore già aperto da prima (e
+      // quindi già visto) non deve contare qui, altrimenti tira la camera
+      // verso di sé e peggiora la vista sul ramo che hai appena toccato —
+      // segnalato dal vivo ("mi basterebbe che quello che esce non sia
+      // tagliato, le parti aperte in precedenza possono esserlo").
       //
-      // Un vicino che place() ha dovuto spingere molto oltre raggio() (posto
-      // vicino già occupato, tocca allargare l'anello) non conta per questo
-      // calcolo: trascinerebbe la camera verso di lui invece di inquadrare
-      // bene il resto del ventaglio, lasciando tutto il resto peggio
-      // centrato per un nodo che comunque resterebbe ai margini — meglio
-      // lui solo raggiungibile trascinando (come ogni nodo ai bordi), non
-      // storcere l'inquadratura per inseguirlo. Verificato dal vivo: un
-      // ventaglio di 5 film su "Dramma" ne spingeva uno (Truman Show) ben
-      // oltre raggio() e tagliava mezzo poster fuori schermo.
+      // Un figlio che place() ha dovuto spingere molto oltre raggio() (posto
+      // vicino già occupato, tocca allargare l'anello) non conta nemmeno
+      // lui: trascinerebbe la camera verso di lui invece di inquadrare bene
+      // il resto del ventaglio, per un nodo che comunque resterebbe ai
+      // margini — meglio lui solo raggiungibile trascinando.
       const distanzaNormale = raggio() * 1.3;
       let minX = focus.x, maxX = focus.x, minY = focus.y, maxY = focus.y;
-      for (const [id, h] of hops) {
-        if (h > 1) continue;
+      for (const id of nuoviIds) {
         const n = net.nodes.get(id);
         if (!n || n.x === null) continue;
         if (Math.hypot(n.x - focus.x, n.y - focus.y) > distanzaNormale) continue;
         minX = Math.min(minX, n.x); maxX = Math.max(maxX, n.x);
         minY = Math.min(minY, n.y); maxY = Math.max(maxY, n.y);
       }
-      // Un vicino spinto molto più lontano del solito da place() (il
-      // ventaglio è occupato, tocca allargare l'anello) sbilancia il
-      // riquadro d'ingombro e da solo basterebbe a spingere il nodo appena
-      // toccato fuori dall'inquadratura. Lo spostamento resta quindi al
-      // massimo un raggio, come già diceva il commento della vecchia
-      // centraSuiFigli — lì valeva quasi per costruzione (media di punti
-      // entro un raggio), qui va imposto perché un riquadro d'ingombro non
-      // ha lo stesso limite naturale.
+      // Spostamento comunque limitato a un raggio: un riquadro d'ingombro,
+      // a differenza della media pesata della vecchia centraSuiFigli, non ha
+      // da solo un limite naturale a quanto può spingere la camera.
       const maxShift = raggio();
       panX = Math.max(-maxShift, Math.min(maxShift, focus.x - (minX + maxX) / 2));
       panY = Math.max(-maxShift, Math.min(maxShift, focus.y - (minY + maxY) / 2));
@@ -1305,9 +1309,9 @@ export function initDnaView() {
       focusId = id;
       panelExpanded = false;
       // Toccare un nodo ricentra sempre; se ha appena figliato, il render che
-      // segue ricentra sul riquadro d'ingombro di tutta la rete visibile (non
-      // solo sui figli nuovi — vedi recenterPending più sopra nel file).
-      if (nuovi) recenterPending = true;
+      // segue ricentra sul riquadro d'ingombro di focus + figli nuovi (vedi
+      // pendingNewIds più sopra nel file).
+      if (nuovi) pendingNewIds = nuovi;
       else { panX = 0; panY = 0; }
       render();
     });
