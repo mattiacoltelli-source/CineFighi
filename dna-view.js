@@ -30,7 +30,12 @@ const STAGE_FOR_WIDE = 340;   // altezza del riquadro che serve al ventaglio da 
 function ramiPerTap() {
   return (el("dnaStage")?.clientHeight || 0) >= STAGE_FOR_WIDE ? NEIGHBOURS_WIDE : NEIGHBOURS_NARROW;
 }
+// A schermo intero (schermoIntero, vedi bindFullscreenToggle) il riquadro è
+// sempre abbastanza alto per i 5 rami di NEIGHBOURS_WIDE, e c'è anche più
+// posto per allargarli: lo stesso ventaglio respira di più invece di
+// restare compresso al raggio tarato sul riquadro piccolo.
 function raggio() {
+  if (schermoIntero) return 154;
   return ramiPerTap() === NEIGHBOURS_WIDE ? 126 : 112;
 }
 
@@ -68,6 +73,12 @@ let bound = false;
 // persone soltanto. Non è un filtro grafico sui nodi già disegnati — la rete
 // è proprio un'altra rete, costruita dallo stesso identico motore.
 let selectedPeople = null;
+
+// Schermo intero: stessa esplorazione di sempre, solo con tutto lo schermo
+// al posto del riquadro — vedi bindFullscreenToggle e la classe
+// "dna-schermo-intero" in styles.css. Falso di default: finché non lo tocchi
+// il comportamento è identico a prima di questo interruttore.
+let schermoIntero = false;
 
 // L'ultimo contesto passato da app.js, così il selettore può ridisegnare da
 // solo senza farsi ripassare db/users/currentUser ad ogni interazione.
@@ -729,6 +740,27 @@ function bindFullView() {
   });
 }
 
+// Schermo intero: stessa esplorazione di sempre (stesso tocco, stesso
+// ventaglio radiale, stesso pannello), solo con tutto lo schermo invece del
+// riquadro — vedi .dna-schermo-intero in styles.css per il resto. Non è
+// "vedi tutta la rete" qui sopra (quella è una foto di sola lettura, pensata
+// per lo screenshot): qui si continua a toccare ed esplorare, proprio come
+// nel riquadro piccolo.
+function bindFullscreenToggle() {
+  const btn = el("dnaFullscreenBtn");
+  if (!btn) return;
+  btn.addEventListener("click", () => {
+    schermoIntero = !schermoIntero;
+    btn.setAttribute("aria-pressed", schermoIntero ? "true" : "false");
+    el("app")?.classList.toggle("dna-schermo-intero", schermoIntero);
+    // La misura del riquadro è appena cambiata di scatto (niente transizione
+    // lì, vedi CSS): ricentra e ricalcola subito lo zoom, non al prossimo
+    // tocco — altrimenti per un istante la rete resterebbe disegnata sulla
+    // misura vecchia.
+    if (net) { panX = 0; panY = 0; render(); }
+  });
+}
+
 function renderMessage(text) {
   const nodes = el("dnaNodes");
   const edges = el("dnaEdges");
@@ -976,6 +1008,7 @@ function render() {
   nodesEl.innerHTML = visible.map(n => nodeButton(n, hops)).join("");
 
   shownIds = visible.map(n => n.id);
+  camScale = cameraScaleTarget();
   applyCamera();
 
   // Con un nodo solo il riquadro sarebbe una scatola quasi vuota: finche' non
@@ -994,23 +1027,58 @@ function render() {
   renderPanel(net.nodes.get(focusId));
 }
 
+// Zoom automatico: SOLO a schermo intero, e mai oltre 1:1 — quello resta lo
+// zoom "naturale" di sempre. Si allontana solo quanto serve a tenere dentro
+// l'inquadratura i nodi già aperti (shownIds, lo stesso budget del render),
+// mai sotto una soglia che renderebbe le etichette illeggibili. Fuori da
+// schermo intero vale sempre 1: applyCamera torna a essere esattamente la
+// stessa translate di sempre.
+let camScale = 1;
+const CAM_SCALE_MIN = 0.62;
+
+function cameraScaleTarget() {
+  if (!schermoIntero || !net || shownIds.length < 2) return 1;
+  const stage = el("dnaStage");
+  if (!stage) return 1;
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const id of shownIds) {
+    const n = net.nodes.get(id);
+    if (!n || n.x === null) continue;
+    minX = Math.min(minX, n.x); maxX = Math.max(maxX, n.x);
+    minY = Math.min(minY, n.y); maxY = Math.max(maxY, n.y);
+  }
+  if (minX === Infinity) return 1;
+  const pad = 70;
+  const w = maxX - minX + pad * 2, h = maxY - minY + pad * 2;
+  const stageW = stage.clientWidth || 800, stageH = stage.clientHeight || 500;
+  return Math.max(CAM_SCALE_MIN, Math.min(1, stageW / w, stageH / h));
+}
+
 // Il pannello è il posto dove sta l'informazione: la rete mostra i
 // collegamenti, qui si legge chi, quanto e perché. È il motivo per cui un tap
 // apre pochi rami — quello che non diventa un nodo si legge qui sotto.
 // Unico punto in cui si muove la camera: posizione del nodo attivo più lo
-// spostamento manuale. È una sola translate sul contenitore, non un
-// riposizionamento dei nodi, quindi il telefono la anima sul compositor.
+// spostamento manuale, e ora anche camScale. È una sola translate+scale sul
+// contenitore, non un riposizionamento dei nodi, quindi il telefono la anima
+// sul compositor — la stessa transizione CSS che animava solo la posizione
+// ora anima anche lo zoom, senza bisogno di un ciclo JS a parte.
 function applyCamera(animata = true) {
   const canvas = el("dnaCanvas");
   if (!canvas || !net) return;
   const focus = net.nodes.get(focusId) || net.nodes.get(net.rootId);
   canvas.classList.toggle("is-dragging", !animata);
-  canvas.style.transform = `translate(${(-focus.x + panX).toFixed(1)}px, ${(-focus.y + panY).toFixed(1)}px)`;
+  const s = camScale;
+  const tx = panX - focus.x * s;
+  const ty = panY - focus.y * s;
+  canvas.style.transform = `translate(${tx.toFixed(1)}px, ${ty.toFixed(1)}px) scale(${s.toFixed(3)})`;
 }
 
 // Fin dove si può trascinare: quanto basta a portare al centro qualunque
 // nodo a schermo, e non un pixel di più. Così non si finisce mai nel vuoto
-// senza sapere come tornare indietro.
+// senza sapere come tornare indietro. Le distanze vanno scalate per
+// camScale: sono calcolate in coordinate virtuali, ma panX/panY sono pixel
+// veri sullo schermo — a camScale=1 (sempre, fuori da schermo intero) è lo
+// stesso conto di sempre.
 function panLimits() {
   const focus = net?.nodes.get(focusId);
   if (!focus) return { minX: 0, maxX: 0, minY: 0, maxY: 0 };
@@ -1018,8 +1086,9 @@ function panLimits() {
   for (const id of shownIds) {
     const n = net.nodes.get(id);
     if (!n || n.x === null) continue;
-    dxMin = Math.min(dxMin, n.x - focus.x); dxMax = Math.max(dxMax, n.x - focus.x);
-    dyMin = Math.min(dyMin, n.y - focus.y); dyMax = Math.max(dyMax, n.y - focus.y);
+    const dx = (n.x - focus.x) * camScale, dy = (n.y - focus.y) * camScale;
+    dxMin = Math.min(dxMin, dx); dxMax = Math.max(dxMax, dx);
+    dyMin = Math.min(dyMin, dy); dyMax = Math.max(dyMax, dy);
   }
   return {
     minX: -dxMax - PAN_MARGIN, maxX: -dxMin + PAN_MARGIN,
@@ -1148,6 +1217,7 @@ export function initDnaView() {
   bindPeople();
   bindIntroToggle();
   bindFullView();
+  bindFullscreenToggle();
 
   const nodesEl = el("dnaNodes");
   if (nodesEl) {

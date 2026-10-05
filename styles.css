@@ -942,6 +942,7 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 }
 .dna-view-all-btn svg { width:15px; height:15px; }
 .dna-view-all-btn:active { transform: scale(.94); }
+.dna-fullscreen-btn[aria-pressed="true"] { border-color: var(--cyan-a3); color: var(--cyan); background: var(--cyan-dim); }
 
 /* La vista a schermo intero della rete completa: stessi nodi/archi dello
    schermo normale (.dna-node, .dna-edge — nessuna regola nuova per loro qui),
@@ -1186,6 +1187,58 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
   .dna-fan { padding:2px 8px 2px 3px; }
   .dna-pills { margin-top:6px; }
 }
+
+/* Schermo intero: la stessa esplorazione di sempre (stesso tocco, stesso
+   ventaglio, stesso pannello — nessuna regola nuova su .dna-node/.dna-edge)
+   portata fino in fondo. Un interruttore in più (dnaFullscreenBtn), non il
+   comportamento di default: finché non lo tocchi la schermata resta
+   identica a oggi. La classe la mette bindFullscreenToggle in dna-view.js,
+   sullo stesso elemento e con lo stesso :has() di .dna-esplorazione qui
+   sopra. Va DOPO le regole normali e le due media query di .dna-stage: a
+   parità di specificità vince chi viene dopo nel foglio, e qui deve sempre
+   vincere lei, su qualunque altezza di schermo.
+   .bottom-nav è apposta FUORI da #app (vedi il commento su #dnaFullView in
+   index.html: dentro resterebbe intrappolata sotto la sua barra di
+   navigazione) — per raggiungerla da qui serve risalire a <body>, non si può
+   restare dentro .app. */
+.app.dna-schermo-intero:has(#screen-tonight:not(.hidden)) .topbar,
+.app.dna-schermo-intero:has(#screen-tonight:not(.hidden)) .dna-affinity,
+.app.dna-schermo-intero:has(#screen-tonight:not(.hidden)) .dna-note {
+  display: none;
+}
+body:has(.app.dna-schermo-intero #screen-tonight:not(.hidden)) .bottom-nav {
+  display: none;
+}
+.app.dna-schermo-intero:has(#screen-tonight:not(.hidden)) #screen-tonight {
+  position: fixed; inset: 0; z-index: 140;
+  background: var(--bg); padding: 0 16px calc(12px + env(safe-area-inset-bottom, 0px));
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.app.dna-schermo-intero:has(#screen-tonight:not(.hidden)) .dna-head {
+  padding-top: calc(10px + env(safe-area-inset-top, 0px));
+}
+/* Niente più vh/min-height/max-height calibrati sul resto della pagina (le
+   regole di .dna-stage qui sopra, comprese le due media query): qui lo
+   spazio è tutto suo, dalla testata (ridotta, come in esplorazione) fino al
+   fondo vero dello schermo — non fino a dove iniziava la barra di
+   navigazione. */
+.app.dna-schermo-intero:has(#screen-tonight:not(.hidden)) .dna-stage {
+  flex: 1; height: auto; min-height: 0; max-height: none;
+  transition: none;   /* qui il salto di misura è il gesto stesso, non il respiro di .dna-esplorazione */
+}
+/* Il pannello non spinge più la pagina: galleggia sopra il riquadro, stesso
+   trattamento di .dna-sheet (il foglio delle persone) qui sotto — così
+   aprirlo non ruba un pixel alla rete dietro. */
+.app.dna-schermo-intero:has(#screen-tonight:not(.hidden)) .dna-panel {
+  position: absolute; left: 16px; right: 16px;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  max-height: min(56vh, 420px); overflow-y: auto;
+  margin-top: 0; padding: 14px 16px; border-radius: var(--radius-md);
+  background: rgba(10,13,19,.94); backdrop-filter: blur(10px);
+  border: 1px solid var(--surface3); box-shadow: var(--shadow-lg);
+}
+.app.dna-schermo-intero:has(#screen-tonight:not(.hidden)) .dna-panel:empty { display: none; }
+
 /* Sfumatura ai quattro bordi: un nodo che esce dall'inquadratura si spegne
    invece di essere tranciato di netto, che sembrava un errore di disegno.
    È una maschera statica su un layer già composto, non costa un ridisegno. */
