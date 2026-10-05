@@ -98,6 +98,15 @@ let panX = 0;
 let panY = 0;
 let shownIds = [];          // i nodi davvero nel DOM all'ultimo render
 
+// Dopo un'apertura la camera non deve centrarsi con la media pesata della
+// vecchia centraSuiFigli (genitore + figli): una media si sposta verso dove
+// i nodi sono più fitti, e con un ventaglio sbilanciato lasciava vuoto
+// l'emicerchio opposto — verificato dal vivo, non un'ipotesi ("spesso mi
+// ritrovo con un sacco di schermo vuoto"). Il render ricentra invece sul
+// riquadro d'ingombro del vicinato immediato (vedi più sotto): resta
+// simmetrico sull'ingombro vero anche quando il ventaglio è sbilanciato.
+let recenterPending = false;
+
 // Oltre questa distanza in pixel un trascinamento non è più un tap. Sotto,
 // il dito che si muove di poco mentre tocca non deve aprire niente per
 // sbaglio, ma nemmeno sembrare che l'app non abbia sentito il tocco.
@@ -862,23 +871,6 @@ function expandNode(id, focus = true) {
   return added;
 }
 
-// Aprendo un nodo la camera non si ferma sul nodo ma sul baricentro fra lui e
-// i figli appena nati: così i nuovi nodi entrano nell'inquadratura invece di
-// spuntare mezzi fuori dal bordo. Lo spostamento è al massimo un raggio, e la
-// prima trascinata dell'utente riparte semplicemente da qui.
-function centraSuiFigli(id, added) {
-  const p = net.nodes.get(id);
-  if (!p || !added.length) { panX = 0; panY = 0; return; }
-  let sx = p.x, sy = p.y, n = 1;
-  for (const c of added) {
-    const nodo = net.nodes.get(c);
-    if (!nodo || nodo.x === null) continue;
-    sx += nodo.x; sy += nodo.y; n++;
-  }
-  panX = p.x - sx / n;
-  panY = p.y - sy / n;
-}
-
 // ─── RENDER ──────────────────────────────────────────────────────────────────
 
 function initials(name) {
@@ -1014,6 +1006,39 @@ function render() {
   nodesEl.innerHTML = visible.map(n => nodeButton(n, hops)).join("");
 
   shownIds = visible.map(n => n.id);
+
+  if (recenterPending) {
+    recenterPending = false;
+    const focus = net.nodes.get(focusId);
+    if (focus) {
+      // Solo il vicinato immediato (focus + genitore + figli, hop<=1): un
+      // ramo lungo più hop potrebbe sforare il riquadro e portare fuori
+      // schermo il nodo appena toccato. Il riquadro d'ingombro (non la media
+      // pesata della vecchia centraSuiFigli) è il punto: una media si sposta
+      // verso dove i nodi sono più fitti, un riquadro resta simmetrico
+      // sull'ingombro vero anche quando il ventaglio è sbilanciato.
+      let minX = focus.x, maxX = focus.x, minY = focus.y, maxY = focus.y;
+      for (const [id, h] of hops) {
+        if (h > 1) continue;
+        const n = net.nodes.get(id);
+        if (!n || n.x === null) continue;
+        minX = Math.min(minX, n.x); maxX = Math.max(maxX, n.x);
+        minY = Math.min(minY, n.y); maxY = Math.max(maxY, n.y);
+      }
+      // Un vicino spinto molto più lontano del solito da place() (il
+      // ventaglio è occupato, tocca allargare l'anello) sbilancia il
+      // riquadro d'ingombro e da solo basterebbe a spingere il nodo appena
+      // toccato fuori dall'inquadratura. Lo spostamento resta quindi al
+      // massimo un raggio, come già diceva il commento della vecchia
+      // centraSuiFigli — lì valeva quasi per costruzione (media di punti
+      // entro un raggio), qui va imposto perché un riquadro d'ingombro non
+      // ha lo stesso limite naturale.
+      const maxShift = raggio();
+      panX = Math.max(-maxShift, Math.min(maxShift, focus.x - (minX + maxX) / 2));
+      panY = Math.max(-maxShift, Math.min(maxShift, focus.y - (minY + maxY) / 2));
+    }
+  }
+
   applyCamera();
 
   // Con un nodo solo il riquadro sarebbe una scatola quasi vuota: finche' non
@@ -1245,9 +1270,10 @@ export function initDnaView() {
       }
       focusId = id;
       panelExpanded = false;
-      // Toccare un nodo ricentra sempre; se ha appena figliato, la camera si
-      // sposta quel tanto che basta a far entrare i nuovi nodi.
-      if (nuovi) centraSuiFigli(id, nuovi);
+      // Toccare un nodo ricentra sempre; se ha appena figliato, il render che
+      // segue ricentra sul riquadro d'ingombro di tutta la rete visibile (non
+      // solo sui figli nuovi — vedi recenterPending più sopra nel file).
+      if (nuovi) recenterPending = true;
       else { panX = 0; panY = 0; }
       render();
     });
