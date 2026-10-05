@@ -203,6 +203,11 @@ export function showDna({ db, users, currentUser }) {
     net = createNetwork(index, radice);
     focusId = net.rootId;
     panX = 0; panY = 0;
+    // Ogni rete nuova riparte da schermo normale: lo schermo intero è una
+    // scelta per QUESTA esplorazione (si riaccende da sola al primo tocco,
+    // vedi il click handler più sotto), non una preferenza che sopravvive a
+    // un "Ricomincia" o a un cambio di persone selezionate.
+    setSchermoIntero(false);
     const root = net.nodes.get(net.rootId);
     root.x = 0;
     root.y = 0;
@@ -761,13 +766,21 @@ function bindFullView() {
 // "vedi tutta la rete" qui sopra (quella è una foto di sola lettura, pensata
 // per lo screenshot): qui si continua a toccare ed esplorare, proprio come
 // nel riquadro piccolo.
+// Accende/spegne lo schermo intero senza ridisegnare: la usano sia il tasto
+// dedicato sia l'apertura automatica al primo tocco su un nodo (vedi il
+// click handler più sotto), così i due punti non si disallineano mai su
+// cosa vuol dire "acceso" (classe su #app + aria-pressed sul tasto).
+function setSchermoIntero(value) {
+  schermoIntero = value;
+  el("dnaFullscreenBtn")?.setAttribute("aria-pressed", schermoIntero ? "true" : "false");
+  el("app")?.classList.toggle("dna-schermo-intero", schermoIntero);
+}
+
 function bindFullscreenToggle() {
   const btn = el("dnaFullscreenBtn");
   if (!btn) return;
   btn.addEventListener("click", () => {
-    schermoIntero = !schermoIntero;
-    btn.setAttribute("aria-pressed", schermoIntero ? "true" : "false");
-    el("app")?.classList.toggle("dna-schermo-intero", schermoIntero);
+    setSchermoIntero(!schermoIntero);
     panelExpanded = false;
     // La misura del riquadro è appena cambiata di scatto (niente transizione
     // lì, vedi CSS): ricentra subito, non al prossimo tocco — altrimenti per
@@ -1256,6 +1269,15 @@ export function initDnaView() {
       const node = net?.nodes.get(id);
       if (!node) return;
       if (dragged) return;   // era un trascinamento, non un tocco
+      // Il primissimo tocco (un solo nodo in rete, quello che stai per
+      // espandere) accende da solo lo schermo intero: è il momento in cui lo
+      // spazio comincia davvero a servire, e chiedere di premere un tasto a
+      // parte prima è un passo in più che quasi nessuno farebbe mai. Va
+      // acceso PRIMA di espandere, non dopo: layoutChildren usa raggio(), e
+      // una volta piazzato un nodo non si muove più — acceso dopo, il primo
+      // giro di nodi resterebbe piazzato piccolo. Il tasto in alto resta per
+      // chi lo vuole spento, o acceso subito anche prima di toccare nulla.
+      if (net.nodes.size === 1 && !schermoIntero) setSchermoIntero(true);
       // Un tap su un nodo che non è quello attivo lo SELEZIONA soltanto: serve
       // a leggerne il pannello (chi l'ha votato, i generi, la regia) senza
       // toccare la rete. Apre o richiude solo il nodo già attivo, cioè quello
