@@ -1259,6 +1259,9 @@ body:has(.app.dna-schermo-intero #screen-tonight:not(.hidden)) .bottom-nav {
   font-family: var(--font-display); font-size: var(--fs-base); font-weight: 700;
 }
 .dna-panel__peek-hint { flex-shrink: 0; font-size: var(--fs-xs); color: var(--cyan2); font-weight: 600; }
+/* Chi ha votato il film, visibile anche da chiuso: .dna-fans porta già il
+   suo margin-top, qui serve solo il respiro laterale e sotto. */
+.dna-panel__peek-fans { padding: 0 16px 12px; }
 .dna-panel__full { padding: 0 16px 14px; }
 .dna-panel__full[hidden] { display: none; }
 

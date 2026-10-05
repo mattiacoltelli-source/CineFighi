@@ -1150,11 +1150,19 @@ function renderPanel(node) {
   // di sempre, nel flusso della pagina: lì non copre niente, non serve.
   if (schermoIntero) {
     panel.classList.toggle("is-compact", !panelExpanded);
+    // Chiuso, un film mostra anche chi l'ha votato e con che voto: è
+    // l'informazione che conta di più su un nodo film, e prima toccava
+    // aprire il pannello anche solo per vedere quello. Da aperto i fan sono
+    // già dentro panelBody, qui sotto — non si ripetono due volte.
+    const fansCompatti = !panelExpanded && node.type === "film" && (node.meta.fans || []).length
+      ? `<div class="dna-panel__peek-fans">${fansHtml(node.meta.fans)}</div>`
+      : "";
     panel.innerHTML = `
       <button type="button" class="dna-panel__peek" id="dnaPanelPeek">
         ${panelIcon(node)}<strong>${escapeHtml(panelTitle(node))}</strong>
         <span class="dna-panel__peek-hint">${panelExpanded ? "▾" : "Dettagli →"}</span>
       </button>
+      ${fansCompatti}
       <div class="dna-panel__full"${panelExpanded ? "" : " hidden"}>
         ${scheda}
         ${panelBody(node)}
