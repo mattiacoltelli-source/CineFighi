@@ -80,6 +80,12 @@ let selectedPeople = null;
 // il comportamento è identico a prima di questo interruttore.
 let schermoIntero = false;
 
+// A schermo intero il pannello nasce "chiuso" (solo il titolo, vedi
+// renderPanel): si espande SOLO quando lo tocchi tu. Si azzera ad ogni tap su
+// un nodo, come panX/panY — toccare qualcosa di nuovo riparte sempre da capo,
+// non trascina dietro lo stato di apertura del nodo precedente.
+let panelExpanded = false;
+
 // L'ultimo contesto passato da app.js, così il selettore può ridisegnare da
 // solo senza farsi ripassare db/users/currentUser ad ogni interazione.
 let ctx = null;
@@ -753,10 +759,10 @@ function bindFullscreenToggle() {
     schermoIntero = !schermoIntero;
     btn.setAttribute("aria-pressed", schermoIntero ? "true" : "false");
     el("app")?.classList.toggle("dna-schermo-intero", schermoIntero);
+    panelExpanded = false;
     // La misura del riquadro è appena cambiata di scatto (niente transizione
-    // lì, vedi CSS): ricentra e ricalcola subito lo zoom, non al prossimo
-    // tocco — altrimenti per un istante la rete resterebbe disegnata sulla
-    // misura vecchia.
+    // lì, vedi CSS): ricentra subito, non al prossimo tocco — altrimenti per
+    // un istante la rete resterebbe disegnata sulla misura vecchia.
     if (net) { panX = 0; panY = 0; render(); }
   });
 }
@@ -1008,7 +1014,6 @@ function render() {
   nodesEl.innerHTML = visible.map(n => nodeButton(n, hops)).join("");
 
   shownIds = visible.map(n => n.id);
-  camScale = cameraScaleTarget();
   applyCamera();
 
   // Con un nodo solo il riquadro sarebbe una scatola quasi vuota: finche' non
@@ -1027,58 +1032,30 @@ function render() {
   renderPanel(net.nodes.get(focusId));
 }
 
-// Zoom automatico: SOLO a schermo intero, e mai oltre 1:1 — quello resta lo
-// zoom "naturale" di sempre. Si allontana solo quanto serve a tenere dentro
-// l'inquadratura i nodi già aperti (shownIds, lo stesso budget del render),
-// mai sotto una soglia che renderebbe le etichette illeggibili. Fuori da
-// schermo intero vale sempre 1: applyCamera torna a essere esattamente la
-// stessa translate di sempre.
-let camScale = 1;
-const CAM_SCALE_MIN = 0.62;
-
-function cameraScaleTarget() {
-  if (!schermoIntero || !net || shownIds.length < 2) return 1;
-  const stage = el("dnaStage");
-  if (!stage) return 1;
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-  for (const id of shownIds) {
-    const n = net.nodes.get(id);
-    if (!n || n.x === null) continue;
-    minX = Math.min(minX, n.x); maxX = Math.max(maxX, n.x);
-    minY = Math.min(minY, n.y); maxY = Math.max(maxY, n.y);
-  }
-  if (minX === Infinity) return 1;
-  const pad = 70;
-  const w = maxX - minX + pad * 2, h = maxY - minY + pad * 2;
-  const stageW = stage.clientWidth || 800, stageH = stage.clientHeight || 500;
-  return Math.max(CAM_SCALE_MIN, Math.min(1, stageW / w, stageH / h));
-}
-
 // Il pannello è il posto dove sta l'informazione: la rete mostra i
 // collegamenti, qui si legge chi, quanto e perché. È il motivo per cui un tap
 // apre pochi rami — quello che non diventa un nodo si legge qui sotto.
 // Unico punto in cui si muove la camera: posizione del nodo attivo più lo
-// spostamento manuale, e ora anche camScale. È una sola translate+scale sul
-// contenitore, non un riposizionamento dei nodi, quindi il telefono la anima
-// sul compositor — la stessa transizione CSS che animava solo la posizione
-// ora anima anche lo zoom, senza bisogno di un ciclo JS a parte.
+// spostamento manuale. È una sola translate sul contenitore, non un
+// riposizionamento dei nodi, quindi il telefono la anima sul compositor.
+//
+// Una prima versione aggiungeva anche uno zoom automatico a schermo intero
+// (si allontanava quando i nodi aperti non ci stavano più): provata dal vivo,
+// rimpiccioliva le locandine anche con poche aperture (0,87x con soli 6 nodi)
+// e lasciava vuoti sopra la rete senza un vero motivo — tolta. A schermo
+// intero lo spazio in più arriva da raggio() e dal riquadro grande, non da
+// uno zoom: stesso identico comportamento della camera di sempre.
 function applyCamera(animata = true) {
   const canvas = el("dnaCanvas");
   if (!canvas || !net) return;
   const focus = net.nodes.get(focusId) || net.nodes.get(net.rootId);
   canvas.classList.toggle("is-dragging", !animata);
-  const s = camScale;
-  const tx = panX - focus.x * s;
-  const ty = panY - focus.y * s;
-  canvas.style.transform = `translate(${tx.toFixed(1)}px, ${ty.toFixed(1)}px) scale(${s.toFixed(3)})`;
+  canvas.style.transform = `translate(${(-focus.x + panX).toFixed(1)}px, ${(-focus.y + panY).toFixed(1)}px)`;
 }
 
 // Fin dove si può trascinare: quanto basta a portare al centro qualunque
 // nodo a schermo, e non un pixel di più. Così non si finisce mai nel vuoto
-// senza sapere come tornare indietro. Le distanze vanno scalate per
-// camScale: sono calcolate in coordinate virtuali, ma panX/panY sono pixel
-// veri sullo schermo — a camScale=1 (sempre, fuori da schermo intero) è lo
-// stesso conto di sempre.
+// senza sapere come tornare indietro.
 function panLimits() {
   const focus = net?.nodes.get(focusId);
   if (!focus) return { minX: 0, maxX: 0, minY: 0, maxY: 0 };
@@ -1086,9 +1063,8 @@ function panLimits() {
   for (const id of shownIds) {
     const n = net.nodes.get(id);
     if (!n || n.x === null) continue;
-    const dx = (n.x - focus.x) * camScale, dy = (n.y - focus.y) * camScale;
-    dxMin = Math.min(dxMin, dx); dxMax = Math.max(dxMax, dx);
-    dyMin = Math.min(dyMin, dy); dyMax = Math.max(dyMax, dy);
+    dxMin = Math.min(dxMin, n.x - focus.x); dxMax = Math.max(dxMax, n.x - focus.x);
+    dyMin = Math.min(dyMin, n.y - focus.y); dyMax = Math.max(dyMax, n.y - focus.y);
   }
   return {
     minX: -dxMax - PAN_MARGIN, maxX: -dxMin + PAN_MARGIN,
@@ -1111,6 +1087,33 @@ function renderPanel(node) {
     ? `<button type="button" class="dna-panel__scheda open-detail" data-id="${escapeHtml(node.meta.id)}">Scheda →</button>`
     : "";
 
+  // A schermo intero il pannello galleggia SOPRA la rete (vedi
+  // .dna-schermo-intero in styles.css): disteso come nel riquadro normale
+  // finiva per coprire nodi veri, rendendoli intoccabili (verificato dal
+  // vivo). Qui nasce come una striscia col solo titolo — "a comparsa" — e il
+  // corpo intero si vede solo se la tocchi (panelExpanded, azzerato ad ogni
+  // nuovo tap su un nodo). Fuori da schermo intero il pannello resta quello
+  // di sempre, nel flusso della pagina: lì non copre niente, non serve.
+  if (schermoIntero) {
+    panel.classList.toggle("is-compact", !panelExpanded);
+    panel.innerHTML = `
+      <button type="button" class="dna-panel__peek" id="dnaPanelPeek">
+        ${panelIcon(node)}<strong>${escapeHtml(panelTitle(node))}</strong>
+        <span class="dna-panel__peek-hint">${panelExpanded ? "▾" : "Dettagli →"}</span>
+      </button>
+      <div class="dna-panel__full"${panelExpanded ? "" : " hidden"}>
+        ${scheda}
+        ${panelBody(node)}
+        ${chiudi}
+      </div>`;
+    el("dnaPanelPeek")?.addEventListener("click", () => {
+      panelExpanded = !panelExpanded;
+      renderPanel(node);
+    });
+    return;
+  }
+
+  panel.classList.remove("is-compact");
   panel.innerHTML = `
     <div class="dna-panel__head">${panelIcon(node)}<strong>${escapeHtml(panelTitle(node))}</strong>${scheda}</div>
     ${panelBody(node)}
@@ -1241,6 +1244,7 @@ export function initDnaView() {
         nuovi = expandNode(id, false);
       }
       focusId = id;
+      panelExpanded = false;
       // Toccare un nodo ricentra sempre; se ha appena figliato, la camera si
       // sposta quel tanto che basta a far entrare i nuovi nodi.
       if (nuovi) centraSuiFigli(id, nuovi);
