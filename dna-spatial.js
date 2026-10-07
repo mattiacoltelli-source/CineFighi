@@ -23,7 +23,7 @@
 // Tutta la logica di "chi si collega a chi" resta in dna.js; aprire e
 // richiudere resta in dna-view.js (onTap).
 
-import { hopsFrom } from "./dna.js?v=729a211";
+import { hopsFrom } from "./dna.js?v=218c0f7";
 
 const F = 560;                               // focale: più bassa = prospettiva più forte
 // z per 0,1,2,3,4+ salti dal nodo attivo. Il nodo attivo e i suoi vicini
