@@ -558,6 +558,33 @@ test("il pannello e' lo stesso nelle due viste e la scheda mostra regia, cast e 
   await expect(page.locator("#detailCredits .detail-fact").first()).toBeAttached();
   await expect(page.locator("#detailFacts")).toHaveCount(0);
 
+  // Stile coerente con il resto dell'app: etichette come i titoli delle card
+  // (Outfit, grassetto), anno e valori alla stessa grandezza, e una riga a capo
+  // allineata al valore, non all'etichetta.
+  const stile = await page.evaluate(() => {
+    const css = (e: Element) => getComputedStyle(e);
+    const lab = document.querySelector("#detailCredits .detail-credit__l");
+    const titoloCard = document.querySelector(".detail-card__title");
+    const anno = document.getElementById("detailYear")!;
+    const val = document.querySelector("#detailCredits .detail-credit > span:not(.detail-credit__l)");
+    return {
+      etichettaUgualeAlTitoloCard: !!lab && !!titoloCard && ["fontFamily", "fontSize", "fontWeight", "letterSpacing", "textTransform"].every(k => (css(lab) as any)[k] === (css(titoloCard) as any)[k]),
+      annoEValoreStessaGrandezza: !!val && css(anno).fontSize === css(val).fontSize,
+    };
+  });
+  expect(stile.etichettaUgualeAlTitoloCard, "le etichette Regia/Con non hanno lo stile dei titoli delle card").toBe(true);
+  expect(stile.annoEValoreStessaGrandezza, "anno e regia/cast non hanno la stessa grandezza").toBe(true);
+  // Una riga a capo (cast lungo) resta nella colonna del valore.
+  const allineato = await page.evaluate(() => {
+    const v = document.querySelector("#detailCredits .detail-credit > span:not(.detail-credit__l)") as HTMLElement;
+    v.textContent = "Nome Cognome Molto Lungo, Altro Nome Cognome Lungo, Un Terzo Attore Con Nome Lungo, Quarto Attore Con Nome Lungo";
+    const r = document.createRange(); r.selectNodeContents(v);
+    const lefts = new Set([...r.getClientRects()].map(x => Math.round(x.left)));
+    return { righe: Math.round(v.getBoundingClientRect().height / parseFloat(getComputedStyle(v).lineHeight)), lefts: lefts.size };
+  });
+  expect(allineato.righe, "la prova non è andata a capo").toBeGreaterThan(1);
+  expect(allineato.lefts, "la riga a capo non è allineata al valore").toBe(1);
+
   expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
   expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
 });

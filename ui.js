@@ -943,8 +943,8 @@ export function renderDetailCredits(item) {
   const cast = (item.cast_names || []).filter(Boolean);
   const generi = item.genre_names || [];
   return [
-    item.director ? `<div class="detail-credit"><span>Regia</span>${escapeHtml(item.director)}</div>` : "",
-    cast.length ? `<div class="detail-credit"><span>Con</span>${cast.map(escapeHtml).join(", ")}</div>` : "",
+    item.director ? `<div class="detail-credit"><span class="detail-credit__l">Regia</span><span>${escapeHtml(item.director)}</span></div>` : "",
+    cast.length ? `<div class="detail-credit"><span class="detail-credit__l">Con</span><span>${cast.map(escapeHtml).join(", ")}</span></div>` : "",
     generi.length ? `<div class="detail-facts detail-facts--sm">${generi.map(g => `<span class="detail-fact">${escapeHtml(g)}</span>`).join("")}</div>` : ""
   ].join("");
 }

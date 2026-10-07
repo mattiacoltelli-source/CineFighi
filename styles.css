@@ -652,6 +652,9 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .detail-poster { width:100px; height:150px; border-radius: var(--radius-md); background: var(--surface2) center/cover no-repeat; border:1px solid var(--border); }
 .detail-title { font-family: var(--font-display); font-size:var(--fs-xl); font-weight:900; line-height:1.05; margin-bottom:4px; }
 .detail-year-type { display:flex; gap:8px; align-items:center; }
+/* L'anno: stessa grandezza e colore dei dati sotto (regia, cast); prima
+   prendeva il testo base (16px bianco), l'unico anno così grande nell'app. */
+#detailYear { font-size:var(--fs-base); font-weight:600; color: var(--text2); }
 .detail-type-badge { font-size:var(--fs-md); font-weight:600; color: var(--text2); padding:2px 8px; background: var(--surface2); border:1px solid var(--border); border-radius: var(--radius-pill); font-size:var(--fs-xs); }
 .detail-body { display:flex; flex-direction:column; gap:12px; }
 .detail-card { background: var(--surface); border:1px solid var(--border); border-radius: var(--radius-lg); padding:16px; }
@@ -659,8 +662,11 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .detail-overview { font-size:var(--fs-base); color: var(--text2); line-height:1.6; }
 .detail-facts { display:flex; flex-wrap:wrap; gap:6px; }
 .detail-credits { display:flex; flex-direction:column; gap:3px; margin-top:8px; }
-.detail-credit { font-size:var(--fs-md); color: var(--text); line-height:1.35; }
-.detail-credit span { display:inline-block; min-width:38px; margin-right:6px; color: var(--text3); font-size:var(--fs-sm); text-transform:uppercase; letter-spacing:.4px; }
+/* Due colonne (etichetta | valore): una riga a capo resta allineata al valore,
+   non torna sotto l'etichetta. Valori come la trama (14px grigio chiaro),
+   etichette come i titoli delle card (.detail-card__title). */
+.detail-credit { display:grid; grid-template-columns:46px 1fr; column-gap:8px; align-items:baseline; font-size:var(--fs-base); color: var(--text2); line-height:1.35; }
+.detail-credit__l { font-family: var(--font-display); font-size:var(--fs-xs); font-weight:700; text-transform:uppercase; letter-spacing:.7px; color: var(--text3); }
 .detail-facts--sm { margin-top:5px; gap:5px; }
 .detail-facts--sm .detail-fact { padding:3px 9px; font-size:var(--fs-sm); }
 .detail-fact { display:inline-block; padding:5px 12px; background: var(--surface2); border:1px solid var(--border); border-radius: var(--radius-pill); font-size:var(--fs-md); color: var(--text2); }
