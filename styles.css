@@ -160,17 +160,17 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 800; line-height: 1.
 
 /* SECTIONS */
 .section { margin: 22px 0; }
-.stats-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
-.stat-card { background: var(--surface); border:1px solid var(--border); border-radius: var(--radius-md);
-  padding:8px 12px 7px; position:relative; overflow:hidden; }
-.stat-card::before { content:""; position:absolute; top:0; left:0; right:0; height:2px;
-  background: linear-gradient(90deg, var(--cyan), transparent); opacity:.5; }
-.stat-card:nth-child(2)::before { background: linear-gradient(90deg, var(--orange), transparent); }
-.stat-card:nth-child(3)::before { background: linear-gradient(90deg, var(--cyan), transparent); }
-.stat-card:nth-child(4)::before { background: linear-gradient(90deg, var(--orange), transparent); }
-.stat-card__num { font-family: var(--font-display); font-size:var(--fs-xl); font-weight:900; line-height:1;
+/* I quattro numeri (visti, watchlist, film, serie) stanno su una riga sola,
+   sotto la Classifica: la Classifica è ciò che si guarda e si tocca, i numeri
+   sono contorno e non devono rubarle la prima schermata. */
+.stats-strip { display:grid; grid-template-columns:repeat(4,1fr); background: var(--surface);
+  border:1px solid var(--border); border-radius: var(--radius-md); overflow:hidden; }
+.stats-strip__item { padding:8px 4px 7px; text-align:center; min-width:0; }
+.stats-strip__item + .stats-strip__item { border-left:1px solid var(--border); }
+.stats-strip__num { display:block; font-family: var(--font-display); font-size:var(--fs-lg); font-weight:900; line-height:1;
   font-variant-numeric: tabular-nums; }
-.stat-card__label { font-size:var(--fs-2xs); color: var(--text3); margin-top:3px; text-transform:uppercase; letter-spacing:.5px; }
+.stats-strip__label { display:block; margin-top:3px; font-size:var(--fs-2xs); color: var(--text3);
+  text-transform:uppercase; letter-spacing:.4px; white-space:nowrap; }
 .section__header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
 .section__title { font-size: var(--fs-lg); font-weight:700; margin-bottom: 12px; }
 .section__header .section__title { margin-bottom: 0; }
