@@ -11,9 +11,9 @@
 
 import {
   buildIndex, createNetwork, expand, collapse, hopsFrom, sharedCountOf, LIKE_THRESHOLD
-} from "./dna.js?v=da87024";
-import { escapeHtml } from "./cine-core.js?v=da87024";
-import { avatarHtml } from "./ui.js?v=da87024";
+} from "./dna.js?v=4b87992";
+import { escapeHtml } from "./cine-core.js?v=4b87992";
+import { avatarHtml } from "./ui.js?v=4b87992";
 
 // Quanti vicini apre un tap, e a che distanza dal genitore. Il tetto e' sempre
 // stato una questione di spazio, non di gusto: con cinque figli su un ventaglio
