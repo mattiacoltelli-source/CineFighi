@@ -626,3 +626,31 @@ test("con due persone il pannello della radice dice quanti titoli amano entrambe
   expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
   expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
 });
+
+// Un percorso lungo mostra al massimo 5 passaggi: la radice, "…" e gli ultimi 4.
+test("un percorso lungo mostra la radice, i puntini e gli ultimi quattro passaggi", async ({ page }) => {
+  const scritture = soloLettura(page);
+  const guasti = osserva(page);
+  await entra(page);
+  await vaiA(page, "tonight");
+  await page.locator("#dnaNodes .dna-node.is-root").waitFor({ state: "visible", timeout: 30_000 });
+  await toccaNodo(page, "#dnaNodes .dna-node.is-root");
+
+  const toccati = new Set<string>();
+  for (let i = 0; i < 7; i++) {
+    const id = await page.evaluate((gia: string[]) =>
+      [...document.querySelectorAll<HTMLElement>("#dnaNodes .dna-node")]
+        .find(n => !n.classList.contains("is-focus") && !n.classList.contains("is-root") && !gia.includes(n.dataset.node!))?.dataset.node,
+      [...toccati]);
+    expect(id, "la rete non ha abbastanza nodi da toccare").toBeTruthy();
+    toccati.add(id!);
+    await page.evaluate((i2: string) => (document.querySelector(`#dnaNodes [data-node="${i2}"]`) as HTMLElement).click(), id!);
+    await page.waitForTimeout(700);
+  }
+  await page.locator("#dnaPanelPeek").click();
+  expect(await page.locator("#dnaPanel .dna-path__chip").count(), "il percorso lungo non ha 5 passaggi").toBe(5);
+  await expect(page.locator("#dnaPanel .dna-path__sep", { hasText: "…" })).toHaveCount(1);
+
+  expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
+  expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
+});
