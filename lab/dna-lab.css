@@ -45,14 +45,16 @@ body.lab {
 }
 .lab-nodes { position:absolute; inset:0; }
 
-/* Il nodo resta identico; cambia solo chi lo posiziona. La transform arriva
-   da JS in --t (traslazione proiettata + scala di profondità). */
+/* Il nodo resta identico; cambia solo chi lo posiziona: la transform la
+   scrive dna-lab.js (traslazione proiettata + scala di profondità). */
 .lab .lab-nodes .dna-node {
-  left:0; top:0; transform: var(--t); transition:none; will-change: transform, opacity;
+  left:0; top:0; transition:none; will-change: transform, opacity;
 }
-/* Stesso trucco del DNA (vedi .dna-node:active in styles.css): la pressione
-   si somma al posizionamento invece di sostituirlo. */
-.lab .lab-nodes .dna-node:active { transform: var(--t) scale(.94); }
+/* La transform del bottone la scrive il JS inline (e vince sulla regola
+   :active di styles.css): la pressione rimpicciolisce il contenuto, stesso
+   effetto a vista. */
+.lab .lab-nodes .dna-node > :first-child { transition: transform var(--t-fast) var(--ease); }
+.lab .lab-nodes .dna-node:active > :first-child { transform: scale(.94); }
 .lab .lab-nodes .dna-node.no-label .dna-node__label { visibility:hidden; }
 .lab .lab-edges .dna-edge { transition:none; }
 
@@ -66,7 +68,8 @@ body.lab {
 .lab-panel { margin:0; padding:10px 14px 12px; height:132px; flex-shrink:0; overflow-y:auto; border-top:1px solid var(--border); }
 .lab-panel .dna-panel__head strong { font-size:var(--fs-base); }
 
-.lab-root { color: var(--text2); max-width:34%; appearance:none; -webkit-appearance:none; padding-right:10px; }
+.lab-tool--icon { min-width:36px; padding:6px 0; font-size:var(--fs-lg); line-height:1; color: var(--text2); }
+.lab-root { color: var(--text2); max-width:30%; appearance:none; -webkit-appearance:none; padding-right:10px; }
 .lab-count {
   position:absolute; left:8px; bottom:6px; font-size:var(--fs-2xs); color: var(--text3);
   pointer-events:none; font-variant-numeric: tabular-nums;

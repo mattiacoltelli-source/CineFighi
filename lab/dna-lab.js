@@ -19,7 +19,10 @@ import { avatarHtml } from "../ui.js?v=da87024";
 import { escapeHtml } from "../cine-core.js?v=da87024";
 
 const DNA_POSTER = "https://image.tmdb.org/t/p/w185";
-const MAX_NODES = 20;
+// Tetto della porzione, scelto dal selettore in alto (Step 3: si sale per
+// gradini e a ogni gradino si guarda se la rete resta leggibile).
+const CAPS = [20, 35, 50];
+let MAX_NODES = 35;
 
 // Nel bundle di prova (artifact) i dati e le locandine arrivano già dentro la
 // pagina; nel repo si leggono dal vivo, con le stesse funzioni dell'app.
@@ -35,9 +38,18 @@ const posterSrc = (path) => window.__LAB_POSTERS__?.[path] || `${DNA_POSTER}${pa
 
 const F = 560;                               // focale: più bassa = prospettiva più forte
 const DEPTH = [-30, 70, 260, 440, 600];      // z per 0,1,2,3,4+ salti dal nodo attivo
-const OPAC  = [1, 1, .6, .34, .2];           // stessa scala di .dna-h0..h4
+const OPAC  = [1, 1, .6, .34, .2];           // stessa scala di .dna-h0..h4 (panoramica, rete piatta)
+// "Nebbia di distanza" (Step 3): a zoom normale si vede la propria zona — il
+// nodo attivo, i vicini, un velo dei nodi a 2 salti — e il resto svanisce
+// nella profondità. Allontanandosi col pinch la nebbia si dirada fino alla
+// scala qui sopra: è la panoramica. Senza, oltre i ~30 nodi i lontani
+// convergevano verso il centro (prospettiva) e riempivano di rumore lo sfondo
+// attorno al nodo attivo.
+const OPAC_ZONA = [1, 1, .5, .1, 0];
+const FOG_Z = 380;                           // quanto allontanarsi per diradarla del tutto
+const FLATTEN = 0.75;                        // in panoramica la profondità si appiattisce di tanto
 const LABEL_MIN_SCALE = .62;
-const Z_MIN = -520, Z_MAX = 170;
+const Z_MIN = -1500, Z_MAX = 170;           // Z_MIN largo: serve alla panoramica
 const MAX_TILT = 0.14;                       // ~8°
 const DRAG_THRESHOLD = 8;
 
@@ -66,6 +78,9 @@ const raggio = () => (ramiPerTap() === 5 ? RADIUS_WIDE : RADIUS_NARROW);
 
 // ─── AVVIO ───────────────────────────────────────────────────────────────────
 
+function storedCap() { try { return Number(localStorage.getItem("dnaLabCap")) || null; } catch { return null; } }
+function storeCap(n) { try { localStorage.setItem("dnaLabCap", String(n)); } catch {} }
+
 function storedRoot() { try { return localStorage.getItem("dnaLabRoot"); } catch { return null; } }
 function storeRoot(u) { try { localStorage.setItem("dnaLabRoot", u); } catch {} }
 
@@ -86,6 +101,11 @@ async function boot() {
   rootUser = conVoti.includes(salvato) ? salvato : conVoti[0];
   sel.value = rootUser;
   sel.addEventListener("change", () => { rootUser = sel.value; storeRoot(rootUser); reset(); });
+  const cap = el("labCap");
+  if (CAPS.includes(storedCap())) MAX_NODES = storedCap();
+  cap.innerHTML = CAPS.map(n => `<option value="${n}">${n} nodi</option>`).join("");
+  cap.value = String(MAX_NODES);
+  cap.addEventListener("change", () => { MAX_NODES = Number(cap.value); storeCap(MAX_NODES); refreshUi(); });
   reset();
 }
 
@@ -245,7 +265,7 @@ function refreshUi() {
   }
   for (const e of net.edges) edgeDom.get(edgeKey(e))?.classList.toggle("is-focus", e.a === focusId || e.b === focusId);
   el("labHint").classList.toggle("hidden", net.nodes.size > 1);
-  el("labCount").textContent = `${net.nodes.size}/${MAX_NODES} nodi`;
+  el("labCount").textContent = `${net.nodes.size}/${MAX_NODES} nodi · doppio tocco sul vuoto: panoramica`;
   renderCrumbs();
   renderPanel();
 }
@@ -325,9 +345,19 @@ const lerpTable = (tab, h) => {
   const lo = Math.floor(i), hi = Math.min(tab.length - 1, lo + 1);
   return tab[lo] + (tab[hi] - tab[lo]) * (i - lo);
 };
-const depthOf = (h) => (depthOn ? lerpTable(DEPTH, h) : 0);
+// Allontanandosi la profondità si appiattisce: da vicino è una pila di piani
+// (la tua zona davanti), da lontano diventa una mappa leggibile di tutto
+// quello che hai aperto.
+const depthOf = (h) => (depthOn ? lerpTable(DEPTH, h) * (1 - FLATTEN * nebbia()) : 0);
 const focusPlane = () => depthOf(0);
+function nebbia() { return depthOn ? Math.max(0, Math.min(1, -cam.z / FOG_Z)) : 1; }
+function opacityAt(h) {
+  const f = nebbia();
+  return lerpTable(OPAC_ZONA, h) * (1 - f) + lerpTable(OPAC, h) * f;
+}
 const scaleAt = (z) => F / Math.max(1, F + z - cam.z);
+// Scala del piano del nodo attivo per una data distanza della camera.
+const scaleAtCam = (tz) => F / Math.max(1, F + focusPlane() - tz);
 
 function aimAt(id, newIds = []) {
   const f = net.nodes.get(id);
@@ -428,26 +458,46 @@ function project(n, v) {
   return { x: W / 2 + dx * s, y: H * 0.47 + dy * s, s, z };
 }
 
+// Scrive nel DOM solo ciò che è cambiato dall'ultimo frame, e niente per i
+// nodi fuori dal riquadro: con 50 nodi riscrivere tutto ad ogni frame (stile,
+// z-index, classi, attributi degli archi) dimezzava gli fps su una CPU lenta.
+const CULL_MARGIN = 90;
+const setIf = (cache, key, value, write) => { if (cache[key] !== value) { cache[key] = value; write(value); } };
+
 function draw() {
   const proj = new Map();
   for (const [id, v] of vis) {
     const n = net.nodes.get(id);
     const p = project(n, v);
+    const fuori = p.x < -CULL_MARGIN || p.x > W + CULL_MARGIN || p.y < -CULL_MARGIN || p.y > H + CULL_MARGIN;
+    let o = fuori ? 0 : opacityAt(v.h) * Math.min(1, v.grow * 1.6);
+    if (o < 0.04) o = 0;   // nella nebbia: né disegnato né toccabile
+    p.o = o;
     proj.set(id, p);
-    v.dom.style.setProperty("--t", `translate3d(${p.x.toFixed(1)}px,${p.y.toFixed(1)}px,0) translate(-50%,-50%) scale(${p.s.toFixed(3)})`);
-    v.dom.style.opacity = (lerpTable(OPAC, v.h) * Math.min(1, v.grow * 1.6)).toFixed(3);
-    v.dom.style.zIndex = String(2000 - Math.round(p.z));
-    v.dom.classList.toggle("no-label", p.s < LABEL_MIN_SCALE);
+    const c = v.cache || (v.cache = {});
+    const st = v.dom.style;
+    setIf(c, "vis", o ? "" : "hidden", x => { st.visibility = x; });
+    if (!o) continue;
+    setIf(c, "t", `translate3d(${p.x.toFixed(1)}px,${p.y.toFixed(1)}px,0) translate(-50%,-50%) scale(${p.s.toFixed(3)})`, x => { st.transform = x; });
+    setIf(c, "o", o.toFixed(2), x => { st.opacity = x; });
+    // Per livello di salto, non per z continuo: cambia solo quando cambia il focus.
+    setIf(c, "z", String(10 - Math.round(v.h)), x => { st.zIndex = x; });
+    setIf(c, "nl", p.s < LABEL_MIN_SCALE, x => { v.dom.classList.toggle("no-label", x); });
   }
   for (const e of net.edges) {
     const a = proj.get(e.a), b = proj.get(e.b), line = edgeDom.get(edgeKey(e));
     if (!a || !b || !line) continue;
+    const c = line.__c || (line.__c = {});
     const va = vis.get(e.a), vb = vis.get(e.b);
+    const o = a.o && b.o ? opacityAt(Math.max(va.h, vb.h)) * Math.min(va.grow, vb.grow) : 0;
+    setIf(c, "o", o.toFixed(2), x => { line.style.opacity = x; });
+    if (!o) continue;
     const focus = e.a === focusId || e.b === focusId;
-    line.setAttribute("x1", a.x.toFixed(1)); line.setAttribute("y1", a.y.toFixed(1));
-    line.setAttribute("x2", b.x.toFixed(1)); line.setAttribute("y2", b.y.toFixed(1));
-    line.style.strokeWidth = ((focus ? 4 : 2.6) * Math.min(a.s, b.s)).toFixed(2);
-    line.style.opacity = (lerpTable(OPAC, Math.max(va.h, vb.h)) * Math.min(va.grow, vb.grow)).toFixed(3);
+    setIf(c, "x1", a.x.toFixed(1), x => line.setAttribute("x1", x));
+    setIf(c, "y1", a.y.toFixed(1), x => line.setAttribute("y1", x));
+    setIf(c, "x2", b.x.toFixed(1), x => line.setAttribute("x2", x));
+    setIf(c, "y2", b.y.toFixed(1), x => line.setAttribute("y2", x));
+    setIf(c, "w", ((focus ? 4 : 2.6) * Math.min(a.s, b.s)).toFixed(1), x => { line.style.strokeWidth = x; });
   }
 }
 
@@ -503,7 +553,7 @@ stage.addEventListener("pointerdown", e => {
   } else if (pts.size === 2) {
     const [p, q] = [...pts.values()];
     dragged = true;
-    gesture = { mode: "pinch", d0: Math.hypot(p.x - q.x, p.y - q.y) || 1, z0: cam.tz };
+    gesture = { mode: "pinch", d0: Math.hypot(p.x - q.x, p.y - q.y) || 1, s0: scaleAtCam(cam.tz) };
     try { stage.setPointerCapture(e.pointerId); } catch {}
   }
   kick();
@@ -516,7 +566,9 @@ stage.addEventListener("pointermove", e => {
   if (gesture.mode === "pinch" && pts.size >= 2) {
     const [p, q] = [...pts.values()];
     const d = Math.hypot(p.x - q.x, p.y - q.y);
-    cam.tz = Math.max(Z_MIN, Math.min(Z_MAX, gesture.z0 + (d / gesture.d0 - 1) * F * 0.9));
+    // Proporzionale: la rete si ingrandisce quanto si allargano le dita.
+    const sNew = gesture.s0 * d / gesture.d0;
+    cam.tz = Math.max(Z_MIN, Math.min(Z_MAX, F + focusPlane() - F / Math.max(0.05, sNew)));
     kick();
     return;
   }
@@ -559,15 +611,42 @@ function endPointer(e) {
   } else if (!pts.size) {
     gesture = null;
     if (dragged) setTimeout(() => { dragged = false; }, 0);
+    else if (!e.target.closest(".dna-node")) doppioTocco();
   }
   kick();
 }
+// Doppio tocco sul vuoto: panoramica (la nebbia si dirada), e di nuovo per
+// tornare nella zona. Lo stesso si ottiene col pinch, ma un pinch non lo
+// scopre nessuno da solo.
+let ultimoTocco = 0;
+function doppioTocco() {
+  const now = performance.now();
+  if (now - ultimoTocco >= 320) { ultimoTocco = now; return; }
+  ultimoTocco = 0;
+  if (cam.tz < -FOG_Z / 2) { aimAt(focusId); kick(); return; }   // di nuovo: torna nella zona
+  // Panoramica: inquadra tutta la rete aperta.
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const n of net.nodes.values()) {
+    if (n.x === null) continue;
+    minX = Math.min(minX, n.x); maxX = Math.max(maxX, n.x);
+    minY = Math.min(minY, n.y); maxY = Math.max(maxY, n.y);
+  }
+  const sFit = Math.min((W - 24) / (maxX - minX + 110), (H - 24) / (maxY - minY + 120), 1);
+  cam.tx = (minX + maxX) / 2;
+  cam.ty = (minY + maxY) / 2 - (H * 0.03) / sFit;   // il centro del riquadro è a 0,47 H
+  // A nebbia diradata il piano del focus è a z = DEPTH[0] * (1 - FLATTEN).
+  cam.tz = Math.max(Z_MIN, Math.min(-FOG_Z, F + DEPTH[0] * (1 - FLATTEN) - F / sFit));
+  cam.vx = cam.vy = 0;
+  kick();
+}
+
 stage.addEventListener("pointerup", endPointer);
 stage.addEventListener("pointercancel", endPointer);
 
 stage.addEventListener("wheel", e => {
   e.preventDefault();
-  cam.tz = Math.max(Z_MIN, Math.min(Z_MAX, cam.tz - e.deltaY * 0.6));
+  const sNew = scaleAtCam(cam.tz) * Math.exp(-e.deltaY * 0.0015);
+  cam.tz = Math.max(Z_MIN, Math.min(Z_MAX, F + focusPlane() - F / sNew));
   kick();
 }, { passive: false });
 
@@ -594,3 +673,5 @@ function measure() {
 window.addEventListener("resize", measure);
 measure();
 boot();
+// Solo per le prove automatiche: lo stato in sola lettura.
+window.__dnaLab = { get net() { return net; }, get focusId() { return focusId; } };
