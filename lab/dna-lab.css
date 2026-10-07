@@ -34,6 +34,8 @@ body.lab {
 }
 .lab-tool.is-on { color: var(--cyan); border-color: var(--cyan-a2); background: var(--cyan-dim); }
 #labReset { margin-left:auto; }
+.lab-tools .dna-people-btn { display:inline-flex; align-items:center; gap:5px; max-width:34%; }
+.lab-stage .dna-sheet { border-radius:0; z-index:3; }
 
 .lab-stage {
   position:relative; flex:1; min-height:0; overflow:hidden;
@@ -43,7 +45,9 @@ body.lab {
 .lab-edges {
   position:absolute; inset:0; width:100%; height:100%; overflow:visible; pointer-events:none;
 }
-.lab-nodes { position:absolute; inset:0; }
+/* z-index:0 crea un contesto di impilamento: lo z-index dei nodi (per
+   livello di salto) resta qui dentro e non passa sopra al foglio Persone. */
+.lab-nodes { position:absolute; inset:0; z-index:0; }
 
 /* Il nodo resta identico; cambia solo chi lo posiziona: la transform la
    scrive dna-lab.js (traslazione proiettata + scala di profondità). */

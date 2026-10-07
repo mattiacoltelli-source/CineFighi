@@ -1,5 +1,6 @@
 // ─── dna-lab.js ──────────────────────────────────────────────────────────────
-// ESPERIMENTO — Step 2 "Piccola porzione del DNA reale".
+// ESPERIMENTO — Step 4 "DNA completo" (dopo Step 1-3: playground, porzione
+// reale, aumento progressivo).
 //
 // Stessa esplorazione spaziale dello Step 1 (approccio A, 2.5D con un filo di
 // prospettiva vera), ma ora la rete è quella VERA:
@@ -8,8 +9,8 @@
 //   - chi si collega a chi lo decide dna.js, importato tale e quale: stesso
 //     indice, stessi vicini, stesso ordine, stessi ponti, stessa chiusura;
 //   - i nodi hanno lo stesso markup di dna-view.js (nodeInner/nodeButton).
-// L'unica differenza voluta: la rete si ferma a MAX_NODES nodi. È la "piccola
-// porzione" dello Step 2, non un cambio di logica.
+// Come nel DNA vero: nessun tetto ai nodi, selettore delle persone (con la
+// modalità condivisa a 2-3 persone e i punti d'incontro), pannello completo.
 //
 // La profondità resta la distanza in salti dal nodo che stai guardando: il
 // nodo attivo davanti, i vicini subito dietro, il resto sfuma in fondo.
@@ -19,10 +20,6 @@ import { avatarHtml } from "../ui.js?v=da87024";
 import { escapeHtml } from "../cine-core.js?v=da87024";
 
 const DNA_POSTER = "https://image.tmdb.org/t/p/w185";
-// Tetto della porzione, scelto dal selettore in alto (Step 3: si sale per
-// gradini e a ogni gradino si guarda se la rete resta leggibile).
-const CAPS = [20, 35, 50];
-let MAX_NODES = 35;
 
 // Nel bundle di prova (artifact) i dati e le locandine arrivano già dentro la
 // pagina; nel repo si leggono dal vivo, con le stesse funzioni dell'app.
@@ -60,10 +57,14 @@ const MIN_GAP = 94, MIN_DX = 66, MIN_DY = 92, PLACE_TRIES = 24;
 // ─── STATO ───────────────────────────────────────────────────────────────────
 
 let data = null, index = null, net = null, focusId = null, rootUser = null;
+// "Tu" (nel lab lo scegli dal menu; nell'app è chi ha fatto l'accesso) e chi
+// sta dentro la rete: null = tutto il gruppo, come selectedPeople in dna-view.
+let me = null, selectedPeople = null, sheetOpen = false;
 const vis = new Map();          // id -> { h, th, grow, dom }
 const edgeDom = new Map();      // "a|b" -> <line>
 const cam = { x: 0, y: 0, z: 0, tx: 0, ty: 0, tz: 0, yaw: 0, pitch: 0, tyaw: 0, tpitch: 0, vx: 0, vy: 0 };
-let depthOn = true, tiltOn = true;
+let depthOn = true;
+const tiltOn = true;   // provata negli Step 1-3: resta sempre accesa
 let W = 0, H = 0;
 let dragged = false;
 
@@ -78,9 +79,6 @@ const raggio = () => (ramiPerTap() === 5 ? RADIUS_WIDE : RADIUS_NARROW);
 
 // ─── AVVIO ───────────────────────────────────────────────────────────────────
 
-function storedCap() { try { return Number(localStorage.getItem("dnaLabCap")) || null; } catch { return null; } }
-function storeCap(n) { try { localStorage.setItem("dnaLabCap", String(n)); } catch {} }
-
 function storedRoot() { try { return localStorage.getItem("dnaLabRoot"); } catch { return null; } }
 function storeRoot(u) { try { localStorage.setItem("dnaLabRoot", u); } catch {} }
 
@@ -93,24 +91,101 @@ async function boot() {
     el("labPanel").innerHTML = `<p class="dna-hint">Non riesco a leggere la libreria. Riprova tra poco.</p>`;
     return;
   }
-  index = DNA.buildIndex(data.db, data.users);
-  const conVoti = data.users.filter(u => index.byPerson.get(u)?.length);
+  const conta = likedCounts(data.db);
+  const conVoti = data.users.filter(u => conta.get(u));
   const sel = el("labRoot");
-  sel.innerHTML = conVoti.map(u => `<option value="${escapeHtml(u)}">${escapeHtml(u)}</option>`).join("");
+  sel.innerHTML = conVoti.map(u => `<option value="${escapeHtml(u)}">Tu: ${escapeHtml(u)}</option>`).join("");
   const salvato = storedRoot();
-  rootUser = conVoti.includes(salvato) ? salvato : conVoti[0];
-  sel.value = rootUser;
-  sel.addEventListener("change", () => { rootUser = sel.value; storeRoot(rootUser); reset(); });
-  const cap = el("labCap");
-  if (CAPS.includes(storedCap())) MAX_NODES = storedCap();
-  cap.innerHTML = CAPS.map(n => `<option value="${n}">${n} nodi</option>`).join("");
-  cap.value = String(MAX_NODES);
-  cap.addEventListener("change", () => { MAX_NODES = Number(cap.value); storeCap(MAX_NODES); refreshUi(); });
+  me = conVoti.includes(salvato) ? salvato : conVoti[0];
+  sel.value = me;
+  sel.addEventListener("change", () => { me = sel.value; storeRoot(me); reset(); });
   reset();
 }
 
+// ─── PERSONE (come dna-view.js: stesso selettore, stessa logica) ─────────────
+
+function likedCounts(db) {
+  const conta = new Map();
+  for (const t of db || []) {
+    for (const [nome, v] of Object.entries(t.votes || {})) {
+      if (Number(v?.vote) >= DNA.LIKE_THRESHOLD) conta.set(nome, (conta.get(nome) || 0) + 1);
+    }
+  }
+  return conta;
+}
+
+function rootUserFor(persone) {
+  if (persone.includes(me) && index.byPerson.get(me)?.length) return me;
+  return persone
+    .map(u => ({ u, n: index.byPerson.get(u)?.length || 0 }))
+    .filter(x => x.n > 0)
+    .sort((a, b) => b.n - a.n || a.u.localeCompare(b.u))[0]?.u || null;
+}
+
+function peopleLabel() {
+  if (!selectedPeople) return "Tutti";
+  if (selectedPeople.length === 1) return selectedPeople[0];
+  if (selectedPeople.length <= 3) return selectedPeople.map(u => (u === me ? "Tu" : u)).join(" + ");
+  return `${selectedPeople.length} persone`;
+}
+
+function renderPeopleSheet() {
+  const conta = likedCounts(data.db);
+  const tutti = !selectedPeople;
+  const riga = (nome, attiva, meta, avatar) => `
+    <button type="button" class="dna-sheet__row${attiva ? " is-active" : ""}" data-user="${escapeHtml(nome)}">
+      ${avatar}
+      <span class="dna-sheet__name">${escapeHtml(nome === "*" ? "Tutti" : nome)}</span>
+      <span class="dna-sheet__meta">${escapeHtml(meta)}</span>
+      <span class="dna-sheet__dot"></span>
+    </button>`;
+  el("labPeopleList").innerHTML = [
+    riga("*", tutti, `${data.users.length} persone`, `<span class="dna-sheet__all">∗</span>`),
+    ...data.users.map(u => riga(u, !tutti && selectedPeople.includes(u), `${conta.get(u) || 0} amati`, avatarHtml(u, 26)))
+  ].join("");
+}
+
+function togglePerson(nome) {
+  if (nome === "*") { selectedPeople = null; return; }
+  const attuale = selectedPeople ? [...selectedPeople] : [];
+  const i = attuale.indexOf(nome);
+  if (i === -1) attuale.push(nome); else attuale.splice(i, 1);
+  selectedPeople = attuale.length ? data.users.filter(u => attuale.includes(u)) : null;
+}
+
+function openSheet(apri) {
+  sheetOpen = apri;
+  if (apri) renderPeopleSheet();
+  el("labPeopleSheet").classList.toggle("hidden", !apri);
+  el("labPeopleBtn").setAttribute("aria-expanded", apri ? "true" : "false");
+}
+
+el("labPeopleBtn").addEventListener("click", () => openSheet(!sheetOpen));
+el("labPeopleDone").addEventListener("click", () => openSheet(false));
+el("labPeopleList").addEventListener("click", e => {
+  const riga = e.target.closest(".dna-sheet__row");
+  if (!riga || !data) return;
+  togglePerson(riga.dataset.user);
+  renderPeopleSheet();
+  reset();
+});
+
 function reset() {
-  if (!index || !rootUser) return;
+  if (!data || !me) return;
+  // Come showDna: la rete è proprio un'altra rete, costruita dallo stesso
+  // motore sulle sole persone scelte.
+  const persone = selectedPeople || data.users;
+  index = DNA.buildIndex(data.db, persone);
+  rootUser = rootUserFor(persone);
+  el("labPeopleLabel").textContent = peopleLabel();
+  el("labPeopleBtn").classList.toggle("is-active", !!selectedPeople);
+  if (!rootUser) {
+    net = null;
+    vis.clear(); edgeDom.clear();
+    nodesEl.innerHTML = ""; edgesEl.innerHTML = ""; el("labCrumbs").innerHTML = "";
+    el("labPanel").innerHTML = `<p class="dna-hint">Nessuno dei selezionati ha ancora votato un titolo 7 o più.</p>`;
+    return;
+  }
   net = DNA.createNetwork(index, rootUser);
   focusId = net.rootId;
   const root = net.nodes.get(net.rootId);
@@ -177,16 +252,12 @@ function layoutChildren(parentId, childIds) {
   });
 }
 
-// ─── APRI / CHIUDI: dna.js, con il solo tetto della porzione ─────────────────
-
-const pieno = () => net.nodes.size >= MAX_NODES;
+// ─── APRI / CHIUDI: dna.js così com'è ────────────────────────────────────────
+// (Gli Step 2-3 si fermavano a 20/35/50 nodi per verificare leggibilità e
+// fluidità gradino per gradino; qui, come nel DNA vero, nessun tetto.)
 
 function expandNode(id) {
-  // Il tetto: si apre al massimo fino a MAX_NODES nodi. Stessa scelta dei
-  // vicini di dna.js, solo con meno posti quando la porzione è quasi piena.
-  const posti = Math.min(ramiPerTap(), Math.max(0, MAX_NODES - net.nodes.size));
-  if (!posti) return [];
-  const added = DNA.expand(net, index, id, posti);
+  const added = DNA.expand(net, index, id, ramiPerTap());
   layoutChildren(id, added);
   return added;
 }
@@ -213,7 +284,8 @@ function sync() {
     const k = edgeKey(e);
     if (edgeDom.has(k)) continue;
     const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    line.setAttribute("class", `dna-edge dna-edge--${e.kind}`);
+    const incontro = isMeetingPoint(net.nodes.get(e.a)) || isMeetingPoint(net.nodes.get(e.b));
+    line.setAttribute("class", `dna-edge dna-edge--${e.kind}${incontro ? " is-shared" : ""}`);
     edgesEl.appendChild(line);
     edgeDom.set(k, line);
   }
@@ -237,10 +309,15 @@ function nodeInner(node) {
   return `<span class="dna-node__genre">${escapeHtml(node.label.slice(0, 3).toUpperCase())}</span>`;
 }
 
-// Stesso "molto amato" di dna-view.js::lovedLevel (fuori dalla modalità
-// condivisa, che qui non c'è).
+// Stessi criteri di dna-view.js::isMeetingPoint / lovedLevel.
+function isMeetingPoint(n) {
+  if (!index?.shared || !selectedPeople) return false;
+  if (n.type !== "film" && n.type !== "genere" && n.type !== "regista" && n.type !== "attore") return false;
+  return DNA.sharedCountOf(index, n.id) === selectedPeople.length;
+}
+
 function lovedLevel(n) {
-  if (n.type !== "film") return 0;
+  if (n.type !== "film" || index?.shared) return 0;
   const fan = (n.meta.fans || []).length;
   return fan >= 5 ? 2 : fan >= 3 ? 1 : 0;
 }
@@ -248,7 +325,7 @@ function lovedLevel(n) {
 function nodeDom(n) {
   const b = document.createElement("button");
   b.type = "button";
-  b.className = `dna-node dna-node--${n.type}${lovedLevel(n) ? ` is-loved-${lovedLevel(n)}` : ""}`;
+  b.className = `dna-node dna-node--${n.type}${isMeetingPoint(n) ? " is-shared" : ""}${lovedLevel(n) ? ` is-loved-${lovedLevel(n)}` : ""}`;
   b.dataset.node = n.id;
   b.setAttribute("aria-label", n.label);
   b.innerHTML = `${nodeInner(n)}<span class="dna-node__label">${escapeHtml(n.label)}</span>`;
@@ -265,7 +342,11 @@ function refreshUi() {
   }
   for (const e of net.edges) edgeDom.get(edgeKey(e))?.classList.toggle("is-focus", e.a === focusId || e.b === focusId);
   el("labHint").classList.toggle("hidden", net.nodes.size > 1);
-  el("labCount").textContent = `${net.nodes.size}/${MAX_NODES} nodi · doppio tocco sul vuoto: panoramica`;
+  const n = selectedPeople?.length;
+  let insieme = 0;
+  if (n === 2 || n === 3) for (const f of index.films.values()) if (f.fans.length === n) insieme++;
+  const affinita = insieme ? ` · ${insieme} ${insieme === 1 ? "titolo amato" : "titoli amati"} ${n === 2 ? "da entrambi" : "da tutti e tre"}` : "";
+  el("labCount").textContent = `${net.nodes.size} nodi${affinita} · doppio tocco sul vuoto: panoramica`;
   renderCrumbs();
   renderPanel();
 }
@@ -307,31 +388,66 @@ function panelIcon(node) {
   return "";
 }
 
+// Gli stessi testi di dna-view.js::panelBody.
+function pillsHtml(items) {
+  return `<div class="dna-pills">${items.map(t => `<span class="dna-pill">${escapeHtml(t)}</span>`).join("")}</div>`;
+}
+
 function panelBody(node) {
   const m = node.meta;
+  const incontro = isMeetingPoint(node)
+    ? `<p class="dna-panel__line dna-panel__line--shared">Punto d'incontro: piace a ${selectedPeople.length === 2 ? "entrambi" : "tutti e tre"}.</p>`
+    : "";
+
   if (node.type === "persona") {
     const n = m.liked || 0;
-    const generi = (m.topGenres || []).length
-      ? `<p class="dna-panel__line">Generi più presenti: ${m.topGenres.map(g => `${escapeHtml(g.genere)} (${g.film})`).join(" · ")}.</p>` : "";
-    return `<p class="dna-panel__line">Ha amato ${n} ${n === 1 ? "titolo" : "titoli"} (voto 7 o più).</p>${generi}`;
+    const io = node.label === me;
+    const riga = (titolo, lista, nome, num) => (lista || []).length
+      ? `<p class="dna-panel__line">${titolo}: ${lista.map(x => `${escapeHtml(x[nome])} (${x[num]})`).join(" · ")}.</p>` : "";
+    return `
+      <p class="dna-panel__line">${io ? "Hai" : "Ha"} amato ${n} ${n === 1 ? "titolo" : "titoli"} (voto 7 o più).</p>
+      ${riga("Generi più presenti", m.topGenres, "genere", "film")}
+      ${riga("Registi ricorrenti", m.topDirectors, "name", "film")}
+      ${riga("Attori ricorrenti", m.topActors, "name", "film")}`;
   }
+
   if (node.type === "film") {
     const tipo = m.media_type === "tv" ? "Serie" : "Film";
-    return `<p class="dna-panel__line">${tipo}${m.director ? ` · Regia di ${escapeHtml(m.director)}` : ""}</p>${fansHtml(m.fans || [])}`;
+    const regia = m.director ? `Regia di ${escapeHtml(m.director)}` : "";
+    const fans = m.fans || [];
+    return `
+      ${incontro}
+      <p class="dna-panel__line">${tipo}${regia ? ` · ${regia}` : ""}</p>
+      ${(m.cast || []).length ? `<p class="dna-panel__line">Con ${m.cast.map(a => escapeHtml(a)).join(", ")}</p>` : ""}
+      <p class="dna-panel__line dna-panel__label">Chi l'ha amato (${fans.length})</p>
+      ${fansHtml(fans)}
+      ${(m.genres || []).length ? pillsHtml(m.genres) : ""}`;
   }
+
   if (node.type === "regista" || node.type === "attore") {
-    return `<p class="dna-panel__line">${m.films} ${m.films === 1 ? "film amato" : "film amati"} nel gruppo, da ${m.people} ${m.people === 1 ? "persona" : "persone"} diverse.</p>`;
+    const titoli = (m.titoli || []).length
+      ? `<p class="dna-panel__line">Nella rete: ${m.titoli.map(t => escapeHtml(t)).join(" · ")}${m.films > m.titoli.length ? ` e altri ${m.films - m.titoli.length}` : ""}.</p>`
+      : "";
+    return `
+      ${incontro}
+      <p class="dna-panel__line">${m.films} ${m.films === 1 ? "film amato" : "film amati"} nel gruppo, da ${m.people} ${m.people === 1 ? "persona" : "persone"} diverse.</p>
+      ${titoli}`;
   }
+
   const c = m.count || 0;
-  return `<p class="dna-panel__line">${c} ${c === 1 ? "titolo amato" : "titoli amati"} dal gruppo in questo genere.</p>`;
+  const chi = (m.topFans || []).length
+    ? `<p class="dna-panel__line">Chi lo ama di più: ${m.topFans.map(f => `${escapeHtml(f.name)} (${f.film})`).join(" · ")}.</p>`
+    : "";
+  return `
+    ${incontro}
+    <p class="dna-panel__line">${c} ${c === 1 ? "titolo amato" : "titoli amati"} dal gruppo in questo genere.</p>
+    ${chi}`;
 }
 
 function renderPanel() {
   const node = net.nodes.get(focusId);
   const titolo = node.type === "film" && node.meta.year ? `${node.label} (${node.meta.year})` : node.label;
-  const hint = node.expanded ? "Toccalo di nuovo per richiudere"
-    : pieno() ? `Porzione piena (${MAX_NODES} nodi): richiudi un ramo per aprirne un altro`
-    : "Toccalo per aprire i collegamenti";
+  const hint = node.expanded ? "Toccalo di nuovo per richiudere" : "Toccalo per aprire i collegamenti";
   el("labPanel").innerHTML = `
     <div class="dna-panel__head">${panelIcon(node)}<strong>${escapeHtml(titolo)}</strong></div>
     ${panelBody(node)}
@@ -476,7 +592,9 @@ function draw() {
     proj.set(id, p);
     const c = v.cache || (v.cache = {});
     const st = v.dom.style;
-    setIf(c, "vis", o ? "" : "hidden", x => { st.visibility = x; });
+    // display:none e non visibility: ogni nodo ha will-change, cioè un suo
+    // livello sul compositor, e con 100+ nodi anche quelli invisibili pesano.
+    setIf(c, "vis", o ? "" : "none", x => { st.display = x; });
     if (!o) continue;
     setIf(c, "t", `translate3d(${p.x.toFixed(1)}px,${p.y.toFixed(1)}px,0) translate(-50%,-50%) scale(${p.s.toFixed(3)})`, x => { st.transform = x; });
     setIf(c, "o", o.toFixed(2), x => { st.opacity = x; });
@@ -491,6 +609,9 @@ function draw() {
     const va = vis.get(e.a), vb = vis.get(e.b);
     const o = a.o && b.o ? opacityAt(Math.max(va.h, vb.h)) * Math.min(va.grow, vb.grow) : 0;
     setIf(c, "o", o.toFixed(2), x => { line.style.opacity = x; });
+    // Fuori dal disegno, non solo trasparente: l'SVG si ridipinge intero ad
+    // ogni frame, e con 100+ nodi gli archi nella nebbia pesavano lo stesso.
+    setIf(c, "d", o ? "" : "none", x => { line.style.display = x; });
     if (!o) continue;
     const focus = e.a === focusId || e.b === focusId;
     setIf(c, "x1", a.x.toFixed(1), x => line.setAttribute("x1", x));
@@ -543,7 +664,7 @@ const pts = new Map();
 let gesture = null;
 
 stage.addEventListener("pointerdown", e => {
-  if (e.button > 0 || !net) return;
+  if (e.button > 0 || !net || e.target.closest(".dna-sheet")) return;
   pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
   pointersDown = pts.size;
   if (pts.size === 1) {
@@ -662,7 +783,6 @@ function bindToggle(id, get, set) {
   });
 }
 bindToggle("labDepth", () => depthOn, v => { depthOn = v; });
-bindToggle("labTilt", () => tiltOn, v => { tiltOn = v; });
 el("labReset").addEventListener("click", reset);
 
 function measure() {

@@ -5,8 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <title>DNA Lab</title>
   <meta name="theme-color" content="#080c12">
-  <!-- ESPERIMENTO (branch separato): esplorazione spaziale del DNA su una piccola
-       porzione della rete vera. Non è collegato all'app e legge i dati in sola
+  <!-- ESPERIMENTO (branch separato): esplorazione spaziale del DNA completo. Non è collegato all'app e legge i dati in sola
        lettura (stesse funzioni dell'app), non scrive niente. -->
   <link rel="stylesheet" href="../styles.css?v=da87024">
   <link rel="stylesheet" href="dna-lab.css">
@@ -15,10 +14,12 @@
   <header class="lab-top">
     <nav class="lab-crumbs" id="labCrumbs" aria-label="Dove sei"></nav>
     <div class="lab-tools">
-      <select class="lab-tool lab-root" id="labRoot" aria-label="Parti da"></select>
-      <select class="lab-tool lab-root" id="labCap" aria-label="Quanti nodi al massimo"></select>
+      <select class="lab-tool lab-root" id="labRoot" aria-label="Chi sei"></select>
+      <button id="labPeopleBtn" type="button" class="lab-tool dna-people-btn" aria-haspopup="true" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 20v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9.5" cy="7" r="4"/><path d="M22 20v-2a4 4 0 0 0-3-3.87"/></svg>
+        <span id="labPeopleLabel">Tutti</span>
+      </button>
       <button type="button" class="lab-tool is-on" id="labDepth" aria-pressed="true">Profondità</button>
-      <button type="button" class="lab-tool is-on" id="labTilt" aria-pressed="true">Inclina</button>
       <button type="button" class="lab-tool lab-tool--icon" id="labReset" aria-label="Ricomincia" title="Ricomincia">↺</button>
     </div>
   </header>
@@ -29,6 +30,13 @@
     <p class="dna-start-hint" id="labHint">Tocca il nodo per aprire i collegamenti · doppio tocco sul vuoto per la panoramica</p>
     <span class="lab-count" id="labCount"></span>
     <span class="lab-fps" id="labFps"></span>
+    <div id="labPeopleSheet" class="dna-sheet hidden">
+      <div class="dna-sheet__head">
+        <strong>Persone</strong>
+        <button id="labPeopleDone" type="button" class="btn-link-quiet">Fatto</button>
+      </div>
+      <div id="labPeopleList" class="dna-sheet__list"></div>
+    </div>
   </main>
 
   <section class="dna-panel lab-panel" id="labPanel"></section>
