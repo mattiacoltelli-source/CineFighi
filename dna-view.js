@@ -10,7 +10,7 @@
 // soprattutto non fa ballare i nodi già piazzati ad ogni apertura.
 
 import {
-  buildIndex, createNetwork, expand, collapse, hopsFrom, sharedCountOf, LIKE_THRESHOLD
+  buildIndex, createNetwork, expand, collapse, hopsFrom, sharedCountOf, remainingCount, LIKE_THRESHOLD
 } from "./dna.js?v=eff58e8";
 import { escapeHtml } from "./cine-core.js?v=eff58e8";
 import { avatarHtml } from "./ui.js?v=eff58e8";
@@ -997,7 +997,7 @@ function edgeLine(e, hops) {
 // Un nodo, con la sua classe (locandina/avatar/pastiglia dentro, vedi
 // nodeInner). Stessa funzione condivisa fra il render live e la vista
 // completa — vedi edgeLine qui sopra per il perché.
-function nodeButton(n, hops) {
+function nodeButton(n, hops, conPiu = false) {
   const h = hops.get(n.id);
   const withLabel = h <= LABEL_MAX_HOPS;
   const cls = [
@@ -1023,8 +1023,28 @@ function nodeButton(n, hops) {
     style="left:${n.x.toFixed(1)}px;top:${n.y.toFixed(1)}px"
     aria-label="${escapeHtml(n.label)}">
     ${nodeInner(n)}
+    ${conPiu ? piuHtml(n) : ""}
     ${withLabel ? `<span class="dna-node__label">${escapeHtml(n.label)}</span>` : ""}
   </button>`;
+}
+
+// Il segno dei collegamenti ancora chiusi. Film, regista e attore ne hanno
+// pochi: il numero dice quanto manca e si arriva a "finito". Persona e genere
+// ne hanno centinaia (+180, +146), un numero che non dice niente e che
+// nessuno aprirebbe tutto: lì solo "+", cioè "c'è altro".
+function piuLabel(node, restano) {
+  return node.type === "persona" || node.type === "genere" ? "+" : `+${restano}`;
+}
+
+// "+N": un nodo aperto che ha ancora altri collegamenti non mostrati. Un
+// tocco sul segno li apre (tapMore), come il tocco sul nodo attivo (vedi
+// tapNode): il segno serve a vederlo prima di toccare. Stesso in entrambe le
+// viste; non nella vista "tutta la rete" (una foto, non si tocca).
+function piuHtml(n) {
+  const restano = n.expanded ? remainingCount(net, index, n.id) : 0;
+  return restano > 0
+    ? `<span class="dna-node__more" data-more="${escapeHtml(n.id)}" role="button" aria-label="Mostra altri ${restano} collegamenti">${piuLabel(n, restano)}</span>`
+    : "";
 }
 
 // Per la vista spaziale: lo stesso nodo di nodeButton (stesse classi fisse,
@@ -1036,7 +1056,7 @@ function nodeShell(n) {
     isMeetingPoint(n) ? "is-shared" : "",
     lovedLevel(n) ? `is-loved-${lovedLevel(n)}` : ""
   ].filter(Boolean).join(" ");
-  return { cls, html: `${nodeInner(n)}<span class="dna-node__label">${escapeHtml(n.label)}</span>` };
+  return { cls, html: `${nodeInner(n)}${piuHtml(n)}<span class="dna-node__label">${escapeHtml(n.label)}</span>` };
 }
 
 function edgeClass(e) {
@@ -1074,7 +1094,7 @@ function render() {
   const shownEdges = net.edges.filter(e => shown.has(e.a) && shown.has(e.b));
   edgesEl.innerHTML = shownEdges.map(e => edgeLine(e, hops)).join("");
 
-  nodesEl.innerHTML = visible.map(n => nodeButton(n, hops)).join("");
+  nodesEl.innerHTML = visible.map(n => nodeButton(n, hops, true)).join("");
 
   shownIds = visible.map(n => n.id);
 
@@ -1228,9 +1248,12 @@ function renderPanel(node) {
   const panel = el("dnaPanel");
   if (!panel || !node) return;
 
-  const chiudi = node.expanded
-    ? `<span class="dna-panel__hint">Toccalo di nuovo per richiudere</span>`
-    : `<span class="dna-panel__hint">Toccalo per aprire i collegamenti</span>`;
+  const restano = node.expanded ? remainingCount(net, index, node.id) : 0;
+  const chiudi = !node.expanded
+    ? `<span class="dna-panel__hint">Toccalo per aprire i collegamenti</span>`
+    : restano
+      ? `<span class="dna-panel__hint">Toccalo per mostrarne altri (${piuLabel(node, restano)}) · <button type="button" class="dna-panel__richiudi" data-richiudi="${escapeHtml(node.id)}">Richiudi</button></span>`
+      : `<span class="dna-panel__hint">Toccalo di nuovo per richiudere</span>`;
 
   // "Scheda →" sta nella riga del titolo e non in fondo: su un telefono
   // piccolo un bottone in coda al pannello finisce dietro la barra di
@@ -1255,11 +1278,19 @@ function renderPanel(node) {
     const fansCompatti = !panelExpanded && node.type === "film" && (node.meta.fans || []).length
       ? `<div class="dna-panel__peek-fans">${fansHtml(node.meta.fans)}</div>`
       : "";
+    // "Richiudi" nella barra, non solo nel corpo del pannello (chiuso a schermo
+    // intero): un nodo aperto si richiude con un tocco solo.
+    const richiudi = node.expanded
+      ? `<button type="button" class="dna-panel__richiudi-bar" data-richiudi="${escapeHtml(node.id)}">Richiudi</button>`
+      : "";
     panel.innerHTML = `
-      <button type="button" class="dna-panel__peek" id="dnaPanelPeek">
-        ${panelIcon(node)}<strong>${escapeHtml(panelTitle(node))}</strong>
-        <span class="dna-panel__peek-hint">${panelExpanded ? "▾" : "Dettagli →"}</span>
-      </button>
+      <div class="dna-panel__bar">
+        <button type="button" class="dna-panel__peek" id="dnaPanelPeek">
+          ${panelIcon(node)}<strong>${escapeHtml(panelTitle(node))}</strong>
+          <span class="dna-panel__peek-hint">${panelExpanded ? "▾" : "Dettagli →"}</span>
+        </button>
+        ${richiudi}
+      </div>
       ${fansCompatti}
       <div class="dna-panel__full"${panelExpanded ? "" : " hidden"}>
         ${scheda}
@@ -1301,73 +1332,116 @@ function fansHtml(fans) {
     .join("")}</div>`;
 }
 
-function pillsHtml(items) {
-  return `<div class="dna-pills">${items.map(t => `<span class="dna-pill">${escapeHtml(t)}</span>`).join("")}</div>`;
+// ─── PANNELLO DELLA VISTA SPAZIALE ───────────────────────────────────────────
+// Stessi dati della vista piatta, letti da un altro lato: il pannello piatto
+// racconta COSA è il nodo, questo racconta COSA LO LEGA a chi guarda — il
+// percorso fatto per arrivarci e quanto lo condividete. Solo voti già in
+// memoria (index), nessun numero inventato: niente percentuali di "affinità",
+// solo conteggi di titoli.
+const PERSONA_PREFIX = "persona:".length;
+const riferimento = () => net.rootId.slice(PERSONA_PREFIX);
+const nomeVisto = (nome) => (nome === ctx?.currentUser ? "Tu" : nome);
+
+// La strada più corta dalla radice al nodo, sugli archi aperti.
+function percorsoHtml(node) {
+  if (node.id === net.rootId) return "";
+  const prev = new Map([[net.rootId, null]]);
+  const adj = new Map();
+  for (const e of net.edges) {
+    (adj.get(e.a) || adj.set(e.a, []).get(e.a)).push(e.b);
+    (adj.get(e.b) || adj.set(e.b, []).get(e.b)).push(e.a);
+  }
+  const coda = [net.rootId];
+  while (coda.length) {
+    const cur = coda.shift();
+    for (const nx of adj.get(cur) || []) if (!prev.has(nx)) { prev.set(nx, cur); coda.push(nx); }
+  }
+  if (!prev.has(node.id)) return "";
+  let ids = [];
+  for (let id = node.id; id; id = prev.get(id)) ids.unshift(id);
+  // Percorsi lunghi: l'inizio, un "…" e gli ultimi due passaggi.
+  if (ids.length > 5) ids = [ids[0], null, ...ids.slice(-2)];
+  const chip = (id) => id === null
+    ? `<span class="dna-path__sep">…</span>`
+    : `<span class="dna-path__chip${id === node.id ? " is-here" : ""}">${escapeHtml(id === net.rootId ? nomeVisto(riferimento()) : net.nodes.get(id).label)}</span>`;
+  return `<div class="dna-path"><span class="dna-path__label">Come ci sei arrivato</span>${ids.map(chip).join(`<span class="dna-path__sep">›</span>`)}</div>`;
+}
+
+const countChip = (nome, n) =>
+  `<span class="dna-fan">${avatarHtml(nome, 22)}<span class="dna-fan__name">${escapeHtml(nomeVisto(nome))}</span><span class="dna-fan__vote">${n}</span></span>`;
+
+const titoliIn = (n) => `${n} ${n === 1 ? "titolo" : "titoli"}`;
+
+// I titoli amati sia da `a` sia da `b`, i più votati insieme per primi.
+function incomune(a, b) {
+  const miei = new Map((index.byPerson.get(a) || []).map(e => [e.id, e.w]));
+  return (index.byPerson.get(b) || [])
+    .filter(e => miei.has(e.id))
+    .map(e => ({ id: e.id, peso: e.w + miei.get(e.id), film: index.films.get(e.id) }))
+    .filter(x => x.film)
+    .sort((x, y) => y.peso - x.peso || x.film.title.localeCompare(y.film.title));
 }
 
 function panelBody(node) {
-  const m = node.meta;
-
-  // Una riga sola, e solo quando conta davvero: non "chi lo ama" (i nomi
-  // sono già nella lista fan o nel conteggio persone qui sotto), ma se è
-  // TUTTI quelli che stai guardando o solo una parte — un confronto che
-  // altrimenti il lettore dovrebbe fare a mente contando le teste.
+  const m = node.meta, rif = riferimento();
+  const percorso = percorsoHtml(node);
   const incontro = isMeetingPoint(node)
     ? `<p class="dna-panel__line dna-panel__line--shared">Punto d'incontro: piace a ${selectedPeople.length === 2 ? "entrambi" : "tutti e tre"}.</p>`
     : "";
 
   if (node.type === "persona") {
-    const n = m.liked || 0;
-    // Non "sei la radice" ma "sei tu": con un filtro attivo la rete può
-    // partire da qualcun altro, e dargli del "tu" sarebbe sbagliato.
-    const io = node.label === ctx?.currentUser;
-    const generi = (m.topGenres || []).length
-      ? `<p class="dna-panel__line">Generi più presenti: ${m.topGenres.map(g => `${escapeHtml(g.genere)} (${g.film})`).join(" · ")}.</p>`
-      : "";
-    const registi = (m.topDirectors || []).length
-      ? `<p class="dna-panel__line">Registi ricorrenti: ${m.topDirectors.map(d => `${escapeHtml(d.name)} (${d.film})`).join(" · ")}.</p>`
-      : "";
-    const attori = (m.topActors || []).length
-      ? `<p class="dna-panel__line">Attori ricorrenti: ${m.topActors.map(a => `${escapeHtml(a.name)} (${a.film})`).join(" · ")}.</p>`
-      : "";
+    if (node.label === rif) {
+      // Chi guardi: con chi hai più titoli amati in comune.
+      const altri = [...index.byPerson.keys()].filter(n => n !== rif)
+        .map(n => ({ n, tot: incomune(rif, n).length }))
+        .filter(x => x.tot > 0)
+        .sort((a, b) => b.tot - a.tot || a.n.localeCompare(b.n))
+        .slice(0, 4);
+      return `
+        <p class="dna-panel__line">${rif === ctx?.currentUser ? "Hai" : "Ha"} amato ${titoliIn(m.liked || 0)} (voto 7 o più).</p>
+        ${altri.length ? `<p class="dna-panel__line dna-panel__label">Chi ti somiglia di più (titoli amati insieme)</p><div class="dna-fans">${altri.map(x => countChip(x.n, x.tot)).join("")}</div>` : ""}`;
+    }
+    const insieme = incomune(rif, node.label);
+    const genere = new Map();
+    for (const x of insieme) for (const g of x.film.genres) genere.set(g, (genere.get(g) || 0) + 1);
+    const top = [...genere.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 2).map(([g]) => g);
     return `
-      <p class="dna-panel__line">${io ? "Hai" : "Ha"} amato ${n} ${n === 1 ? "titolo" : "titoli"} (voto 7 o più).</p>
-      ${generi}
-      ${registi}
-      ${attori}`;
+      ${percorso}
+      <p class="dna-panel__line">${insieme.length ? `${escapeHtml(nomeVisto(rif))} e ${escapeHtml(node.label)} avete amato in comune <strong>${titoliIn(insieme.length)}</strong>.` : `${escapeHtml(nomeVisto(rif))} e ${escapeHtml(node.label)} non avete titoli amati in comune.`}</p>
+      ${insieme.length ? `<p class="dna-panel__line">Ad esempio: ${insieme.slice(0, 3).map(x => escapeHtml(x.film.title)).join(" · ")}.</p>` : ""}
+      ${top.length ? `<p class="dna-panel__line">Soprattutto: ${top.map(escapeHtml).join(" · ")}.</p>` : ""}`;
   }
 
   if (node.type === "film") {
-    const tipo = m.media_type === "tv" ? "Serie" : "Film";
-    const regia = m.director ? `Regia di ${escapeHtml(m.director)}` : "";
+    // Regia, cast, generi e anno stanno nella scheda ("Scheda →"): qui solo il
+    // legame fra le persone. Niente frase su chi lo ama: i nomi e i voti qui
+    // sotto la dicono già.
     const fans = m.fans || [];
     return `
+      ${percorso}
       ${incontro}
-      <p class="dna-panel__line">${tipo}${regia ? ` · ${regia}` : ""}</p>
-      ${(m.cast || []).length ? `<p class="dna-panel__line">Con ${m.cast.map(a => escapeHtml(a)).join(", ")}</p>` : ""}
       <p class="dna-panel__line dna-panel__label">Chi l'ha amato (${fans.length})</p>
-      ${fansHtml(fans)}
-      ${(m.genres || []).length ? pillsHtml(m.genres) : ""}`;
+      ${fansHtml(fans)}`;
   }
 
-  if (node.type === "regista" || node.type === "attore") {
-    const titoli = (m.titoli || []).length
-      ? `<p class="dna-panel__line">Nella rete: ${m.titoli.map(t => escapeHtml(t)).join(" · ")}${m.films > m.titoli.length ? ` e altri ${m.films - m.titoli.length}` : ""}.</p>`
-      : "";
-    return `
-      ${incontro}
-      <p class="dna-panel__line">${m.films} ${m.films === 1 ? "film amato" : "film amati"} nel gruppo, da ${m.people} ${m.people === 1 ? "persona" : "persone"} diverse.</p>
-      ${titoli}`;
+  // Genere, regista, attore: chi li ama, e quanto ci sei dentro tu.
+  const key = node.id.slice(node.id.indexOf(":") + 1);
+  const voci = node.type === "genere" ? index.byGenre.get(key)
+    : node.type === "regista" ? index.byDirector.get(key) : index.byActor.get(key);
+  const tally = new Map();
+  let tuoi = 0;
+  for (const e of voci || []) {
+    const film = index.films.get(e.id);
+    if (!film) continue;
+    if (film.fans.some(f => f.name === rif)) tuoi++;
+    for (const f of film.fans) tally.set(f.name, (tally.get(f.name) || 0) + 1);
   }
-
-  const c = m.count || 0;
-  const chi = (m.topFans || []).length
-    ? `<p class="dna-panel__line">Chi lo ama di più: ${m.topFans.map(f => `${escapeHtml(f.name)} (${f.film})`).join(" · ")}.</p>`
-    : "";
+  const chi = [...tally.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 4);
   return `
+    ${percorso}
     ${incontro}
-    <p class="dna-panel__line">${c} ${c === 1 ? "titolo amato" : "titoli amati"} dal gruppo in questo genere.</p>
-    ${chi}`;
+    <p class="dna-panel__line">${tuoi ? `Tra i tuoi amati: <strong>${titoliIn(tuoi)}</strong> su ${(voci || []).length}.` : `Nessuno dei tuoi amati ne fa parte (${titoliIn((voci || []).length)} nel gruppo).`}</p>
+    ${chi.length ? `<p class="dna-panel__line dna-panel__label">Chi lo ama di più (titoli)</p><div class="dna-fans">${chi.map(([n, t]) => countChip(n, t)).join("")}</div>` : ""}`;
 }
 
 // ─── EVENTI ──────────────────────────────────────────────────────────────────
@@ -1387,13 +1461,26 @@ export function initDnaView() {
     nodesEl.addEventListener("click", e => {
       const btn = e.target.closest(".dna-node");
       if (!btn || dragged) return;   // era un trascinamento, non un tocco
-      tapNode(btn.dataset.node);
+      if (e.target.closest(".dna-node__more")) tapMore(btn.dataset.node);
+      else tapNode(btn.dataset.node);
     });
   }
 
+  // "Richiudi" nel pannello: vedi renderPanel.
+  el("dnaPanel")?.addEventListener("click", e => {
+    const b = e.target.closest("[data-richiudi]");
+    if (!b || !net) return;
+    const id = b.dataset.richiudi;
+    if (!net.nodes.get(id)?.expanded) return;
+    collapse(net, id);
+    focusId = id;
+    panX = 0; panY = 0;
+    render();
+  });
+
   const spatialEl = el("dnaSpatial");
   if (spatialEl) {
-    spatial = createSpatial({ container: spatialEl, nodeShell, edgeClass, onTap: tapNode, radius: raggio });
+    spatial = createSpatial({ container: spatialEl, nodeShell, edgeClass, onTap: tapNode, onMore: tapMore, radius: raggio });
   }
   bindViewToggle();
 }
@@ -1416,10 +1503,17 @@ function tapNode(id) {
   // toccare la rete. Apre o richiude solo il nodo già attivo, cioè quello
   // che il pannello sta già descrivendo — così guardare non è mai un'azione
   // distruttiva, e "richiudi" non capita mai per sbaglio.
+  //
+  // Sul nodo attivo, il tocco apre sempre ciò che c'è ancora da aprire: se ha
+  // altri collegamenti chiusi ne mostra altri (stesso gesto del "+"), e solo
+  // quando non resta niente richiude. Prima richiudeva sempre, ed era
+  // impossibile sapere se un altro tocco ne avrebbe aperti altri o chiuso
+  // tutto. Chi ne ha sempre di più (persone, generi) si richiude dal
+  // "Richiudi" nel pannello.
   let nuovi = null;
   if (id === focusId) {
-    if (node.expanded) collapse(net, id);
-    else nuovi = expandNode(id, false);
+    if (!node.expanded || remainingCount(net, index, id) > 0) nuovi = expandNode(id, false);
+    else collapse(net, id);
   } else if (!node.expanded) {
     nuovi = expandNode(id, false);
   }
@@ -1429,6 +1523,18 @@ function tapNode(id) {
   // segue ricentra sul riquadro d'ingombro di focus + figli nuovi (vedi
   // pendingNewIds più sopra nel file).
   if (nuovi) pendingNewIds = nuovi;
+  else { panX = 0; panY = 0; }
+  render();
+}
+
+// "+N": apre altri collegamenti di un nodo già aperto, senza richiuderlo.
+function tapMore(id) {
+  const node = net?.nodes.get(id);
+  if (!node) return;
+  const nuovi = expandNode(id, false);
+  focusId = id;
+  panelExpanded = false;
+  if (nuovi.length) pendingNewIds = nuovi;
   else { panX = 0; panY = 0; }
   render();
 }

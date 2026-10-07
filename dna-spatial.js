@@ -56,8 +56,9 @@ const setIf = (cache, key, value, write) => { if (cache[key] !== value) { cache[
 //   stessa funzione della vista piatta (stesso aspetto).
 // edgeClass(e) -> classi dell'arco, idem.
 // onTap(id): toccato un nodo (apri/chiudi/seleziona lo decide dna-view).
+// onMore(id): toccato il "+N" di un nodo aperto (mostra altri collegamenti).
 // radius(): il raggio del ventaglio, per inquadrare i figli appena aperti.
-export function createSpatial({ container, nodeShell, edgeClass, onTap, radius }) {
+export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, radius }) {
   const edgesEl = container.querySelector(".dna-spatial__edges");
   const nodesEl = container.querySelector(".dna-spatial__nodes");
 
@@ -289,7 +290,8 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, radius }
   nodesEl.addEventListener("click", e => {
     const b = e.target.closest(".dna-node");
     if (!b || dragged || !net) return;
-    onTap(b.dataset.node);
+    if (e.target.closest(".dna-node__more")) onMore(b.dataset.node);
+    else onTap(b.dataset.node);
   });
 
   const pts = new Map();

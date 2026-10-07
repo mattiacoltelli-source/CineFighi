@@ -457,3 +457,107 @@ test("la vista spaziale mostra la stessa rete e si torna al piatto senza perdere
   expect(guasti, `guasti nella vista spaziale:\n${guasti.join("\n")}`).toEqual([]);
   expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
 });
+
+// "+N" della vista spaziale: un nodo aperto con altri collegamenti non
+// mostrati lo dice, e un tocco sul pallino ne apre altri SENZA richiudere il
+// nodo (il tocco sul nodo resta apri/richiudi). Il pannello spaziale parla
+// del legame con chi guardi, non del solo nodo.
+test("vista spaziale: il +N apre altri collegamenti e il pannello racconta il legame", async ({ page }) => {
+  const scritture = soloLettura(page);
+  const guasti = osserva(page);
+  await entra(page);
+  await vaiA(page, "tonight");
+  await page.locator('#dnaViewToggle [data-dna-view="spatial"]').click();
+  await page.locator("#dnaSpatial .dna-node.is-root").waitFor({ state: "visible", timeout: 30_000 });
+  await toccaNodo(page, "#dnaSpatial .dna-node.is-root");
+
+  const piu = page.locator("#dnaSpatial .dna-node.is-root .dna-node__more");
+  await expect(piu, "la radice aperta non mostra il +N").toHaveCount(1);
+  const prima = await page.locator("#dnaSpatial .dna-node").count();
+  await piu.evaluate(b => (b as HTMLElement).click());
+  await page.waitForTimeout(800);
+  expect(await page.locator("#dnaSpatial .dna-node").count(), "il +N non ha aperto altri nodi").toBeGreaterThan(prima);
+  await expect(page.locator("#dnaSpatial .dna-node.is-root"), "il +N ha richiuso il nodo").toHaveClass(/is-open/);
+
+  // Pannello: a schermo intero nasce chiuso, si apre toccando il titolo.
+  await page.locator("#dnaPanelPeek").click();
+  await expect(page.locator("#dnaPanel")).toContainText("Chi ti somiglia di più");
+
+  expect(guasti, `guasti nella vista spaziale:\n${guasti.join("\n")}`).toEqual([]);
+  expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
+});
+
+// Il tocco sul nodo attivo apre ciò che c'è ancora da aprire e richiude solo
+// quando non resta niente; chi ha sempre altro (la persona di partenza) si
+// richiude dal "Richiudi" nel pannello. Stessa dinamica in tutte e due le viste.
+for (const vista of ["flat", "spatial"] as const) {
+  test(`vista ${vista}: il secondo tocco sul nodo attivo ne apre altri, il Richiudi nella barra lo chiude`, async ({ page }) => {
+    const scritture = soloLettura(page);
+    const guasti = osserva(page);
+    await entra(page);
+    await vaiA(page, "tonight");
+    if (vista === "spatial") await page.locator('#dnaViewToggle [data-dna-view="spatial"]').click();
+    const nodi = vista === "spatial" ? "#dnaSpatial .dna-node" : "#dnaNodes .dna-node";
+    await page.locator(`${nodi}.is-root`).waitFor({ state: "visible", timeout: 30_000 });
+
+    await toccaNodo(page, `${nodi}.is-root`);
+    const dopoPrimo = await page.locator(nodi).count();
+    expect(dopoPrimo, "il primo tocco non ha aperto niente").toBeGreaterThan(1);
+
+    // La radice ha centinaia di collegamenti: un altro tocco ne apre altri, NON richiude.
+    await toccaNodo(page, `${nodi}.is-root`);
+    const dopoSecondo = await page.locator(nodi).count();
+    expect(dopoSecondo, "il secondo tocco ha richiuso invece di aprire altri collegamenti").toBeGreaterThan(dopoPrimo);
+    await expect(page.locator(`${nodi}.is-root`)).toHaveClass(/is-open/);
+
+    // Il segno "+" è sul nodo, in entrambe le viste.
+    await expect(page.locator(`${nodi}.is-root .dna-node__more`)).toHaveCount(1);
+
+    // Richiudere: "Richiudi" è nella barra del titolo, sempre visibile sul nodo
+    // aperto (un tocco solo, senza aprire il pannello).
+    await page.locator("#dnaPanel .dna-panel__richiudi-bar").click();
+    await page.waitForTimeout(600);
+    await expect(page.locator(`${nodi}.is-root`)).not.toHaveClass(/is-open/);
+    expect(await page.locator(nodi).count(), "il Richiudi non ha chiuso i rami").toBeLessThan(dopoSecondo);
+
+    expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
+    expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
+  });
+}
+
+// Il pannello è uguale nelle due viste e non ripete ciò che sta nella scheda
+// (regia, cast, generi, anno): quelli ora sono in alto nella scheda del film.
+test("il pannello e' lo stesso nelle due viste e la scheda mostra regia, cast e generi in alto", async ({ page }) => {
+  const scritture = soloLettura(page);
+  const guasti = osserva(page);
+  await entra(page);
+  await vaiA(page, "tonight");
+  await page.locator("#dnaNodes .dna-node.is-root").waitFor({ state: "visible", timeout: 30_000 });
+  await toccaNodo(page, "#dnaNodes .dna-node.is-root");
+
+  // Panello della radice, vista piatta: "Chi ti somiglia", non più generi/registi ricorrenti.
+  await page.locator("#dnaPanelPeek").click();
+  await expect(page.locator("#dnaPanel")).toContainText("Chi ti somiglia di più");
+  await expect(page.locator("#dnaPanel")).not.toContainText("Registi ricorrenti");
+  await page.locator("#dnaPanelPeek").click();
+
+  // Un film: il pannello ha il percorso e chi l'ha amato, senza frasi in più.
+  const film = await page.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>("#dnaNodes .dna-node--film")][0]?.dataset.node);
+  expect(film, "nessun film nella rete").toBeTruthy();
+  await toccaNodo(page, `#dnaNodes [data-node="${film}"]`);
+  await page.locator("#dnaPanelPeek").click();
+  await expect(page.locator("#dnaPanel")).toContainText("Come ci sei arrivato");
+  await expect(page.locator("#dnaPanel")).toContainText("Chi l'ha amato");
+  await expect(page.locator("#dnaPanel")).not.toContainText("Non è tra i tuoi amati");
+  await expect(page.locator("#dnaPanel")).not.toContainText("Lo ami anche tu");
+
+  // La scheda: regia/cast/generi in alto, niente più card "Dati" in fondo.
+  await page.evaluate(() => (document.querySelector("#dnaPanel .open-detail") as HTMLElement).click());
+  await expect(page.locator("#detailTitle")).not.toHaveText("Titolo");
+  await expect(page.locator("#detailCredits .detail-fact").first()).toBeAttached();
+  await expect(page.locator("#detailFacts")).toHaveCount(0);
+
+  expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
+  expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
+});
