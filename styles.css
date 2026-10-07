@@ -1488,11 +1488,6 @@ body:has(.app.dna-schermo-intero #screen-tonight:not(.hidden)) .bottom-nav {
 }
 .dna-node__more::before { content:""; position:absolute; inset:-14px -12px; }
 
-.dna-panel__richiudi {
-  display:inline; padding:0 2px; background:none; border:0; color: var(--cyan);
-  font:inherit; font-weight:700; text-decoration:underline; cursor:pointer;
-}
-
 /* Barra del titolo del pannello (schermo intero): il titolo apre i dettagli,
    "Richiudi" richiude il nodo aperto con un tocco solo. */
 .dna-panel__bar { display:flex; align-items:center; }
@@ -1503,7 +1498,10 @@ body:has(.app.dna-schermo-intero #screen-tonight:not(.hidden)) .bottom-nav {
   cursor:pointer; -webkit-tap-highlight-color: transparent;
 }
 
-/* Percorso nel pannello della vista spaziale. */
+/* Nella riga del titolo (schermo normale): senza il respiro della barra. */
+.dna-panel__head .dna-panel__richiudi-bar { padding:4px 2px; }
+
+/* Percorso nel pannello. */
 .dna-path { display:flex; flex-wrap:wrap; align-items:center; gap:4px 6px; margin:2px 0 6px; }
 .dna-path__label { flex-basis:100%; font-size:var(--fs-xs); color: var(--text3); text-transform:uppercase; letter-spacing:.4px; }
 .dna-path__chip {
@@ -1511,6 +1509,7 @@ body:has(.app.dna-schermo-intero #screen-tonight:not(.hidden)) .bottom-nav {
   padding:2px 8px; border-radius: var(--radius-pill); background: var(--surface2);
   border:1px solid var(--surface3); font-size:var(--fs-xs); color: var(--text2);
 }
+button.dna-path__chip { font-family:inherit; cursor:pointer; -webkit-tap-highlight-color: transparent; }
 .dna-path__chip.is-here { border-color: var(--cyan-a3); color: var(--cyan); background: var(--cyan-dim); }
 .dna-path__sep { color: var(--text3); font-size:var(--fs-xs); }
 

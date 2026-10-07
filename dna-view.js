@@ -232,6 +232,7 @@ export function showDna({ db, users, currentUser }) {
     }
     net = createNetwork(index, radice);
     focusId = net.rootId;
+    trail = [net.rootId];
     panX = 0; panY = 0;
     // Ogni rete nuova riparte da schermo normale: lo schermo intero è una
     // scelta per QUESTA esplorazione (si riaccende da sola al primo tocco,
@@ -1252,7 +1253,7 @@ function renderPanel(node) {
   const chiudi = !node.expanded
     ? `<span class="dna-panel__hint">Toccalo per aprire i collegamenti</span>`
     : restano
-      ? `<span class="dna-panel__hint">Toccalo per mostrarne altri (${piuLabel(node, restano)}) · <button type="button" class="dna-panel__richiudi" data-richiudi="${escapeHtml(node.id)}">Richiudi</button></span>`
+      ? `<span class="dna-panel__hint">Toccalo per mostrarne altri (${piuLabel(node, restano)})</span>`
       : `<span class="dna-panel__hint">Toccalo di nuovo per richiudere</span>`;
 
   // "Scheda →" sta nella riga del titolo e non in fondo: su un telefono
@@ -1305,8 +1306,13 @@ function renderPanel(node) {
   }
 
   panel.classList.remove("is-compact");
+  // "Richiudi" sta sempre in alto a destra: nella barra a schermo intero, qui
+  // nella riga del titolo.
+  const richiudiTesta = node.expanded
+    ? `<button type="button" class="dna-panel__richiudi-bar" data-richiudi="${escapeHtml(node.id)}">Richiudi</button>`
+    : "";
   panel.innerHTML = `
-    <div class="dna-panel__head">${panelIcon(node)}<strong>${escapeHtml(panelTitle(node))}</strong>${scheda}</div>
+    <div class="dna-panel__head">${panelIcon(node)}<strong>${escapeHtml(panelTitle(node))}</strong>${scheda}${richiudiTesta}</div>
     ${panelBody(node)}
     ${chiudi}`;
 }
@@ -1342,29 +1348,48 @@ const PERSONA_PREFIX = "persona:".length;
 const riferimento = () => net.rootId.slice(PERSONA_PREFIX);
 const nomeVisto = (nome) => (nome === ctx?.currentUser ? "Tu" : nome);
 
-// La strada più corta dalla radice al nodo, sugli archi aperti.
+// Il percorso fatto: i nodi che hai toccato, dalla radice al nodo attivo. Non
+// il collegamento più corto della rete (con i "ponti" fra rami ce n'è quasi
+// sempre uno più breve di quello che hai percorso davvero): quello che serve
+// a orientarsi è la STRADA CHE HAI FATTO. Toccare un nodo già nel percorso lo
+// accorcia fino lì, come un "indietro"; ogni passaggio si tocca per tornarci.
+let trail = [];
+
+function visit(id) {
+  focusId = id;
+  const i = trail.indexOf(id);
+  if (i !== -1) trail.length = i + 1;
+  else trail.push(id);
+}
+
+// Il percorso riallineato alla rete di adesso: un ramo richiuso porta via i
+// nodi che c'erano solo grazie a lui, e il percorso finisce sempre sul nodo
+// attivo.
+function percorsoAttuale(node) {
+  const t = [];
+  for (const id of trail) { if (!net.nodes.has(id)) break; t.push(id); }
+  const i = t.indexOf(node.id);
+  if (i !== -1) t.length = i + 1;
+  else t.push(node.id);
+  trail = t;
+  return t;
+}
+
+const MAX_PASSAGGI = 4;
+
 function percorsoHtml(node) {
-  if (node.id === net.rootId) return "";
-  const prev = new Map([[net.rootId, null]]);
-  const adj = new Map();
-  for (const e of net.edges) {
-    (adj.get(e.a) || adj.set(e.a, []).get(e.a)).push(e.b);
-    (adj.get(e.b) || adj.set(e.b, []).get(e.b)).push(e.a);
-  }
-  const coda = [net.rootId];
-  while (coda.length) {
-    const cur = coda.shift();
-    for (const nx of adj.get(cur) || []) if (!prev.has(nx)) { prev.set(nx, cur); coda.push(nx); }
-  }
-  if (!prev.has(node.id)) return "";
-  let ids = [];
-  for (let id = node.id; id; id = prev.get(id)) ids.unshift(id);
-  // Percorsi lunghi: l'inizio, un "…" e gli ultimi due passaggi.
-  if (ids.length > 5) ids = [ids[0], null, ...ids.slice(-2)];
-  const chip = (id) => id === null
-    ? `<span class="dna-path__sep">…</span>`
-    : `<span class="dna-path__chip${id === node.id ? " is-here" : ""}">${escapeHtml(id === net.rootId ? nomeVisto(riferimento()) : net.nodes.get(id).label)}</span>`;
-  return `<div class="dna-path"><span class="dna-path__label">Come ci sei arrivato</span>${ids.map(chip).join(`<span class="dna-path__sep">›</span>`)}</div>`;
+  const t = percorsoAttuale(node);
+  if (t.length < 2) return "";
+  // Percorsi lunghi: l'inizio, un "…" e gli ultimi tre passaggi.
+  const visti = t.length > MAX_PASSAGGI ? [t[0], null, ...t.slice(-(MAX_PASSAGGI - 1))] : t;
+  const chip = (id) => {
+    if (id === null) return `<span class="dna-path__sep">…</span>`;
+    const nome = escapeHtml(id === net.rootId ? nomeVisto(riferimento()) : net.nodes.get(id).label);
+    return id === node.id
+      ? `<span class="dna-path__chip is-here">${nome}</span>`
+      : `<button type="button" class="dna-path__chip" data-trail="${escapeHtml(id)}">${nome}</button>`;
+  };
+  return `<div class="dna-path"><span class="dna-path__label">Il tuo percorso</span>${visti.map(chip).join(`<span class="dna-path__sep">›</span>`)}</div>`;
 }
 
 const countChip = (nome, n) =>
@@ -1392,14 +1417,31 @@ function panelBody(node) {
   if (node.type === "persona") {
     if (node.label === rif) {
       // Chi guardi: con chi hai più titoli amati in comune.
-      const altri = [...index.byPerson.keys()].filter(n => n !== rif)
-        .map(n => ({ n, tot: incomune(rif, n).length }))
+      const io = rif === ctx?.currentUser;
+      const conta = `<p class="dna-panel__line">${io ? "Hai" : "Ha"} amato ${titoliIn(m.liked || 0)} (voto 7 o più).</p>`;
+      const n = selectedPeople?.length || 0;
+      if (n >= 2) {
+        // Più persone scelte: con chi si sovrappone lo sa già il selettore (le
+        // altre sono quelle spuntate), quindi una riga sola sul comune a TUTTI.
+        const chi = n === 2 ? "entrambi" : n === 3 ? "tutti e tre" : n === 4 ? "tutti e quattro" : `tutti e ${n}`;
+        const insieme = [...index.films.values()].filter(f => f.fans.length === n);
+        const genere = new Map();
+        for (const f of insieme) for (const g of f.genres) genere.set(g, (genere.get(g) || 0) + 1);
+        const top = [...genere.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 2).map(([g]) => escapeHtml(g));
+        return `${conta}
+        <p class="dna-panel__line">${insieme.length
+          ? `Amati da ${chi}: <strong>${titoliIn(insieme.length)}</strong>${top.length ? ` · soprattutto ${top.join(" e ")}` : ""}.`
+          : `Nessun titolo amato da ${chi}.`}</p>`;
+      }
+      if (n === 1) return conta;
+      // Tutto il gruppo: con chi si hanno più titoli amati in comune.
+      const altri = [...index.byPerson.keys()].filter(x => x !== rif)
+        .map(x => ({ n: x, tot: incomune(rif, x).length }))
         .filter(x => x.tot > 0)
         .sort((a, b) => b.tot - a.tot || a.n.localeCompare(b.n))
-        .slice(0, 4);
-      return `
-        <p class="dna-panel__line">${rif === ctx?.currentUser ? "Hai" : "Ha"} amato ${titoliIn(m.liked || 0)} (voto 7 o più).</p>
-        ${altri.length ? `<p class="dna-panel__line dna-panel__label">Chi ti somiglia di più (titoli amati insieme)</p><div class="dna-fans">${altri.map(x => countChip(x.n, x.tot)).join("")}</div>` : ""}`;
+        .slice(0, 3);
+      return `${conta}
+        ${altri.length ? `<p class="dna-panel__line dna-panel__label">Con chi ${io ? "hai" : "ha"} più titoli in comune</p><div class="dna-fans">${altri.map(x => countChip(x.n, x.tot)).join("")}</div>` : ""}`;
     }
     const insieme = incomune(rif, node.label);
     const genere = new Map();
@@ -1468,12 +1510,25 @@ export function initDnaView() {
 
   // "Richiudi" nel pannello: vedi renderPanel.
   el("dnaPanel")?.addEventListener("click", e => {
+    if (!net) return;
+    // Un passaggio del percorso: si torna a quel nodo (solo selezione, non
+    // apre né richiude niente).
+    const passo = e.target.closest("[data-trail]");
+    if (passo) {
+      const id = passo.dataset.trail;
+      if (!net.nodes.has(id)) return;
+      visit(id);
+      panelExpanded = false;
+      panX = 0; panY = 0;
+      render();
+      return;
+    }
     const b = e.target.closest("[data-richiudi]");
-    if (!b || !net) return;
+    if (!b) return;
     const id = b.dataset.richiudi;
     if (!net.nodes.get(id)?.expanded) return;
     collapse(net, id);
-    focusId = id;
+    visit(id);
     panX = 0; panY = 0;
     render();
   });
@@ -1517,7 +1572,7 @@ function tapNode(id) {
   } else if (!node.expanded) {
     nuovi = expandNode(id, false);
   }
-  focusId = id;
+  visit(id);
   panelExpanded = false;
   // Toccare un nodo ricentra sempre; se ha appena figliato, il render che
   // segue ricentra sul riquadro d'ingombro di focus + figli nuovi (vedi
@@ -1532,7 +1587,7 @@ function tapMore(id) {
   const node = net?.nodes.get(id);
   if (!node) return;
   const nuovi = expandNode(id, false);
-  focusId = id;
+  visit(id);
   panelExpanded = false;
   if (nuovi.length) pendingNewIds = nuovi;
   else { panX = 0; panY = 0; }

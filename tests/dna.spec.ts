@@ -481,7 +481,7 @@ test("vista spaziale: il +N apre altri collegamenti e il pannello racconta il le
 
   // Pannello: a schermo intero nasce chiuso, si apre toccando il titolo.
   await page.locator("#dnaPanelPeek").click();
-  await expect(page.locator("#dnaPanel")).toContainText("Chi ti somiglia di più");
+  await expect(page.locator("#dnaPanel")).toContainText("più titoli in comune");
 
   expect(guasti, `guasti nella vista spaziale:\n${guasti.join("\n")}`).toEqual([]);
   expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
@@ -535,9 +535,9 @@ test("il pannello e' lo stesso nelle due viste e la scheda mostra regia, cast e 
   await page.locator("#dnaNodes .dna-node.is-root").waitFor({ state: "visible", timeout: 30_000 });
   await toccaNodo(page, "#dnaNodes .dna-node.is-root");
 
-  // Panello della radice, vista piatta: "Chi ti somiglia", non più generi/registi ricorrenti.
+  // Pannello della radice, vista piatta: "con chi hai più titoli in comune", non più generi/registi ricorrenti.
   await page.locator("#dnaPanelPeek").click();
-  await expect(page.locator("#dnaPanel")).toContainText("Chi ti somiglia di più");
+  await expect(page.locator("#dnaPanel")).toContainText("più titoli in comune");
   await expect(page.locator("#dnaPanel")).not.toContainText("Registi ricorrenti");
   await page.locator("#dnaPanelPeek").click();
 
@@ -547,7 +547,7 @@ test("il pannello e' lo stesso nelle due viste e la scheda mostra regia, cast e 
   expect(film, "nessun film nella rete").toBeTruthy();
   await toccaNodo(page, `#dnaNodes [data-node="${film}"]`);
   await page.locator("#dnaPanelPeek").click();
-  await expect(page.locator("#dnaPanel")).toContainText("Come ci sei arrivato");
+  await expect(page.locator("#dnaPanel")).toContainText("Il tuo percorso");
   await expect(page.locator("#dnaPanel")).toContainText("Chi l'ha amato");
   await expect(page.locator("#dnaPanel")).not.toContainText("Non è tra i tuoi amati");
   await expect(page.locator("#dnaPanel")).not.toContainText("Lo ami anche tu");
@@ -557,6 +557,71 @@ test("il pannello e' lo stesso nelle due viste e la scheda mostra regia, cast e 
   await expect(page.locator("#detailTitle")).not.toHaveText("Titolo");
   await expect(page.locator("#detailCredits .detail-fact").first()).toBeAttached();
   await expect(page.locator("#detailFacts")).toHaveCount(0);
+
+  expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
+  expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
+});
+
+// Il percorso è la strada che hai FATTO (i nodi toccati), non il collegamento
+// più corto: con i ponti fra rami quello è quasi sempre più breve di quello
+// che si è percorso davvero.
+for (const vista of ["flat", "spatial"] as const) {
+  test(`vista ${vista}: il percorso e' la strada fatta e i passaggi si toccano per tornare indietro`, async ({ page }) => {
+    const scritture = soloLettura(page);
+    const guasti = osserva(page);
+    await entra(page);
+    await vaiA(page, "tonight");
+    if (vista === "spatial") await page.locator('#dnaViewToggle [data-dna-view="spatial"]').click();
+    const nodi = vista === "spatial" ? "#dnaSpatial" : "#dnaNodes";
+    await page.locator(`${nodi} .dna-node.is-root`).waitFor({ state: "visible", timeout: 30_000 });
+    const clicca = async (tipo: string) => {
+      const id = await page.evaluate(([n, t]) =>
+        [...document.querySelectorAll<HTMLElement>(`${n} .dna-node--${t}`)]
+          .find(x => x.style.display !== "none" && !x.classList.contains("is-focus") && !x.classList.contains("is-root"))?.dataset.node, [nodi, tipo]);
+      expect(id, `nessun nodo ${tipo} da toccare`).toBeTruthy();
+      await page.evaluate(([n, i]) => (document.querySelector(`${n} [data-node="${i}"]`) as HTMLElement).click(), [nodi, id!]);
+      await page.waitForTimeout(900);
+      return id!;
+    };
+    const etichetta = (id: string) => page.evaluate(([n, i]) =>
+      document.querySelector(`${n} [data-node="${i}"]`)!.getAttribute("aria-label")!.trim(), [nodi, id]);
+
+    await toccaNodo(page, `${nodi} .dna-node.is-root`);
+    const genere = await clicca("genere");
+    const film = await clicca("film");
+    await page.locator("#dnaPanelPeek").click();
+    const passi = await page.locator("#dnaPanel .dna-path__chip").allInnerTexts();
+    expect(passi.length, "il percorso non ha tre passaggi (radice, genere, film)").toBe(3);
+    expect(passi[1].trim()).toBe(await etichetta(genere));
+    expect(passi[2].trim()).toBe(await etichetta(film));
+
+    // Tornare indietro: il primo passaggio riporta alla radice, e il percorso sparisce.
+    await page.locator("#dnaPanel .dna-path__chip[data-trail]").first().click();
+    await expect(page.locator(`${nodi} .dna-node.is-focus`)).toHaveClass(/is-root/);
+    await expect(page.locator("#dnaPanel .dna-path")).toHaveCount(0);
+
+    expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
+    expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
+  });
+}
+
+// Con piu' persone scelte il pannello della radice non ripete i nomi del
+// selettore: una riga sul titolo amato da TUTTI.
+test("con due persone il pannello della radice dice quanti titoli amano entrambe", async ({ page }) => {
+  const scritture = soloLettura(page);
+  const guasti = osserva(page);
+  await entra(page);
+  await vaiA(page, "tonight");
+  await page.locator("#dnaNodes .dna-node.is-root").waitFor({ state: "visible", timeout: 30_000 });
+  await page.locator("#dnaPeopleBtn").click();
+  const nomi = await page.$$eval("#dnaPeopleList .dna-sheet__row", r => r.map(x => (x as HTMLElement).dataset.user!).filter(u => u !== "*"));
+  for (const nome of nomi.slice(0, 2)) await page.locator(`#dnaPeopleList .dna-sheet__row[data-user="${nome}"]`).click();
+  await page.locator("#dnaPeopleDoneBtn").click();
+  await page.locator("#dnaNodes .dna-node").first().waitFor({ state: "visible", timeout: 30_000 });
+  await toccaNodo(page, "#dnaNodes .dna-node.is-root");
+  await page.locator("#dnaPanelPeek").click();
+  await expect(page.locator("#dnaPanel")).toContainText(/Amati da entrambi|Nessun titolo amato da entrambi/);
+  await expect(page.locator("#dnaPanel")).not.toContainText("più titoli in comune");
 
   expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
   expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
