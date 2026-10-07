@@ -486,3 +486,41 @@ test("vista spaziale: il +N apre altri collegamenti e il pannello racconta il le
   expect(guasti, `guasti nella vista spaziale:\n${guasti.join("\n")}`).toEqual([]);
   expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
 });
+
+// Il tocco sul nodo attivo apre ciò che c'è ancora da aprire e richiude solo
+// quando non resta niente; chi ha sempre altro (la persona di partenza) si
+// richiude dal "Richiudi" nel pannello. Stessa dinamica in tutte e due le viste.
+for (const vista of ["flat", "spatial"] as const) {
+  test(`vista ${vista}: il secondo tocco sul nodo attivo ne apre altri, il Richiudi del pannello lo chiude`, async ({ page }) => {
+    const scritture = soloLettura(page);
+    const guasti = osserva(page);
+    await entra(page);
+    await vaiA(page, "tonight");
+    if (vista === "spatial") await page.locator('#dnaViewToggle [data-dna-view="spatial"]').click();
+    const nodi = vista === "spatial" ? "#dnaSpatial .dna-node" : "#dnaNodes .dna-node";
+    await page.locator(`${nodi}.is-root`).waitFor({ state: "visible", timeout: 30_000 });
+
+    await toccaNodo(page, `${nodi}.is-root`);
+    const dopoPrimo = await page.locator(nodi).count();
+    expect(dopoPrimo, "il primo tocco non ha aperto niente").toBeGreaterThan(1);
+
+    // La radice ha centinaia di collegamenti: un altro tocco ne apre altri, NON richiude.
+    await toccaNodo(page, `${nodi}.is-root`);
+    const dopoSecondo = await page.locator(nodi).count();
+    expect(dopoSecondo, "il secondo tocco ha richiuso invece di aprire altri collegamenti").toBeGreaterThan(dopoPrimo);
+    await expect(page.locator(`${nodi}.is-root`)).toHaveClass(/is-open/);
+
+    // Il segno "+" è sul nodo, in entrambe le viste.
+    await expect(page.locator(`${nodi}.is-root .dna-node__more`)).toHaveCount(1);
+
+    // Richiudere: dal pannello (a schermo intero il corpo si apre toccando il titolo).
+    if (!(await page.locator("#dnaPanel [data-richiudi]").isVisible())) await page.locator("#dnaPanelPeek").click();
+    await page.locator("#dnaPanel [data-richiudi]").click();
+    await page.waitForTimeout(600);
+    await expect(page.locator(`${nodi}.is-root`)).not.toHaveClass(/is-open/);
+    expect(await page.locator(nodi).count(), "il Richiudi non ha chiuso i rami").toBeLessThan(dopoSecondo);
+
+    expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
+    expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
+  });
+}

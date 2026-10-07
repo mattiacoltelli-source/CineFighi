@@ -997,7 +997,7 @@ function edgeLine(e, hops) {
 // Un nodo, con la sua classe (locandina/avatar/pastiglia dentro, vedi
 // nodeInner). Stessa funzione condivisa fra il render live e la vista
 // completa — vedi edgeLine qui sopra per il perché.
-function nodeButton(n, hops) {
+function nodeButton(n, hops, conPiu = false) {
   const h = hops.get(n.id);
   const withLabel = h <= LABEL_MAX_HOPS;
   const cls = [
@@ -1023,6 +1023,7 @@ function nodeButton(n, hops) {
     style="left:${n.x.toFixed(1)}px;top:${n.y.toFixed(1)}px"
     aria-label="${escapeHtml(n.label)}">
     ${nodeInner(n)}
+    ${conPiu ? piuHtml(n) : ""}
     ${withLabel ? `<span class="dna-node__label">${escapeHtml(n.label)}</span>` : ""}
   </button>`;
 }
@@ -1035,6 +1036,17 @@ function piuLabel(node, restano) {
   return node.type === "persona" || node.type === "genere" ? "+" : `+${restano}`;
 }
 
+// "+N": un nodo aperto che ha ancora altri collegamenti non mostrati. Un
+// tocco sul segno li apre (tapMore), come il tocco sul nodo attivo (vedi
+// tapNode): il segno serve a vederlo prima di toccare. Stesso in entrambe le
+// viste; non nella vista "tutta la rete" (una foto, non si tocca).
+function piuHtml(n) {
+  const restano = n.expanded ? remainingCount(net, index, n.id) : 0;
+  return restano > 0
+    ? `<span class="dna-node__more" data-more="${escapeHtml(n.id)}" role="button" aria-label="Mostra altri ${restano} collegamenti">${piuLabel(n, restano)}</span>`
+    : "";
+}
+
 // Per la vista spaziale: lo stesso nodo di nodeButton (stesse classi fisse,
 // stesso contenuto) senza posizione né profondità, che lì decide la
 // proiezione. E lo stesso arco di edgeLine, senza coordinate.
@@ -1044,15 +1056,7 @@ function nodeShell(n) {
     isMeetingPoint(n) ? "is-shared" : "",
     lovedLevel(n) ? `is-loved-${lovedLevel(n)}` : ""
   ].filter(Boolean).join(" ");
-  // "+N": un nodo aperto che ha ancora altri collegamenti non mostrati. Un
-  // tocco sul segno li apre (tapMore); il tocco sul nodo resta quello di
-  // sempre (apre/richiude). Solo nella vista spaziale: questa funzione la
-  // usa solo lei.
-  const restano = n.expanded ? remainingCount(net, index, n.id) : 0;
-  const piu = restano > 0
-    ? `<span class="dna-node__more" data-more="${escapeHtml(n.id)}" role="button" aria-label="Mostra altri ${restano} collegamenti">${piuLabel(n, restano)}</span>`
-    : "";
-  return { cls, html: `${nodeInner(n)}${piu}<span class="dna-node__label">${escapeHtml(n.label)}</span>` };
+  return { cls, html: `${nodeInner(n)}${piuHtml(n)}<span class="dna-node__label">${escapeHtml(n.label)}</span>` };
 }
 
 function edgeClass(e) {
@@ -1090,7 +1094,7 @@ function render() {
   const shownEdges = net.edges.filter(e => shown.has(e.a) && shown.has(e.b));
   edgesEl.innerHTML = shownEdges.map(e => edgeLine(e, hops)).join("");
 
-  nodesEl.innerHTML = visible.map(n => nodeButton(n, hops)).join("");
+  nodesEl.innerHTML = visible.map(n => nodeButton(n, hops, true)).join("");
 
   shownIds = visible.map(n => n.id);
 
@@ -1244,10 +1248,12 @@ function renderPanel(node) {
   const panel = el("dnaPanel");
   if (!panel || !node) return;
 
-  const restano = dnaView === "spatial" && node.expanded ? remainingCount(net, index, node.id) : 0;
-  const chiudi = node.expanded
-    ? `<span class="dna-panel__hint">${restano ? `Tocca ${piuLabel(node, restano)} per mostrarne altri · toccalo di nuovo per richiudere` : "Toccalo di nuovo per richiudere"}</span>`
-    : `<span class="dna-panel__hint">Toccalo per aprire i collegamenti</span>`;
+  const restano = node.expanded ? remainingCount(net, index, node.id) : 0;
+  const chiudi = !node.expanded
+    ? `<span class="dna-panel__hint">Toccalo per aprire i collegamenti</span>`
+    : restano
+      ? `<span class="dna-panel__hint">Toccalo per mostrarne altri (${piuLabel(node, restano)}) · <button type="button" class="dna-panel__richiudi" data-richiudi="${escapeHtml(node.id)}">Richiudi</button></span>`
+      : `<span class="dna-panel__hint">Toccalo di nuovo per richiudere</span>`;
 
   // "Scheda →" sta nella riga del titolo e non in fondo: su un telefono
   // piccolo un bottone in coda al pannello finisce dietro la barra di
@@ -1522,9 +1528,22 @@ export function initDnaView() {
     nodesEl.addEventListener("click", e => {
       const btn = e.target.closest(".dna-node");
       if (!btn || dragged) return;   // era un trascinamento, non un tocco
-      tapNode(btn.dataset.node);
+      if (e.target.closest(".dna-node__more")) tapMore(btn.dataset.node);
+      else tapNode(btn.dataset.node);
     });
   }
+
+  // "Richiudi" nel pannello: vedi renderPanel.
+  el("dnaPanel")?.addEventListener("click", e => {
+    const b = e.target.closest("[data-richiudi]");
+    if (!b || !net) return;
+    const id = b.dataset.richiudi;
+    if (!net.nodes.get(id)?.expanded) return;
+    collapse(net, id);
+    focusId = id;
+    panX = 0; panY = 0;
+    render();
+  });
 
   const spatialEl = el("dnaSpatial");
   if (spatialEl) {
@@ -1551,10 +1570,17 @@ function tapNode(id) {
   // toccare la rete. Apre o richiude solo il nodo già attivo, cioè quello
   // che il pannello sta già descrivendo — così guardare non è mai un'azione
   // distruttiva, e "richiudi" non capita mai per sbaglio.
+  //
+  // Sul nodo attivo, il tocco apre sempre ciò che c'è ancora da aprire: se ha
+  // altri collegamenti chiusi ne mostra altri (stesso gesto del "+"), e solo
+  // quando non resta niente richiude. Prima richiudeva sempre, ed era
+  // impossibile sapere se un altro tocco ne avrebbe aperti altri o chiuso
+  // tutto. Chi ne ha sempre di più (persone, generi) si richiude dal
+  // "Richiudi" nel pannello.
   let nuovi = null;
   if (id === focusId) {
-    if (node.expanded) collapse(net, id);
-    else nuovi = expandNode(id, false);
+    if (!node.expanded || remainingCount(net, index, id) > 0) nuovi = expandNode(id, false);
+    else collapse(net, id);
   } else if (!node.expanded) {
     nuovi = expandNode(id, false);
   }

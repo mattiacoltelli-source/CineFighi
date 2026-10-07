@@ -1483,6 +1483,11 @@ body:has(.app.dna-schermo-intero #screen-tonight:not(.hidden)) .bottom-nav {
 }
 .dna-node__more::before { content:""; position:absolute; inset:-14px -12px; }
 
+.dna-panel__richiudi {
+  display:inline; padding:0 2px; background:none; border:0; color: var(--cyan);
+  font:inherit; font-weight:700; text-decoration:underline; cursor:pointer;
+}
+
 /* Percorso nel pannello della vista spaziale. */
 .dna-path { display:flex; flex-wrap:wrap; align-items:center; gap:4px 6px; margin:2px 0 6px; }
 .dna-path__label { flex-basis:100%; font-size:var(--fs-xs); color: var(--text3); text-transform:uppercase; letter-spacing:.4px; }
