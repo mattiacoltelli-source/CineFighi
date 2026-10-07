@@ -272,6 +272,17 @@
             <svg id="dnaEdges" class="dna-edges"></svg>
             <div id="dnaNodes" class="dna-nodes"></div>
           </div>
+          <!-- Vista Spaziale (dna-spatial.js): stessa rete, con profondità. -->
+          <div id="dnaSpatial" class="dna-spatial hidden">
+            <svg class="dna-spatial__edges" aria-hidden="true"></svg>
+            <div class="dna-spatial__nodes"></div>
+          </div>
+        </div>
+        <!-- Piatto/Spaziale: piccolo, nell'angolo del riquadro che comanda —
+             stessa pillola di Barre/Bolle nelle Statistiche. -->
+        <div class="genre-view-toggle dna-view-toggle" id="dnaViewToggle" role="group" aria-label="Vista della rete">
+          <button type="button" class="genre-view-btn active" data-dna-view="flat" aria-pressed="true">Piatto</button>
+          <button type="button" class="genre-view-btn" data-dna-view="spatial" aria-pressed="false">Spaziale</button>
         </div>
         <!-- Il selettore delle persone copre il riquadro invece di spingere
              la pagina in basso: così aprirlo e chiuderlo non sposta niente. -->

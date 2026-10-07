@@ -406,3 +406,54 @@ test("il tasto vedi tutta la rete compare con rete grande in ogni modalita', e m
   expect(guasti, `guasti aprendo la vista completa:\n${guasti.join("\n")}`).toEqual([]);
   expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
 });
+
+// Piatto/Spaziale: le due viste disegnano la STESSA rete. Passando da una
+// all'altra non si perde niente di quello che si è aperto, il tocco apre i
+// rami anche nella vista spaziale, e la scelta resta sul dispositivo.
+test("la vista spaziale mostra la stessa rete e si torna al piatto senza perdere niente", async ({ page }) => {
+  const scritture = soloLettura(page);
+  const guasti = osserva(page);
+  await entra(page);
+  await vaiA(page, "tonight");
+  await page.locator("#dnaNodes .dna-node").first().waitFor({ state: "visible", timeout: 30_000 });
+
+  await page.locator('#dnaViewToggle [data-dna-view="spatial"]').click();
+  await expect(page.locator("#dnaSpatial")).not.toHaveClass(/hidden/);
+  await expect(page.locator("#dnaCanvas")).toHaveClass(/hidden/);
+  await page.locator("#dnaSpatial .dna-node.is-root").waitFor({ state: "visible" });
+
+  // Il tocco apre i rami anche qui (stessa logica: tapNode in dna-view.js).
+  await toccaNodo(page, "#dnaSpatial .dna-node.is-root");
+  const aperti = await page.locator("#dnaSpatial .dna-node").count();
+  expect(aperti, "nella vista spaziale il tocco non ha aperto nessun ramo").toBeGreaterThan(1);
+
+  const vicino = await page.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>("#dnaSpatial .dna-node")]
+      .find(n => !n.classList.contains("is-focus") && n.style.display !== "none")?.dataset.node);
+  expect(vicino, "nessun vicino visibile nella vista spaziale").toBeTruthy();
+  await toccaNodo(page, `#dnaSpatial [data-node="${vicino}"]`);
+  await expect(page.locator("#dnaSpatial .dna-node.is-focus")).toHaveAttribute("data-node", vicino!);
+  const nodiRete = await page.locator("#dnaSpatial .dna-node").count();
+
+  // La scelta resta sul dispositivo: riaprendo l'app si riparte in Spaziale.
+  // La rete invece riparte da capo: rifaccio lo stesso percorso (stesso
+  // motore, deterministico) e confronto i nodi con quelli di prima.
+  // (L'utente è già ricordato: dopo il reload l'app entra da sola.)
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page.locator("#app")).not.toHaveClass(/hidden/, { timeout: 30_000 });
+  await vaiA(page, "tonight");
+  await page.locator("#dnaSpatial .dna-node.is-root").waitFor({ state: "visible", timeout: 30_000 });
+  await toccaNodo(page, "#dnaSpatial .dna-node.is-root");
+  await toccaNodo(page, `#dnaSpatial [data-node="${vicino}"]`);
+  expect(await page.locator("#dnaSpatial .dna-node").count(), "stesso percorso, rete diversa").toBe(nodiRete);
+
+  await page.locator('#dnaViewToggle [data-dna-view="flat"]').click();
+  await expect(page.locator("#dnaSpatial")).toHaveClass(/hidden/);
+  await expect(page.locator("#dnaNodes .dna-node.is-focus")).toHaveAttribute("data-node", vicino!);
+  const piatti = await page.locator("#dnaNodes .dna-node").count();
+  expect(piatti, "tornando al piatto la rete aperta e' sparita").toBeGreaterThan(1);
+  expect(await page.locator("#dnaSpatial .dna-node").count(), "la vista spaziale nascosta tiene ancora i nodi").toBe(0);
+
+  expect(guasti, `guasti nella vista spaziale:\n${guasti.join("\n")}`).toEqual([]);
+  expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
+});

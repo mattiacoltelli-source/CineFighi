@@ -1441,6 +1441,33 @@ body:has(.app.dna-schermo-intero #screen-tonight:not(.hidden)) .bottom-nav {
   text-align:center; font-size:var(--fs-sm); color: var(--text3); pointer-events:none;
 }
 
+/* Piatto/Spaziale (vedi dnaViewToggle in index.html): la pillola di
+   Barre/Bolle, in piccolo e in sovrimpressione nell'angolo in alto a
+   sinistra del riquadro — comanda come si guarda la rete, quindi sta sulla
+   rete, senza aggiungere righe alla pagina. Sotto al foglio Persone (z 2). */
+.dna-view-toggle {
+  position:absolute; top:8px; left:8px; z-index:1; gap:2px; padding:2px;
+  background: rgba(13,19,28,.82); backdrop-filter: blur(6px);
+}
+.dna-view-toggle .genre-view-btn { padding:4px 9px; font-size:var(--fs-2xs); }
+
+/* Vista Spaziale (dna-spatial.js). I nodi e gli archi sono quelli di sempre
+   (.dna-node, .dna-edge): qui cambia solo chi li posiziona — la transform la
+   scrive il JS, con la proiezione e la scala della profondità. */
+.dna-spatial { position:absolute; inset:0; touch-action:none; }
+.dna-spatial__edges {
+  position:absolute; inset:0; width:100%; height:100%; overflow:visible; pointer-events:none;
+}
+/* z-index:0: lo z-index dei nodi (per livello di salto) resta qui dentro. */
+.dna-spatial__nodes { position:absolute; inset:0; z-index:0; }
+.dna-spatial .dna-node { left:0; top:0; transition:none; will-change: transform, opacity; }
+/* La transform del bottone è inline (e vince su .dna-node:active): la
+   pressione rimpicciolisce il contenuto, stesso effetto a vista. */
+.dna-spatial .dna-node > :first-child { transition: transform var(--t-fast) var(--ease); }
+.dna-spatial .dna-node:active > :first-child { transform: scale(.94); }
+.dna-spatial .dna-node.no-label .dna-node__label { visibility:hidden; }
+.dna-spatial .dna-edge { transition:none; }
+
 .dna-panel { margin-top:12px; min-height:88px; }
 .dna-panel__head { display:flex; align-items:center; gap:8px; margin-bottom:4px; }
 .dna-panel__head strong { flex:1; min-width:0; }

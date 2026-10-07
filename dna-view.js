@@ -14,6 +14,7 @@ import {
 } from "./dna.js?v=4b87992";
 import { escapeHtml } from "./cine-core.js?v=4b87992";
 import { avatarHtml } from "./ui.js?v=4b87992";
+import { createSpatial } from "./dna-spatial.js?v=4b87992";
 
 // Quanti vicini apre un tap, e a che distanza dal genitore. Il tetto e' sempre
 // stato una questione di spazio, non di gusto: con cinque figli su un ventaglio
@@ -100,6 +101,21 @@ let panelExpanded = false;
 // solo senza farsi ripassare db/users/currentUser ad ogni interazione.
 let ctx = null;
 let sheetOpen = false;
+
+// Vista Piatta (questo file, quella di sempre) o Spaziale (dna-spatial.js):
+// stessa rete, stesso pannello, stesse persone — cambia solo come la si
+// guarda. Interruttore nell'angolo del riquadro; la scelta resta sul
+// dispositivo, come Barre/Bolle nelle Statistiche (è una preferenza visiva,
+// non qualcosa da imporre al gruppo).
+const DNA_VIEW_KEY = "cinefighiDnaView";
+function getDnaView() {
+  try { return localStorage.getItem(DNA_VIEW_KEY) === "spatial" ? "spatial" : "flat"; } catch { return "flat"; }
+}
+function setDnaView(v) {
+  try { localStorage.setItem(DNA_VIEW_KEY, v); } catch {}
+}
+let dnaView = getDnaView();
+let spatial = null;
 
 // Spostamento manuale della camera rispetto al nodo attivo (vedi il
 // trascinamento in fondo al file). Si azzera ad ogni tap su un nodo: toccare
@@ -809,6 +825,7 @@ function renderMessage(text) {
   const panel = el("dnaPanel");
   if (edges) edges.innerHTML = "";
   if (nodes) nodes.innerHTML = "";
+  spatial?.clear();
   if (panel) panel.innerHTML = `<p class="dna-hint">${escapeHtml(text)}</p>`;
 }
 
@@ -1010,11 +1027,40 @@ function nodeButton(n, hops) {
   </button>`;
 }
 
+// Per la vista spaziale: lo stesso nodo di nodeButton (stesse classi fisse,
+// stesso contenuto) senza posizione né profondità, che lì decide la
+// proiezione. E lo stesso arco di edgeLine, senza coordinate.
+function nodeShell(n) {
+  const cls = [
+    "dna-node", `dna-node--${n.type}`,
+    isMeetingPoint(n) ? "is-shared" : "",
+    lovedLevel(n) ? `is-loved-${lovedLevel(n)}` : ""
+  ].filter(Boolean).join(" ");
+  return { cls, html: `${nodeInner(n)}<span class="dna-node__label">${escapeHtml(n.label)}</span>` };
+}
+
+function edgeClass(e) {
+  const incontro = isMeetingPoint(net.nodes.get(e.a)) || isMeetingPoint(net.nodes.get(e.b));
+  return `dna-edge dna-edge--${e.kind}${incontro ? " is-shared" : ""}`;
+}
+
 function render() {
   const nodesEl = el("dnaNodes");
   const edgesEl = el("dnaEdges");
   const canvas = el("dnaCanvas");
   if (!nodesEl || !edgesEl || !canvas) return;
+
+  if (dnaView === "spatial" && spatial) {
+    // La vista spaziale disegna da sé tutta la rete (niente budget DOM: i
+    // lontani svaniscono nella sua "nebbia"); qui resta tutto il resto.
+    if (nodesEl.firstChild) { nodesEl.innerHTML = ""; edgesEl.innerHTML = ""; }
+    shownIds = [];
+    const nuovi = pendingNewIds;
+    pendingNewIds = null;
+    spatial.update(net, focusId, nuovi);
+    afterRender();
+    return;
+  }
 
   const hops = hopsFrom(net, focusId);
 
@@ -1068,7 +1114,11 @@ function render() {
   }
 
   applyCamera();
+  afterRender();
+}
 
+// Quello che segue un render, in entrambe le viste.
+function afterRender() {
   // Con un nodo solo il riquadro sarebbe una scatola quasi vuota: finche' non
   // si apre niente, una riga dice cosa fare. Sparisce al primo tocco.
   const esplorando = net.nodes.size > 1;
@@ -1336,42 +1386,77 @@ export function initDnaView() {
   if (nodesEl) {
     nodesEl.addEventListener("click", e => {
       const btn = e.target.closest(".dna-node");
-      if (!btn) return;
-      const id = btn.dataset.node;
-      const node = net?.nodes.get(id);
-      if (!node) return;
-      if (dragged) return;   // era un trascinamento, non un tocco
-      // Il primissimo tocco (un solo nodo in rete, quello che stai per
-      // espandere) accende da solo lo schermo intero: è il momento in cui lo
-      // spazio comincia davvero a servire, e chiedere di premere un tasto a
-      // parte prima è un passo in più che quasi nessuno farebbe mai. Va
-      // acceso PRIMA di espandere, non dopo: layoutChildren usa raggio(), e
-      // una volta piazzato un nodo non si muove più — acceso dopo, il primo
-      // giro di nodi resterebbe piazzato piccolo. Il tasto in alto resta per
-      // chi lo vuole spento, o acceso subito anche prima di toccare nulla.
-      if (net.nodes.size === 1 && !schermoIntero) setSchermoIntero(true);
-      // Un tap su un nodo che non è quello attivo lo SELEZIONA soltanto: serve
-      // a leggerne il pannello (chi l'ha votato, i generi, la regia) senza
-      // toccare la rete. Apre o richiude solo il nodo già attivo, cioè quello
-      // che il pannello sta già descrivendo — così guardare non è mai un'azione
-      // distruttiva, e "richiudi" non capita mai per sbaglio.
-      let nuovi = null;
-      if (id === focusId) {
-        if (node.expanded) collapse(net, id);
-        else nuovi = expandNode(id, false);
-      } else if (!node.expanded) {
-        nuovi = expandNode(id, false);
-      }
-      focusId = id;
-      panelExpanded = false;
-      // Toccare un nodo ricentra sempre; se ha appena figliato, il render che
-      // segue ricentra sul riquadro d'ingombro di focus + figli nuovi (vedi
-      // pendingNewIds più sopra nel file).
-      if (nuovi) pendingNewIds = nuovi;
-      else { panX = 0; panY = 0; }
-      render();
+      if (!btn || dragged) return;   // era un trascinamento, non un tocco
+      tapNode(btn.dataset.node);
     });
   }
+
+  const spatialEl = el("dnaSpatial");
+  if (spatialEl) {
+    spatial = createSpatial({ container: spatialEl, nodeShell, edgeClass, onTap: tapNode, radius: raggio });
+  }
+  bindViewToggle();
+}
+
+// Un tocco su un nodo, da qualunque delle due viste.
+function tapNode(id) {
+  const node = net?.nodes.get(id);
+  if (!node) return;
+  // Il primissimo tocco (un solo nodo in rete, quello che stai per
+  // espandere) accende da solo lo schermo intero: è il momento in cui lo
+  // spazio comincia davvero a servire, e chiedere di premere un tasto a
+  // parte prima è un passo in più che quasi nessuno farebbe mai. Va
+  // acceso PRIMA di espandere, non dopo: layoutChildren usa raggio(), e
+  // una volta piazzato un nodo non si muove più — acceso dopo, il primo
+  // giro di nodi resterebbe piazzato piccolo. Il tasto in alto resta per
+  // chi lo vuole spento, o acceso subito anche prima di toccare nulla.
+  if (net.nodes.size === 1 && !schermoIntero) setSchermoIntero(true);
+  // Un tap su un nodo che non è quello attivo lo SELEZIONA soltanto: serve
+  // a leggerne il pannello (chi l'ha votato, i generi, la regia) senza
+  // toccare la rete. Apre o richiude solo il nodo già attivo, cioè quello
+  // che il pannello sta già descrivendo — così guardare non è mai un'azione
+  // distruttiva, e "richiudi" non capita mai per sbaglio.
+  let nuovi = null;
+  if (id === focusId) {
+    if (node.expanded) collapse(net, id);
+    else nuovi = expandNode(id, false);
+  } else if (!node.expanded) {
+    nuovi = expandNode(id, false);
+  }
+  focusId = id;
+  panelExpanded = false;
+  // Toccare un nodo ricentra sempre; se ha appena figliato, il render che
+  // segue ricentra sul riquadro d'ingombro di focus + figli nuovi (vedi
+  // pendingNewIds più sopra nel file).
+  if (nuovi) pendingNewIds = nuovi;
+  else { panX = 0; panY = 0; }
+  render();
+}
+
+function bindViewToggle() {
+  const box = el("dnaViewToggle");
+  if (!box) return;
+  box.addEventListener("click", e => {
+    const btn = e.target.closest("[data-dna-view]");
+    if (!btn || btn.dataset.dnaView === dnaView) return;
+    dnaView = btn.dataset.dnaView;
+    setDnaView(dnaView);
+    applyViewMode();
+    // Tornando al piatto la camera riparte centrata sul nodo attivo.
+    panX = 0; panY = 0;
+    if (net) render();
+  });
+  applyViewMode();
+}
+
+function applyViewMode() {
+  for (const btn of document.querySelectorAll("#dnaViewToggle [data-dna-view]")) {
+    const on = btn.dataset.dnaView === dnaView;
+    btn.classList.toggle("active", on);
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
+  }
+  el("dnaCanvas")?.classList.toggle("hidden", dnaView === "spatial");
+  if (dnaView === "spatial") spatial?.show(); else spatial?.hide();
 }
 
 // Trascinamento a un dito per guardarsi intorno. 1:1, senza inerzia e senza
@@ -1389,6 +1474,8 @@ function bindPan() {
 
   stage.addEventListener("pointerdown", e => {
     if (!net || pid !== null || e.button > 0) return;
+    // In vista spaziale i gesti sono suoi (dna-spatial.js).
+    if (dnaView === "spatial") return;
     // Il selettore è dentro al riquadro: lì i tocchi sono suoi, non della rete.
     if (e.target.closest(".dna-sheet")) return;
     // Un solo nodo (il tuo, ancora chiuso) sta sempre fermo al centro: non
