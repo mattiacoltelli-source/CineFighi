@@ -491,7 +491,7 @@ test("vista spaziale: il +N apre altri collegamenti e il pannello racconta il le
 // quando non resta niente; chi ha sempre altro (la persona di partenza) si
 // richiude dal "Richiudi" nel pannello. Stessa dinamica in tutte e due le viste.
 for (const vista of ["flat", "spatial"] as const) {
-  test(`vista ${vista}: il secondo tocco sul nodo attivo ne apre altri, il Richiudi del pannello lo chiude`, async ({ page }) => {
+  test(`vista ${vista}: il secondo tocco sul nodo attivo ne apre altri, il Richiudi nella barra lo chiude`, async ({ page }) => {
     const scritture = soloLettura(page);
     const guasti = osserva(page);
     await entra(page);
@@ -513,9 +513,9 @@ for (const vista of ["flat", "spatial"] as const) {
     // Il segno "+" è sul nodo, in entrambe le viste.
     await expect(page.locator(`${nodi}.is-root .dna-node__more`)).toHaveCount(1);
 
-    // Richiudere: dal pannello (a schermo intero il corpo si apre toccando il titolo).
-    if (!(await page.locator("#dnaPanel [data-richiudi]").isVisible())) await page.locator("#dnaPanelPeek").click();
-    await page.locator("#dnaPanel [data-richiudi]").click();
+    // Richiudere: "Richiudi" è nella barra del titolo, sempre visibile sul nodo
+    // aperto (un tocco solo, senza aprire il pannello).
+    await page.locator("#dnaPanel .dna-panel__richiudi-bar").click();
     await page.waitForTimeout(600);
     await expect(page.locator(`${nodi}.is-root`)).not.toHaveClass(/is-open/);
     expect(await page.locator(nodi).count(), "il Richiudi non ha chiuso i rami").toBeLessThan(dopoSecondo);
@@ -524,3 +524,40 @@ for (const vista of ["flat", "spatial"] as const) {
     expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
   });
 }
+
+// Il pannello è uguale nelle due viste e non ripete ciò che sta nella scheda
+// (regia, cast, generi, anno): quelli ora sono in alto nella scheda del film.
+test("il pannello e' lo stesso nelle due viste e la scheda mostra regia, cast e generi in alto", async ({ page }) => {
+  const scritture = soloLettura(page);
+  const guasti = osserva(page);
+  await entra(page);
+  await vaiA(page, "tonight");
+  await page.locator("#dnaNodes .dna-node.is-root").waitFor({ state: "visible", timeout: 30_000 });
+  await toccaNodo(page, "#dnaNodes .dna-node.is-root");
+
+  // Panello della radice, vista piatta: "Chi ti somiglia", non più generi/registi ricorrenti.
+  await page.locator("#dnaPanelPeek").click();
+  await expect(page.locator("#dnaPanel")).toContainText("Chi ti somiglia di più");
+  await expect(page.locator("#dnaPanel")).not.toContainText("Registi ricorrenti");
+  await page.locator("#dnaPanelPeek").click();
+
+  // Un film: il pannello ha il percorso e chi l'ha amato, senza frasi in più.
+  const film = await page.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>("#dnaNodes .dna-node--film")][0]?.dataset.node);
+  expect(film, "nessun film nella rete").toBeTruthy();
+  await toccaNodo(page, `#dnaNodes [data-node="${film}"]`);
+  await page.locator("#dnaPanelPeek").click();
+  await expect(page.locator("#dnaPanel")).toContainText("Come ci sei arrivato");
+  await expect(page.locator("#dnaPanel")).toContainText("Chi l'ha amato");
+  await expect(page.locator("#dnaPanel")).not.toContainText("Non è tra i tuoi amati");
+  await expect(page.locator("#dnaPanel")).not.toContainText("Lo ami anche tu");
+
+  // La scheda: regia/cast/generi in alto, niente più card "Dati" in fondo.
+  await page.evaluate(() => (document.querySelector("#dnaPanel .open-detail") as HTMLElement).click());
+  await expect(page.locator("#detailTitle")).not.toHaveText("Titolo");
+  await expect(page.locator("#detailCredits .detail-fact").first()).toBeAttached();
+  await expect(page.locator("#detailFacts")).toHaveCount(0);
+
+  expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
+  expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
+});

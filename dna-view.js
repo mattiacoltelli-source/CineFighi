@@ -1278,15 +1278,23 @@ function renderPanel(node) {
     const fansCompatti = !panelExpanded && node.type === "film" && (node.meta.fans || []).length
       ? `<div class="dna-panel__peek-fans">${fansHtml(node.meta.fans)}</div>`
       : "";
+    // "Richiudi" nella barra, non solo nel corpo del pannello (chiuso a schermo
+    // intero): un nodo aperto si richiude con un tocco solo.
+    const richiudi = node.expanded
+      ? `<button type="button" class="dna-panel__richiudi-bar" data-richiudi="${escapeHtml(node.id)}">Richiudi</button>`
+      : "";
     panel.innerHTML = `
-      <button type="button" class="dna-panel__peek" id="dnaPanelPeek">
-        ${panelIcon(node)}<strong>${escapeHtml(panelTitle(node))}</strong>
-        <span class="dna-panel__peek-hint">${panelExpanded ? "▾" : "Dettagli →"}</span>
-      </button>
+      <div class="dna-panel__bar">
+        <button type="button" class="dna-panel__peek" id="dnaPanelPeek">
+          ${panelIcon(node)}<strong>${escapeHtml(panelTitle(node))}</strong>
+          <span class="dna-panel__peek-hint">${panelExpanded ? "▾" : "Dettagli →"}</span>
+        </button>
+        ${richiudi}
+      </div>
       ${fansCompatti}
       <div class="dna-panel__full"${panelExpanded ? "" : " hidden"}>
         ${scheda}
-        ${panelBodyFor(node)}
+        ${panelBody(node)}
         ${chiudi}
       </div>`;
     el("dnaPanelPeek")?.addEventListener("click", () => {
@@ -1299,7 +1307,7 @@ function renderPanel(node) {
   panel.classList.remove("is-compact");
   panel.innerHTML = `
     <div class="dna-panel__head">${panelIcon(node)}<strong>${escapeHtml(panelTitle(node))}</strong>${scheda}</div>
-    ${panelBodyFor(node)}
+    ${panelBody(node)}
     ${chiudi}`;
 }
 
@@ -1322,10 +1330,6 @@ function fansHtml(fans) {
     .sort((a, b) => b.vote - a.vote || a.name.localeCompare(b.name))
     .map(f => `<span class="dna-fan">${avatarHtml(f.name, 22)}<span class="dna-fan__name">${escapeHtml(f.name)}</span><span class="dna-fan__vote">${f.vote.toFixed(1)}</span></span>`)
     .join("")}</div>`;
-}
-
-function pillsHtml(items) {
-  return `<div class="dna-pills">${items.map(t => `<span class="dna-pill">${escapeHtml(t)}</span>`).join("")}</div>`;
 }
 
 // ─── PANNELLO DELLA VISTA SPAZIALE ───────────────────────────────────────────
@@ -1378,7 +1382,7 @@ function incomune(a, b) {
     .sort((x, y) => y.peso - x.peso || x.film.title.localeCompare(y.film.title));
 }
 
-function panelBodySpatial(node) {
+function panelBody(node) {
   const m = node.meta, rif = riferimento();
   const percorso = percorsoHtml(node);
   const incontro = isMeetingPoint(node)
@@ -1409,17 +1413,13 @@ function panelBodySpatial(node) {
   }
 
   if (node.type === "film") {
+    // Regia, cast, generi e anno stanno nella scheda ("Scheda →"): qui solo il
+    // legame fra le persone. Niente frase su chi lo ama: i nomi e i voti qui
+    // sotto la dicono già.
     const fans = m.fans || [];
-    const altri = fans.filter(f => f.name !== rif);
-    const tuo = fans.some(f => f.name === rif);
-    const nomi = altri.map(f => escapeHtml(f.name)).join(", ");
-    const riga = tuo
-      ? (altri.length ? `Lo ami anche tu: lo condividi con ${nomi}.` : "Nel gruppo l'hai amato soltanto tu.")
-      : `Non è tra i tuoi amati: lo ${altri.length === 1 ? "ama" : "amano"} ${nomi}.`;
     return `
       ${percorso}
       ${incontro}
-      <p class="dna-panel__line">${riga}</p>
       <p class="dna-panel__line dna-panel__label">Chi l'ha amato (${fans.length})</p>
       ${fansHtml(fans)}`;
   }
@@ -1442,73 +1442,6 @@ function panelBodySpatial(node) {
     ${incontro}
     <p class="dna-panel__line">${tuoi ? `Tra i tuoi amati: <strong>${titoliIn(tuoi)}</strong> su ${(voci || []).length}.` : `Nessuno dei tuoi amati ne fa parte (${titoliIn((voci || []).length)} nel gruppo).`}</p>
     ${chi.length ? `<p class="dna-panel__line dna-panel__label">Chi lo ama di più (titoli)</p><div class="dna-fans">${chi.map(([n, t]) => countChip(n, t)).join("")}</div>` : ""}`;
-}
-
-const panelBodyFor = (node) => (dnaView === "spatial" ? panelBodySpatial(node) : panelBody(node));
-
-function panelBody(node) {
-  const m = node.meta;
-
-  // Una riga sola, e solo quando conta davvero: non "chi lo ama" (i nomi
-  // sono già nella lista fan o nel conteggio persone qui sotto), ma se è
-  // TUTTI quelli che stai guardando o solo una parte — un confronto che
-  // altrimenti il lettore dovrebbe fare a mente contando le teste.
-  const incontro = isMeetingPoint(node)
-    ? `<p class="dna-panel__line dna-panel__line--shared">Punto d'incontro: piace a ${selectedPeople.length === 2 ? "entrambi" : "tutti e tre"}.</p>`
-    : "";
-
-  if (node.type === "persona") {
-    const n = m.liked || 0;
-    // Non "sei la radice" ma "sei tu": con un filtro attivo la rete può
-    // partire da qualcun altro, e dargli del "tu" sarebbe sbagliato.
-    const io = node.label === ctx?.currentUser;
-    const generi = (m.topGenres || []).length
-      ? `<p class="dna-panel__line">Generi più presenti: ${m.topGenres.map(g => `${escapeHtml(g.genere)} (${g.film})`).join(" · ")}.</p>`
-      : "";
-    const registi = (m.topDirectors || []).length
-      ? `<p class="dna-panel__line">Registi ricorrenti: ${m.topDirectors.map(d => `${escapeHtml(d.name)} (${d.film})`).join(" · ")}.</p>`
-      : "";
-    const attori = (m.topActors || []).length
-      ? `<p class="dna-panel__line">Attori ricorrenti: ${m.topActors.map(a => `${escapeHtml(a.name)} (${a.film})`).join(" · ")}.</p>`
-      : "";
-    return `
-      <p class="dna-panel__line">${io ? "Hai" : "Ha"} amato ${n} ${n === 1 ? "titolo" : "titoli"} (voto 7 o più).</p>
-      ${generi}
-      ${registi}
-      ${attori}`;
-  }
-
-  if (node.type === "film") {
-    const tipo = m.media_type === "tv" ? "Serie" : "Film";
-    const regia = m.director ? `Regia di ${escapeHtml(m.director)}` : "";
-    const fans = m.fans || [];
-    return `
-      ${incontro}
-      <p class="dna-panel__line">${tipo}${regia ? ` · ${regia}` : ""}</p>
-      ${(m.cast || []).length ? `<p class="dna-panel__line">Con ${m.cast.map(a => escapeHtml(a)).join(", ")}</p>` : ""}
-      <p class="dna-panel__line dna-panel__label">Chi l'ha amato (${fans.length})</p>
-      ${fansHtml(fans)}
-      ${(m.genres || []).length ? pillsHtml(m.genres) : ""}`;
-  }
-
-  if (node.type === "regista" || node.type === "attore") {
-    const titoli = (m.titoli || []).length
-      ? `<p class="dna-panel__line">Nella rete: ${m.titoli.map(t => escapeHtml(t)).join(" · ")}${m.films > m.titoli.length ? ` e altri ${m.films - m.titoli.length}` : ""}.</p>`
-      : "";
-    return `
-      ${incontro}
-      <p class="dna-panel__line">${m.films} ${m.films === 1 ? "film amato" : "film amati"} nel gruppo, da ${m.people} ${m.people === 1 ? "persona" : "persone"} diverse.</p>
-      ${titoli}`;
-  }
-
-  const c = m.count || 0;
-  const chi = (m.topFans || []).length
-    ? `<p class="dna-panel__line">Chi lo ama di più: ${m.topFans.map(f => `${escapeHtml(f.name)} (${f.film})`).join(" · ")}.</p>`
-    : "";
-  return `
-    ${incontro}
-    <p class="dna-panel__line">${c} ${c === 1 ? "titolo amato" : "titoli amati"} dal gruppo in questo genere.</p>
-    ${chi}`;
 }
 
 // ─── EVENTI ──────────────────────────────────────────────────────────────────

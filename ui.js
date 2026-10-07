@@ -935,18 +935,18 @@ export function renderReportContent(report) {
 
 // ─── DETAIL ──────────────────────────────────────────────────────────────────
 
-export function renderDetailFacts(item) {
-  const statusFact = item.status === "watchlist" ? "★ In watchlist"
-    : item.status === "seen" ? "✓ Visto"
-    : "Non ancora salvato";
-  const facts = [
-    mediaLabel(item),
-    item.year,
-    item.genre_names?.length ? item.genre_names.join(", ") : null,
-    item.director ? `Regia: ${item.director}` : null,
-    statusFact
-  ].filter(Boolean);
-  return facts.map(f => `<span class="detail-fact">${escapeHtml(f)}</span>`).join("");
+// Regia, cast (i primi 3 attori salvati, gli stessi del DNA) e generi, sotto
+// titolo e anno. Anno e tipo stanno già in alto e lo stato (visto/watchlist)
+// lo dice il bottone in fondo: qui non si ripetono. Ciò che manca (un titolo
+// senza cast) semplicemente non compare.
+export function renderDetailCredits(item) {
+  const cast = (item.cast_names || []).filter(Boolean);
+  const generi = item.genre_names || [];
+  return [
+    item.director ? `<div class="detail-credit"><span>Regia</span>${escapeHtml(item.director)}</div>` : "",
+    cast.length ? `<div class="detail-credit"><span>Con</span>${cast.map(escapeHtml).join(", ")}</div>` : "",
+    generi.length ? `<div class="detail-facts detail-facts--sm">${generi.map(g => `<span class="detail-fact">${escapeHtml(g)}</span>`).join("")}</div>` : ""
+  ].join("");
 }
 
 export function renderVotesList(votesObj, currentUser) {

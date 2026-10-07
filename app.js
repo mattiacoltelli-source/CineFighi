@@ -21,7 +21,7 @@ import {
   showToast, avatarHtml, initScreens, switchScreen,
   renderShelf, renderSearchResults, renderLibraryList, renderGenreFilters,
   renderGenreBars, renderGenreBubbles, renderRanking, toggleRankingList, renderGroupReport, toggleUserCardFact,
-  renderDetailFacts, renderVotesList, renderReportMeta, renderGroupReportMeta, renderReportContent, renderReportGate,
+  renderDetailCredits, renderVotesList, renderReportMeta, renderGroupReportMeta, renderReportContent, renderReportGate,
   haptic, animateValue
 } from "./ui.js?v=eff58e8";
 import { initDnaView, showDna, resetDna } from "./dna-view.js?v=eff58e8";
@@ -559,7 +559,7 @@ function fillDetailHeader(item) {
   document.getElementById("detailYear").textContent = item.year;
   document.getElementById("detailType").textContent = item.media_type === "movie" ? "Film" : "Serie TV";
   document.getElementById("detailOverview").textContent = item.overview || "Nessuna trama disponibile.";
-  document.getElementById("detailFacts").innerHTML = renderDetailFacts(item);
+  document.getElementById("detailCredits").innerHTML = renderDetailCredits(item);
 }
 
 // Voti del gruppo in una tendina sotto il tuo voto: chiusa mostra solo gli
