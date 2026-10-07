@@ -109,12 +109,17 @@ let sheetOpen = false;
 // non qualcosa da imporre al gruppo).
 const DNA_VIEW_KEY = "cinefighiDnaView";
 function getDnaView() {
-  try { return localStorage.getItem(DNA_VIEW_KEY) === "spatial" ? "spatial" : "flat"; } catch { return "flat"; }
+  try {
+    const v = localStorage.getItem(DNA_VIEW_KEY);
+    return v === "spatial" || v === "orbit" ? v : "flat";
+  } catch { return "flat"; }
 }
 function setDnaView(v) {
   try { localStorage.setItem(DNA_VIEW_KEY, v); } catch {}
 }
 let dnaView = getDnaView();
+// "Spaziale" e la prova "3D" (orbita) usano lo stesso disegno: cambia solo il gesto.
+const inSpaziale = () => dnaView === "spatial" || dnaView === "orbit";
 let spatial = null;
 
 // Spostamento manuale della camera rispetto al nodo attivo (vedi il
@@ -1079,7 +1084,7 @@ function render() {
   const canvas = el("dnaCanvas");
   if (!nodesEl || !edgesEl || !canvas) return;
 
-  if (dnaView === "spatial" && spatial) {
+  if (inSpaziale() && spatial) {
     // La vista spaziale disegna da sé tutta la rete (niente budget DOM: i
     // lontani svaniscono nella sua "nebbia"); qui resta tutto il resto.
     if (nodesEl.firstChild) { nodesEl.innerHTML = ""; edgesEl.innerHTML = ""; }
@@ -1674,8 +1679,9 @@ function applyViewMode() {
     btn.classList.toggle("active", on);
     btn.setAttribute("aria-pressed", on ? "true" : "false");
   }
-  el("dnaCanvas")?.classList.toggle("hidden", dnaView === "spatial");
-  if (dnaView === "spatial") spatial?.show(); else spatial?.hide();
+  el("dnaCanvas")?.classList.toggle("hidden", inSpaziale());
+  spatial?.setOrbit(dnaView === "orbit");
+  if (inSpaziale()) spatial?.show(); else spatial?.hide();
 }
 
 // Trascinamento a un dito per guardarsi intorno. 1:1, senza inerzia e senza
@@ -1694,7 +1700,7 @@ function bindPan() {
   stage.addEventListener("pointerdown", e => {
     if (!net || pid !== null || e.button > 0) return;
     // In vista spaziale i gesti sono suoi (dna-spatial.js).
-    if (dnaView === "spatial") return;
+    if (inSpaziale()) return;
     // Il selettore è dentro al riquadro: lì i tocchi sono suoi, non della rete.
     if (e.target.closest(".dna-sheet")) return;
     // Un solo nodo (il tuo, ancora chiuso) sta sempre fermo al centro: non

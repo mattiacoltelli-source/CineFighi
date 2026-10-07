@@ -25,12 +25,22 @@
 
 import { hopsFrom } from "./dna.js?v=ca2c25f";
 
-const F = 560;                               // focale: più bassa = prospettiva più forte
+const F_BASE = 560;                          // focale: più bassa = prospettiva più forte
+const F_ORBIT = 1400;                        // in orbita la prospettiva è più dolce: a 60° i nodi vicini non esplodono
+const S_MAX_ORBIT = 1.45;                    // e nessun nodo diventa più di così più grande di com'è (altrimenti copre gli altri)
+let F = F_BASE;
 // z per 0,1,2,3,4+ salti dal nodo attivo. Il nodo attivo e i suoi vicini
 // stanno sul piano z=0, cioè a scala 1: grandi esattamente come nella vista
 // piatta (stesso nodo, stesse distanze). La profondità comincia dai nodi a 2
 // salti, quelli che devono sembrare più lontani.
 const DEPTH = [0, 0, 200, 380, 540];
+// LABORATORIO 3D: in orbita la profondità per salto è più larga, così girando
+// la scena i livelli si vedono davvero. Il piano 0 (nodo attivo e vicini) resta
+// a scala 1 come nella vista Spaziale.
+const DEPTH_ORBIT = [0, 0, 260, 480, 680];
+const PITCH_MAX = 1.25;                      // ~72°: oltre, la rete si vedrebbe di taglio
+const ORBIT_K = 0.008;                       // radianti per pixel di trascinamento (~0,46°)
+const NEAR = 140;                            // sotto questa distanza un nodo è "dietro la camera"
 const OPAC = [1, 1, .6, .34, .2];            // = .dna-h0..h4: panoramica e rete piatta
 const OPAC_ZONA = [1, 1, .5, .1, 0];         // a zoom normale: la tua zona, il resto nella nebbia
 const FOG_Z = 380;                           // quanto allontanarsi per diradare la nebbia
@@ -63,6 +73,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
   const nodesEl = container.querySelector(".dna-spatial__nodes");
 
   let net = null, focusId = null, active = false;
+  let orbit = false;            // laboratorio 3D: un dito ruota la scena
   const vis = new Map();        // id -> { h, th, grow, dom, cache }
   const edgeDom = new Map();    // "a|b" -> <line>
   const cam = { x: 0, y: 0, z: 0, tx: 0, ty: 0, tz: 0, yaw: 0, pitch: 0, tyaw: 0, tpitch: 0, vx: 0, vy: 0 };
@@ -71,7 +82,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
 
   // ─── profondità e nebbia ───────────────────────────────────────────────────
   function nebbia() { return Math.max(0, Math.min(1, -cam.z / FOG_Z)); }
-  const depthOf = (h) => lerpTable(DEPTH, h) * (1 - FLATTEN * nebbia());
+  const depthOf = (h) => lerpTable(orbit ? DEPTH_ORBIT : DEPTH, h) * (1 - FLATTEN * nebbia());
   const focusPlane = () => depthOf(0);
   const scaleAt = (z) => F / Math.max(1, F + z - cam.z);
   const scaleAtCam = (tz) => F / Math.max(1, F + focusPlane() - tz);
@@ -182,6 +193,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     // A nebbia diradata il piano del nodo attivo è a z = DEPTH[0] * (1 - FLATTEN).
     cam.tz = Math.max(Z_MIN, Math.min(-FOG_Z, F + DEPTH[0] * (1 - FLATTEN) - F / sFit));
     cam.vx = cam.vy = 0;
+    if (orbit) { cam.tyaw = giroPiuVicino(cam.tyaw); cam.tpitch = 0; }   // la panoramica è una mappa: di fronte
   }
 
   // ─── animazione (gira solo mentre qualcosa si muove) ───────────────────────
@@ -214,9 +226,10 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     ease("x", "tx", pointersDown ? 30 : 120, 0.05);
     ease("y", "ty", pointersDown ? 30 : 120, 0.05);
     ease("z", "tz", 90, 0.1);
-    if (!pointersDown) { cam.tyaw = 0; cam.tpitch = 0; }
-    ease("yaw", "tyaw", 160, 0.0005);
-    ease("pitch", "tpitch", 160, 0.0005);
+    if (!pointersDown && !orbit) { cam.tyaw = 0; cam.tpitch = 0; }
+    const tauRot = orbit && pointersDown ? 45 : 160;   // in orbita segue il dito da vicino
+    ease("yaw", "tyaw", tauRot, 0.0005);
+    ease("pitch", "tpitch", tauRot, 0.0005);
 
     for (const v of vis.values()) {
       const h = approach(v.h, v.th, dt, 140);
@@ -244,8 +257,13 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       const c = Math.cos(cam.pitch), s = Math.sin(cam.pitch);
       [dy, dz] = [dy * c + dz * s, -dy * s + dz * c];
     }
-    const s = scaleAt(focusPlane() + dz);
-    return { x: W / 2 + dx * s, y: H / 2 + dy * s, s };
+    const z = focusPlane() + dz;
+    const denom = F + z - cam.z;
+    if (denom < NEAR) return { x: 0, y: 0, s: 0, z, dietro: true };   // dietro la camera
+    const s = F / denom;
+    // La posizione segue la prospettiva piena; la GRANDEZZA del nodo ha un tetto
+    // in orbita: un nodo molto vicino non deve coprire quelli attorno.
+    return { x: W / 2 + dx * s, y: H / 2 + dy * s, s: orbit ? Math.min(s, S_MAX_ORBIT) : s, z };
   }
 
   function draw() {
@@ -253,7 +271,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     for (const [id, v] of vis) {
       const n = net.nodes.get(id);
       const p = project(n, v);
-      const fuori = p.x < -CULL_MARGIN || p.x > W + CULL_MARGIN || p.y < -CULL_MARGIN || p.y > H + CULL_MARGIN;
+      const fuori = p.dietro || p.x < -CULL_MARGIN || p.x > W + CULL_MARGIN || p.y < -CULL_MARGIN || p.y > H + CULL_MARGIN;
       let o = fuori ? 0 : opacityAt(v.h) * Math.min(1, v.grow * 1.6);
       if (o < 0.04) o = 0;   // nella nebbia: né disegnato né toccabile
       p.o = o;
@@ -265,7 +283,9 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       if (!o) continue;
       setIf(c, "t", `translate3d(${p.x.toFixed(1)}px,${p.y.toFixed(1)}px,0) translate(-50%,-50%) scale(${p.s.toFixed(3)})`, x => { st.transform = x; });
       setIf(c, "o", o.toFixed(2), x => { st.opacity = x; });
-      setIf(c, "z", String(10 - Math.round(v.h)), x => { st.zIndex = x; });
+      // Ordine di sovrapposizione per profondità vera (anche ruotando), non per
+      // salto: più lontano = sotto.
+      setIf(c, "z", String(Math.max(1, 5000 - Math.round(p.z))), x => { st.zIndex = x; });
       setIf(c, "nl", p.s < LABEL_MIN_SCALE, x => { v.dom.classList.toggle("no-label", x); });
     }
     for (const e of net.edges) {
@@ -284,7 +304,19 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       setIf(c, "y2", b.y.toFixed(1), x => line.setAttribute("y2", x));
       setIf(c, "w", ((focus ? 4 : 2.6) * Math.min(a.s, b.s)).toFixed(1), x => { line.style.strokeWidth = x; });
     }
+    aggiornaFrontale();
   }
+
+  // "Frontale": compare solo in orbita, quando la scena è girata.
+  const frontBtn = container.querySelector(".dna-spatial__front");
+  const giroPiuVicino = (a) => Math.round(a / (2 * Math.PI)) * 2 * Math.PI;
+  let frontMostrato = null;
+  function aggiornaFrontale() {
+    if (!frontBtn) return;
+    const girata = orbit && (Math.abs(cam.tyaw - giroPiuVicino(cam.tyaw)) > 0.06 || Math.abs(cam.tpitch) > 0.06);
+    if (girata !== frontMostrato) { frontMostrato = girata; frontBtn.classList.toggle("hidden", !girata); }
+  }
+  frontBtn?.addEventListener("click", () => { cam.tyaw = giroPiuVicino(cam.tyaw); cam.tpitch = 0; kick(); });
 
   // ─── gesti ─────────────────────────────────────────────────────────────────
   nodesEl.addEventListener("click", e => {
@@ -297,18 +329,25 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
   const pts = new Map();
   let gesture = null, ultimoTocco = 0;
 
+  // Un dito: in orbita ruota la scena attorno al nodo attivo, altrimenti sposta
+  // la camera (con parallax e lieve inclinazione, come sempre).
+  const nuovoGesto = (x, y) => orbit
+    ? { mode: "orbit", x0: x, y0: y, yaw0: cam.tyaw, pitch0: cam.tpitch }
+    : { mode: "pan", x0: x, y0: y, cx: cam.tx, cy: cam.ty, lx: x, ly: y, lt: performance.now() };
+
   container.addEventListener("pointerdown", e => {
-    if (e.button > 0 || !net || !active) return;
+    if (e.button > 0 || !net || !active || e.target.closest(".dna-spatial__front")) return;
     pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
     pointersDown = pts.size;
     if (pts.size === 1) {
       dragged = false;
-      gesture = { mode: "pan", x0: e.clientX, y0: e.clientY, cx: cam.tx, cy: cam.ty, lx: e.clientX, ly: e.clientY, lt: performance.now() };
+      gesture = nuovoGesto(e.clientX, e.clientY);
       cam.vx = cam.vy = 0;
     } else if (pts.size === 2) {
       const [p, q] = [...pts.values()];
       dragged = true;
-      gesture = { mode: "pinch", d0: Math.hypot(p.x - q.x, p.y - q.y) || 1, s0: scaleAtCam(cam.tz) };
+      gesture = { mode: "pinch", d0: Math.hypot(p.x - q.x, p.y - q.y) || 1, s0: scaleAtCam(cam.tz),
+        mx0: (p.x + q.x) / 2, my0: (p.y + q.y) / 2, tx0: cam.tx, ty0: cam.ty };
       try { container.setPointerCapture(e.pointerId); } catch {}
     }
     kick();
@@ -323,6 +362,28 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       const [p, q] = [...pts.values()];
       const sNew = gesture.s0 * Math.hypot(p.x - q.x, p.y - q.y) / gesture.d0;
       cam.tz = Math.max(Z_MIN, Math.min(Z_MAX, F + focusPlane() - F / Math.max(0.05, sNew)));
+      if (orbit) {
+        // In orbita due dita spostano anche il centro (un dito è occupato a ruotare):
+        // approssimato sul piano della rete, meno efficace se la scena è molto girata.
+        const sc = scaleAt(focusPlane());
+        const mx = (p.x + q.x) / 2, my = (p.y + q.y) / 2;
+        cam.tx = gesture.tx0 - (mx - gesture.mx0) / sc * Math.max(0.35, Math.cos(cam.tyaw));
+        cam.ty = gesture.ty0 - (my - gesture.my0) / sc * Math.max(0.35, Math.cos(cam.tpitch));
+        clampCam();
+      }
+      kick();
+      return;
+    }
+    if (gesture.mode === "orbit") {
+      if (net.nodes.size <= 1) return;   // un nodo solo: niente da girare
+      const ox = e.clientX - gesture.x0, oy = e.clientY - gesture.y0;
+      if (!dragged) {
+        if (Math.hypot(ox, oy) < DRAG_THRESHOLD) return;
+        dragged = true;
+        try { container.setPointerCapture(e.pointerId); } catch {}
+      }
+      cam.tyaw = gesture.yaw0 - ox * ORBIT_K;
+      cam.tpitch = Math.max(-PITCH_MAX, Math.min(PITCH_MAX, gesture.pitch0 - oy * ORBIT_K));
       kick();
       return;
     }
@@ -368,13 +429,13 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     pointersDown = pts.size;
     if (pts.size === 1 && gesture?.mode === "pinch") {
       const [p] = [...pts.values()];
-      gesture = { mode: "pan", x0: p.x, y0: p.y, cx: cam.tx, cy: cam.ty, lx: p.x, ly: p.y, lt: performance.now() };
+      gesture = nuovoGesto(p.x, p.y);
       cam.vx = cam.vy = 0;
     } else if (!pts.size) {
       gesture = null;
       // Il click arriva dopo il pointerup: il flag deve sopravvivere fino a lì.
       if (dragged) setTimeout(() => { dragged = false; }, 0);
-      else if (!e.target.closest(".dna-node") && net.nodes.size > 1) doppioTocco();
+      else if (!e.target.closest(".dna-node, .dna-spatial__front") && net.nodes.size > 1) doppioTocco();
     }
     kick();
   }
@@ -411,6 +472,16 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       }
       aimAt(focusId, newIds || []);
       if (snap) { cam.x = cam.tx; cam.y = cam.ty; draw(); }
+      kick();
+    },
+    // Laboratorio 3D: attiva/disattiva l'orbita. Lo zoom riparte da zero, perché
+    // la focale cambia e la scala di prima non vorrebbe più dire la stessa cosa.
+    setOrbit(on) {
+      orbit = !!on;
+      F = orbit ? F_ORBIT : F_BASE;
+      cam.z = cam.tz = 0;
+      if (!orbit) { cam.tyaw = cam.tpitch = 0; cam.yaw = cam.pitch = 0; }
+      for (const v of vis.values()) v.cache = {};
       kick();
     },
     show() { active = true; container.classList.remove("hidden"); measure(); },

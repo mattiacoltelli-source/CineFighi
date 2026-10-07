@@ -791,3 +791,56 @@ test("più persone: riga verde sempre, pannello senza doppioni, schermo intero i
   expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
   expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
 });
+
+// Laboratorio 3D (voce "3D" del selettore): un dito ruota la scena attorno al
+// nodo attivo; "Frontale" compare solo a scena girata e la riporta dritta.
+test("3D: un dito ruota la scena e Frontale la riporta dritta", async ({ page }) => {
+  const scritture = soloLettura(page);
+  const guasti = osserva(page);
+  await entra(page);
+  await vaiA(page, "tonight");
+  await page.locator("#dnaNodes .dna-node.is-root").waitFor({ state: "visible", timeout: 30_000 });
+  await page.locator('#dnaViewToggle [data-dna-view="orbit"]').click();
+  await page.locator("#dnaSpatial .dna-node.is-root").waitFor({ state: "visible" });
+  await toccaNodo(page, "#dnaSpatial .dna-node.is-root");
+  await page.waitForTimeout(500);
+
+  const posizioni = () => page.evaluate(() =>
+    Object.fromEntries([...document.querySelectorAll<HTMLElement>("#dnaSpatial .dna-node")]
+      .filter(n => n.style.display !== "none")
+      .map(n => { const r = n.getBoundingClientRect(); return [n.dataset.node!, [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)]]; })));
+  const prima = await posizioni();
+  await expect(page.locator(".dna-spatial__front")).toBeHidden();
+
+  // Un dito che trascina ruota (non sposta soltanto).
+  const st = (await page.locator("#dnaStage").boundingBox())!;
+  await page.mouse.move(st.x + st.width / 2, st.y + st.height * 0.7);
+  await page.mouse.down();
+  for (let i = 1; i <= 12; i++) { await page.mouse.move(st.x + st.width / 2 + i * 12, st.y + st.height * 0.7 - i * 6); await page.waitForTimeout(16); }
+  await page.mouse.up();
+  await page.waitForTimeout(700);
+  const girata = await posizioni();
+  const comuni = Object.keys(prima).filter(id => girata[id]);
+  expect(comuni.length, "ruotando sono spariti quasi tutti i nodi").toBeGreaterThan(2);
+  const spostati = comuni.filter(id => Math.hypot(girata[id][0] - prima[id][0], girata[id][1] - prima[id][1]) > 25).length;
+  expect(spostati, "il trascinamento non ha ruotato la scena").toBeGreaterThan(1);
+  await expect(page.locator(".dna-spatial__front")).toBeVisible();
+
+  // "Frontale" la riporta dritta e sparisce.
+  await page.locator(".dna-spatial__front").click();
+  await page.waitForTimeout(900);
+  await expect(page.locator(".dna-spatial__front")).toBeHidden();
+  const dopo = await posizioni();
+  const tornati = comuni.filter(id => dopo[id] && Math.hypot(dopo[id][0] - prima[id][0], dopo[id][1] - prima[id][1]) < 12).length;
+  expect(tornati, "Frontale non riporta i nodi dov'erano").toBeGreaterThan(comuni.length / 2);
+
+  // Il tocco sui nodi funziona anche in 3D.
+  const vicino = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>("#dnaSpatial .dna-node")]
+    .find(n => n.style.display !== "none" && !n.classList.contains("is-focus"))?.dataset.node);
+  await page.evaluate((i: string) => (document.querySelector(`#dnaSpatial [data-node="${i}"]`) as HTMLElement).click(), vicino!);
+  await page.waitForTimeout(700);
+  await expect(page.locator(`#dnaSpatial [data-node="${vicino}"]`)).toHaveClass(/is-focus/);
+
+  expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
+  expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
+});

@@ -278,6 +278,8 @@
           <div id="dnaSpatial" class="dna-spatial hidden">
             <svg class="dna-spatial__edges" aria-hidden="true"></svg>
             <div class="dna-spatial__nodes"></div>
+            <!-- Solo in orbita, quando la scena è girata: torna alla vista dritta. -->
+            <button type="button" class="dna-spatial__front hidden">Frontale</button>
           </div>
         </div>
         <!-- Piatto/Spaziale: piccolo, nell'angolo del riquadro che comanda —
@@ -285,6 +287,7 @@
         <div class="genre-view-toggle dna-view-toggle" id="dnaViewToggle" role="group" aria-label="Vista della rete">
           <button type="button" class="genre-view-btn active" data-dna-view="flat" aria-pressed="true">Piatto</button>
           <button type="button" class="genre-view-btn" data-dna-view="spatial" aria-pressed="false">Spaziale</button>
+          <button type="button" class="genre-view-btn" data-dna-view="orbit" aria-pressed="false">3D</button>
         </div>
         <!-- Il selettore delle persone copre il riquadro invece di spingere
              la pagina in basso: così aprirlo e chiuderlo non sposta niente. -->

@@ -1478,6 +1478,12 @@ body:has(.app.dna-schermo-intero #screen-tonight:not(.hidden)) .bottom-nav {
 .dna-spatial .dna-node:active > :first-child { transform: scale(.94); }
 .dna-spatial .dna-node.no-label .dna-node__label { visibility:hidden; }
 .dna-spatial .dna-edge { transition:none; }
+.dna-spatial__front {
+  position:absolute; top:8px; right:8px; z-index:4; padding:5px 11px; border:1px solid var(--cyan-a2);
+  border-radius: var(--radius-pill); background: rgba(13,19,28,.85); backdrop-filter: blur(6px);
+  color: var(--cyan); font-family: var(--font-display); font-weight:700; font-size:var(--fs-xs);
+  cursor:pointer; -webkit-tap-highlight-color: transparent;
+}
 
 /* "+N" (vedi nodeShell in dna-view.js): i collegamenti di un nodo aperto che
    non sono ancora in rete. Solo il segno, in ciano come l'anello del nodo
