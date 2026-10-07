@@ -41,6 +41,12 @@ const DEPTH_ORBIT = [0, 0, 260, 480, 680];
 const PITCH_MAX = 1.25;                      // ~72°: oltre, la rete si vedrebbe di taglio
 const ORBIT_K = 0.008;                       // radianti per pixel di trascinamento (~0,46°)
 const NEAR = 140;                            // sotto questa distanza un nodo è "dietro la camera"
+// LABORATORIO 3D "Sfera": i collegamenti di un nodo si dispongono su una sfera
+// (un po' schiacciata in profondità) attorno a lui, dalla parte opposta al
+// nodo da cui si arriva. Le posizioni sono SOLO per la vista 3D: la rete vera
+// (node.x/node.y) resta quella di sempre, e le altre viste non cambiano.
+const N_DIREZIONI = 72;                      // direzioni candidate sulla sfera
+const Z_SCHIACCIATA = 0.8;                   // la profondità è l'80% del raggio: meno nodi uno sull'altro
 const OPAC = [1, 1, .6, .34, .2];            // = .dna-h0..h4: panoramica e rete piatta
 const OPAC_ZONA = [1, 1, .5, .1, 0];         // a zoom normale: la tua zona, il resto nella nebbia
 const FOG_Z = 380;                           // quanto allontanarsi per diradare la nebbia
@@ -74,9 +80,11 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
 
   let net = null, focusId = null, active = false;
   let orbit = false;            // laboratorio 3D: un dito ruota la scena
+  let sfera = false;            // laboratorio 3D: posizioni sulla sfera invece che sul piano
+  const pos3 = new Map();       // id -> { x, y, z }: posizioni della vista Sfera
   const vis = new Map();        // id -> { h, th, grow, dom, cache }
   const edgeDom = new Map();    // "a|b" -> <line>
-  const cam = { x: 0, y: 0, z: 0, tx: 0, ty: 0, tz: 0, yaw: 0, pitch: 0, tyaw: 0, tpitch: 0, vx: 0, vy: 0 };
+  const cam = { x: 0, y: 0, z: 0, tx: 0, ty: 0, tz: 0, cz: 0, tcz: 0, yaw: 0, pitch: 0, tyaw: 0, tpitch: 0, vx: 0, vy: 0 };
   let W = 0, H = 0;
   let dragged = false;
 
@@ -93,12 +101,56 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
 
   // ─── allineamento alla rete ────────────────────────────────────────────────
   function clear() {
-    vis.clear(); edgeDom.clear();
+    vis.clear(); edgeDom.clear(); pos3.clear();
     nodesEl.innerHTML = ""; edgesEl.innerHTML = "";
     net = null;
   }
 
+  // ─── disposizione sferica ──────────────────────────────────────────────────
+  // Ogni nodo nuovo va nella direzione (fra N_DIREZIONI, sull'emisfero lontano dal
+  // nodo da cui si arriva) che lo tiene più lontano da tutti gli altri: niente
+  // casualità, e un nodo piazzato non si muove più. Si riparte sempre dall'ordine
+  // di creazione dei nodi, quindi cambiare vista e tornare dà lo stesso risultato.
+  const DIREZIONI = Array.from({ length: N_DIREZIONI }, (_, i) => {
+    const y = 1 - 2 * (i + 0.5) / N_DIREZIONI, r = Math.sqrt(1 - y * y), a = i * 2.399963229728653;
+    return [Math.cos(a) * r, y, Math.sin(a) * r];
+  });
+
+  function layout3d() {
+    if (!pos3.has(net.rootId)) pos3.set(net.rootId, { x: 0, y: 0, z: 0 });
+    const R = radius();
+    for (const n of net.nodes.values()) {
+      if (pos3.has(n.id)) continue;
+      const pp = pos3.get(n.parent) || pos3.get(net.rootId);
+      const gp = n.parent ? pos3.get(net.nodes.get(n.parent)?.parent) : null;
+      let fuori = null;
+      if (gp) {
+        const ox = pp.x - gp.x, oy = pp.y - gp.y, oz = pp.z - gp.z, l = Math.hypot(ox, oy, oz) || 1;
+        fuori = [ox / l, oy / l, oz / l];
+      }
+      let best = null, bestD = -1;
+      for (const d of DIREZIONI) {
+        if (fuori && d[0] * fuori[0] + d[1] * fuori[1] + d[2] * fuori[2] < -0.1) continue;
+        const x = pp.x + d[0] * R, y = pp.y + d[1] * R, z = pp.z + d[2] * R * Z_SCHIACCIATA;
+        let m = Infinity;
+        for (const q of pos3.values()) { const dd = Math.hypot(q.x - x, q.y - y, q.z - z); if (dd < m) m = dd; }
+        if (m > bestD) { bestD = m; best = { x, y, z }; }
+      }
+      pos3.set(n.id, best || { x: pp.x + R, y: pp.y, z: pp.z });
+    }
+  }
+
+  // Dopo un cambio di modalità le coordinate della camera cambiano significato
+  // (piano <-> sfera): si riparte dal nodo attivo.
+  function risistema() {
+    if (!net) return;
+    if (sfera) layout3d();
+    aimAt(focusId);
+    cam.x = cam.tx; cam.y = cam.ty; cam.cz = cam.tcz; cam.z = cam.tz = 0;
+  }
+
   function sync(snap) {
+    if (sfera) layout3d();
     for (const [id, v] of vis) {
       if (!net.nodes.has(id)) { v.dom.remove(); vis.delete(id); }
     }
@@ -155,6 +207,21 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     const f = net.nodes.get(id);
     if (!f || f.x === null) return;
     const r = radius();
+    if (sfera) {
+      // Il centro dell'inquadratura è il nodo attivo, spostato verso i figli
+      // appena nati ma al massimo di mezzo raggio.
+      layout3d();
+      const q = pos3.get(id);
+      if (!q) return;
+      let sx = 0, sy = 0, sz = 0, k = 0;
+      for (const nid of newIds) { const m = pos3.get(nid); if (m) { sx += m.x - q.x; sy += m.y - q.y; sz += m.z - q.z; k++; } }
+      if (k) { sx /= k + 1; sy /= k + 1; sz /= k + 1; }
+      const l = Math.hypot(sx, sy, sz), cap = r * 0.5, f2 = l > cap ? cap / l : 1;
+      cam.tx = q.x + sx * f2; cam.ty = q.y + sy * f2; cam.tcz = q.z + sz * f2;
+      cam.tz = 0; cam.vx = cam.vy = 0;
+      return;
+    }
+    cam.tcz = 0;
     let minX = f.x, maxX = f.x, minY = f.y, maxY = f.y;
     for (const nid of newIds) {
       const n = net.nodes.get(nid);
@@ -170,13 +237,21 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
   }
 
   function bounds() {
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    if (sfera) {
+      for (const q of pos3.values()) {
+        minX = Math.min(minX, q.x); maxX = Math.max(maxX, q.x);
+        minY = Math.min(minY, q.y); maxY = Math.max(maxY, q.y);
+        minZ = Math.min(minZ, q.z); maxZ = Math.max(maxZ, q.z);
+      }
+      return { minX, maxX, minY, maxY, minZ, maxZ };
+    }
     for (const n of net.nodes.values()) {
       if (n.x === null) continue;
       minX = Math.min(minX, n.x); maxX = Math.max(maxX, n.x);
       minY = Math.min(minY, n.y); maxY = Math.max(maxY, n.y);
     }
-    return { minX, maxX, minY, maxY };
+    return { minX, maxX, minY, maxY, minZ: 0, maxZ: 0 };
   }
 
   function clampCam() {
@@ -190,6 +265,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     const sFit = Math.min((W - 24) / (b.maxX - b.minX + 110), (H - 24) / (b.maxY - b.minY + 120), 1);
     cam.tx = (b.minX + b.maxX) / 2;
     cam.ty = (b.minY + b.maxY) / 2;
+    cam.tcz = (b.minZ + b.maxZ) / 2;
     // A nebbia diradata il piano del nodo attivo è a z = DEPTH[0] * (1 - FLATTEN).
     cam.tz = Math.max(Z_MIN, Math.min(-FOG_Z, F + DEPTH[0] * (1 - FLATTEN) - F / sFit));
     cam.vx = cam.vy = 0;
@@ -226,6 +302,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     ease("x", "tx", pointersDown ? 30 : 120, 0.05);
     ease("y", "ty", pointersDown ? 30 : 120, 0.05);
     ease("z", "tz", 90, 0.1);
+    ease("cz", "tcz", pointersDown ? 30 : 120, 0.05);
     if (!pointersDown && !orbit) { cam.tyaw = 0; cam.tpitch = 0; }
     const tauRot = orbit && pointersDown ? 45 : 160;   // in orbita segue il dito da vicino
     ease("yaw", "tyaw", tauRot, 0.0005);
@@ -246,9 +323,19 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
   function project(n, v) {
     const p = n.parent && net.nodes.get(n.parent);
     const e = 1 - Math.pow(1 - v.grow, 3);            // i nuovi escono dal genitore
-    const wx = p && p.x !== null ? p.x + (n.x - p.x) * e : n.x;
-    const wy = p && p.y !== null ? p.y + (n.y - p.y) * e : n.y;
-    let dx = wx - cam.x, dy = wy - cam.y, dz = depthOf(v.h) - focusPlane();
+    let wx, wy, dz;
+    if (sfera) {
+      const q = pos3.get(n.id), pq = p && pos3.get(p.id);
+      if (!q) return { x: 0, y: 0, s: 0, z: 0, dietro: true };
+      wx = pq ? pq.x + (q.x - pq.x) * e : q.x;
+      wy = pq ? pq.y + (q.y - pq.y) * e : q.y;
+      dz = (pq ? pq.z + (q.z - pq.z) * e : q.z) - cam.cz;      // la profondità è la posizione vera
+    } else {
+      wx = p && p.x !== null ? p.x + (n.x - p.x) * e : n.x;
+      wy = p && p.y !== null ? p.y + (n.y - p.y) * e : n.y;
+      dz = depthOf(v.h) - focusPlane();
+    }
+    let dx = wx - cam.x, dy = wy - cam.y;
     if (cam.yaw) {
       const c = Math.cos(cam.yaw), s = Math.sin(cam.yaw);
       [dx, dz] = [dx * c + dz * s, -dx * s + dz * c];
@@ -257,7 +344,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       const c = Math.cos(cam.pitch), s = Math.sin(cam.pitch);
       [dy, dz] = [dy * c + dz * s, -dy * s + dz * c];
     }
-    const z = focusPlane() + dz;
+    const z = (sfera ? 0 : focusPlane()) + dz;
     const denom = F + z - cam.z;
     if (denom < NEAR) return { x: 0, y: 0, s: 0, z, dietro: true };   // dietro la camera
     const s = F / denom;
@@ -467,21 +554,24 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       measure();
       sync(snap);
       if (snap) {
-        const f = net.nodes.get(focusId);
-        Object.assign(cam, { x: f.x, y: f.y, z: 0, tx: f.x, ty: f.y, tz: 0, yaw: 0, pitch: 0, tyaw: 0, tpitch: 0, vx: 0, vy: 0 });
+        const f = sfera ? (pos3.get(focusId) || { x: 0, y: 0, z: 0 }) : net.nodes.get(focusId);
+        const fz = sfera ? f.z : 0;
+        Object.assign(cam, { x: f.x, y: f.y, z: 0, cz: fz, tx: f.x, ty: f.y, tz: 0, tcz: fz, yaw: 0, pitch: 0, tyaw: 0, tpitch: 0, vx: 0, vy: 0 });
       }
       aimAt(focusId, newIds || []);
-      if (snap) { cam.x = cam.tx; cam.y = cam.ty; draw(); }
+      if (snap) { cam.x = cam.tx; cam.y = cam.ty; cam.cz = cam.tcz; draw(); }
       kick();
     },
     // Laboratorio 3D: attiva/disattiva l'orbita. Lo zoom riparte da zero, perché
     // la focale cambia e la scala di prima non vorrebbe più dire la stessa cosa.
-    setOrbit(on) {
-      orbit = !!on;
+    setModo({ orbita, sfera: sf }) {
+      orbit = !!orbita;
+      sfera = orbit && !!sf;
       F = orbit ? F_ORBIT : F_BASE;
       cam.z = cam.tz = 0;
       if (!orbit) { cam.tyaw = cam.tpitch = 0; cam.yaw = cam.pitch = 0; }
       for (const v of vis.values()) v.cache = {};
+      risistema();
       kick();
     },
     show() { active = true; container.classList.remove("hidden"); measure(); },

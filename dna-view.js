@@ -111,7 +111,7 @@ const DNA_VIEW_KEY = "cinefighiDnaView";
 function getDnaView() {
   try {
     const v = localStorage.getItem(DNA_VIEW_KEY);
-    return v === "spatial" || v === "orbit" ? v : "flat";
+    return v === "spatial" || v === "orbit" || v === "sphere" ? v : "flat";
   } catch { return "flat"; }
 }
 function setDnaView(v) {
@@ -119,7 +119,7 @@ function setDnaView(v) {
 }
 let dnaView = getDnaView();
 // "Spaziale" e la prova "3D" (orbita) usano lo stesso disegno: cambia solo il gesto.
-const inSpaziale = () => dnaView === "spatial" || dnaView === "orbit";
+const inSpaziale = () => dnaView === "spatial" || dnaView === "orbit" || dnaView === "sphere";
 let spatial = null;
 
 // Spostamento manuale della camera rispetto al nodo attivo (vedi il
@@ -1680,7 +1680,7 @@ function applyViewMode() {
     btn.setAttribute("aria-pressed", on ? "true" : "false");
   }
   el("dnaCanvas")?.classList.toggle("hidden", inSpaziale());
-  spatial?.setOrbit(dnaView === "orbit");
+  spatial?.setModo({ orbita: dnaView === "orbit" || dnaView === "sphere", sfera: dnaView === "sphere" });
   if (inSpaziale()) spatial?.show(); else spatial?.hide();
 }
 
