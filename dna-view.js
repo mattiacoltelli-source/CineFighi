@@ -274,6 +274,11 @@ function peopleLabel() {
   return `${selectedPeople.length} persone`;
 }
 
+// "entrambi", "tutti e tre", "tutti e quattro", "tutti e 5"...
+function daTutti(n) {
+  return n === 2 ? "entrambi" : n === 3 ? "tutti e tre" : n === 4 ? "tutti e quattro" : `tutti e ${n}`;
+}
+
 function renderPeopleControl() {
   const btn = el("dnaPeopleBtn");
   const label = el("dnaPeopleLabel");
@@ -299,13 +304,16 @@ function renderPeopleControl() {
   // zero: resta un dato interessante, non un vuoto imbarazzante.
   const affinity = el("dnaAffinity");
   if (affinity) {
-    const n = selectedPeople?.length;
-    let insieme = 0;
-    if ((n === 2 || n === 3) && index) {
+    const n = selectedPeople?.length || 0;
+    let testo = "";
+    if (n >= 2 && index) {
+      let insieme = 0;
       for (const f of index.films.values()) if (f.fans.length === n) insieme++;
+      testo = insieme > 0
+        ? `${insieme} ${insieme === 1 ? "titolo amato" : "titoli amati"} da ${daTutti(n)}.`
+        : `Nessun titolo amato da ${daTutti(n)}.`;
     }
-    const chi = n === 2 ? "da entrambi" : "da tutti e tre";
-    affinity.textContent = insieme > 0 ? `${insieme} ${insieme === 1 ? "titolo amato" : "titoli amati"} ${chi}.` : "";
+    affinity.textContent = testo;
   }
 }
 
@@ -1429,16 +1437,46 @@ function panelBody(node) {
       const n = selectedPeople?.length || 0;
       if (n >= 2) {
         // Più persone scelte: con chi si sovrappone lo sa già il selettore (le
-        // altre sono quelle spuntate), quindi una riga sola sul comune a TUTTI.
-        const chi = n === 2 ? "entrambi" : n === 3 ? "tutti e tre" : n === 4 ? "tutti e quattro" : `tutti e ${n}`;
+        // altre sono quelle spuntate), quindi si parla del comune a TUTTI.
+        const chi = daTutti(n);
         const insieme = [...index.films.values()].filter(f => f.fans.length === n);
         const genere = new Map();
         for (const f of insieme) for (const g of f.genres) genere.set(g, (genere.get(g) || 0) + 1);
         const top = [...genere.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 2).map(([g]) => escapeHtml(g));
-        return `${conta}
+        // A schermo intero la riga verde in alto è nascosta: qui il numero resta,
+        // com'è sempre stato.
+        if (schermoIntero) {
+          return `${conta}
         <p class="dna-panel__line">${insieme.length
           ? `Amati da ${chi}: <strong>${titoliIn(insieme.length)}</strong>${top.length ? ` · soprattutto ${top.join(" e ")}` : ""}.`
           : `Nessun titolo amato da ${chi}.`}</p>`;
+        }
+        // A schermo normale la riga verde dice già quanti sono: qui solo ciò che
+        // non dice, cioè di che genere e quali titoli, e (da 3 persone) chi è
+        // più vicino a chi.
+        const righe = [];
+        if (insieme.length) {
+          const voti = (f) => f.fans.reduce((s, x) => s + x.vote, 0);
+          const esempi = [...insieme].sort((a, b) => voti(b) - voti(a) || a.title.localeCompare(b.title)).slice(0, 3);
+          if (top.length) righe.push(`<p class="dna-panel__line">In comune soprattutto ${top.join(" e ")}.</p>`);
+          righe.push(`<p class="dna-panel__line">Ad esempio: ${esempi.map(f => escapeHtml(f.title)).join(" · ")}.</p>`);
+        } else {
+          // Nessun titolo amato da tutti: quelli amati da tutti tranne uno.
+          const quasi = [...index.films.values()].filter(f => f.fans.length === n - 1).length;
+          if (quasi) righe.push(`<p class="dna-panel__line">Amati da quasi tutti: <strong>${titoliIn(quasi)}</strong>.</p>`);
+        }
+        if (n >= 3) {
+          const gente = selectedPeople.filter(x => index.byPerson.has(x));
+          let meglio = null;
+          for (let i = 0; i < gente.length; i++) for (let j = i + 1; j < gente.length; j++) {
+            const k = incomune(gente[i], gente[j]).length;
+            if (!meglio || k > meglio.k) meglio = { a: gente[i], b: gente[j], k };
+          }
+          if (meglio && meglio.k > 0) {
+            righe.push(`<p class="dna-panel__line">Più vicini: ${escapeHtml(nomeVisto(meglio.a))} e ${escapeHtml(nomeVisto(meglio.b))} (${titoliIn(meglio.k)} amati insieme).</p>`);
+          }
+        }
+        return `${conta}${righe.join("")}`;
       }
       if (n === 1) return conta;
       // Tutto il gruppo: con chi si hanno più titoli amati in comune.

@@ -738,3 +738,50 @@ test("pannelli: parole giuste, niente doppioni, titoli del regista", async ({ pa
   expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
   expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
 });
+
+// Durante la selezione di più persone (schermo normale): la riga verde in alto
+// dice quanti titoli amano tutti, da 2 persone in su; il pannello sotto non lo
+// ripete e dice altro (generi, titoli, chi è più vicino a chi). A schermo
+// intero, dove la riga verde non c'è, il pannello resta com'era.
+test("più persone: riga verde sempre, pannello senza doppioni, schermo intero invariato", async ({ page }) => {
+  const scritture = soloLettura(page);
+  const guasti = osserva(page);
+  await entra(page);
+  await vaiA(page, "tonight");
+  await page.locator("#dnaNodes .dna-node.is-root").waitFor({ state: "visible", timeout: 30_000 });
+  const scegli = async (nomi: string[]) => {
+    await page.locator("#dnaPeopleBtn").click();
+    // Il foglio è a interruttore: si riparte da "Tutti", poi si spuntano i nomi.
+    await page.locator('#dnaPeopleList .dna-sheet__row[data-user="*"]').click();
+    for (const n of nomi) await page.locator(`#dnaPeopleList .dna-sheet__row[data-user="${n}"]`).click();
+    await page.locator("#dnaPeopleDoneBtn").click();
+    await page.locator("#dnaNodes .dna-node.is-root").waitFor({ state: "visible", timeout: 30_000 });
+    await page.waitForTimeout(300);
+  };
+  const testo = (sel: string) => page.evaluate((s: string) => (document.querySelector(s)?.textContent || "").replace(/\s+/g, " ").trim(), sel);
+
+  await scegli(["Cos", "Gabri", "Generalissimo"]);
+  expect(await testo("#dnaAffinity")).toMatch(/\d+ titol\w+ amat\w+ da tutti e tre\./);
+  let pannello = await testo("#dnaPanel");
+  expect(pannello, "il pannello ripete il numero della riga verde").not.toMatch(/Amati da tutti e tre/);
+  expect(pannello).toContain("In comune soprattutto");
+  expect(pannello).toContain("Ad esempio:");
+  expect(pannello, "con 3 persone manca chi è più vicino a chi").toMatch(/Più vicini: .+ e .+ \(\d+ titol\w+ amati insieme\)\./);
+
+  // Con 4 persone la riga verde c'è ancora.
+  await scegli(["Cos", "Gabri", "Generalissimo", "TB"]);
+  expect(await testo("#dnaAffinity")).toMatch(/(\d+ titol\w+ amat\w+|Nessun titolo amato) da tutti e quattro\./);
+
+  // Con 2 persone: niente "Più vicini" (sarebbe lo stesso numero della riga verde).
+  await scegli(["Cos", "Gabri"]);
+  expect(await testo("#dnaAffinity")).toMatch(/da entrambi\./);
+  expect(await testo("#dnaPanel")).not.toContain("Più vicini");
+
+  // Schermo intero (dopo il primo tocco): il pannello dice il numero, come prima.
+  await toccaNodo(page, "#dnaNodes .dna-node.is-root");
+  await page.locator("#dnaPanelPeek").click();
+  await expect(page.locator("#dnaPanel")).toContainText(/Amati da entrambi: \d+ titol/);
+
+  expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
+  expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
+});
