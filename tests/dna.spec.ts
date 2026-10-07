@@ -697,6 +697,12 @@ test("pannelli: parole giuste, niente doppioni, titoli del regista", async ({ pa
   await expect(page.locator("#dnaStartHint")).toBeVisible();
   await expect(page.locator("#dnaPanel")).not.toContainText("Toccalo per aprire i collegamenti");
 
+  // La riga sotto il titolo sta intera (niente puntini) e il pannello non
+  // ripete la regola "voto 7 o più", che dice già la nota in fondo.
+  const troncata = await page.evaluate(() => { const e = document.querySelector("#dnaIntroToggle > span") as HTMLElement; return e.scrollWidth > e.clientWidth + 1; });
+  expect(troncata, "la riga sotto il titolo e' tagliata con i puntini").toBe(false);
+  await expect(page.locator("#dnaPanel")).not.toContainText("voto 7 o più");
+
   const clicca = async (tipo: string) => {
     const id = await page.evaluate((t: string) =>
       [...document.querySelectorAll<HTMLElement>(`#dnaNodes .dna-node--${t}`)]

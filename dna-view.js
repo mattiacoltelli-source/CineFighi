@@ -1433,7 +1433,7 @@ function panelBody(node) {
     if (node.label === rif) {
       // Chi guardi: con chi hai più titoli amati in comune.
       const io = rif === ctx?.currentUser;
-      const conta = `<p class="dna-panel__line">${io ? "Hai" : "Ha"} amato ${titoliIn(m.liked || 0)} (voto 7 o più).</p>`;
+      const conta = `<p class="dna-panel__line">${io ? "Hai" : "Ha"} amato ${titoliIn(m.liked || 0)}.</p>`;
       const n = selectedPeople?.length || 0;
       if (n >= 2) {
         // Più persone scelte: con chi si sovrappone lo sa già il selettore (le
