@@ -1259,6 +1259,11 @@ body:has(.app.dna-schermo-intero #screen-tonight:not(.hidden)) .bottom-nav {
   font-family: var(--font-display); font-size: var(--fs-base); font-weight: 700;
 }
 .dna-panel__peek-hint { flex-shrink: 0; font-size: var(--fs-xs); color: var(--cyan2); font-weight: 600; }
+/* Quando sotto arriva la riga dei fan, il padding pieno del bottone (12px)
+   più il margin-top di .dna-fans (4px) lasciavano un distacco maggiore del
+   solito fra titolo e voti — segnalato dal vivo. Si stringe solo qui,
+   lasciando intero il padding quando il titolo resta da solo. */
+.dna-panel__peek:has(+ .dna-panel__peek-fans) { padding-bottom: 6px; }
 /* Chi ha votato il film, visibile anche da chiuso: .dna-fans porta già il
    suo margin-top, qui serve solo il respiro laterale e sotto. */
 .dna-panel__peek-fans { padding: 0 16px 12px; }
