@@ -1,0 +1,65 @@
+/* ─── DNA Lab ────────────────────────────────────────────────────────────────
+   Solo l'impalcatura del playground. I nodi e gli archi usano le classi VERE
+   del DNA (.dna-node, .dna-edge, ...) da styles.css: qui si sovrascrive solo
+   il posizionamento, perché ora lo decide la proiezione 2.5D in dna-lab.js. */
+
+html, body.lab { height:100%; overflow:hidden; overscroll-behavior:none; }
+body.lab {
+  padding:0; display:flex; flex-direction:column;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.lab-top {
+  display:flex; flex-direction:column; gap:8px;
+  padding:10px 14px 8px; border-bottom:1px solid var(--border);
+}
+.lab-crumbs {
+  display:flex; align-items:center; gap:4px; overflow-x:auto; scrollbar-width:none;
+  font-size:var(--fs-sm); color: var(--text3); white-space:nowrap; min-height:28px;
+}
+.lab-crumbs::-webkit-scrollbar { display:none; }
+.lab-crumb {
+  background:none; color: var(--text2); padding:4px 6px; font-size:var(--fs-sm);
+  border-radius: var(--radius-pill);
+}
+.lab-crumb.is-here { color: var(--text); font-weight:700; background: var(--surface2); }
+.lab-crumb-sep { color: var(--text3); }
+
+.lab-tools { display:flex; gap:6px; }
+.lab-tool {
+  padding:6px 10px; min-height:32px; font-size:var(--fs-sm); font-weight:600;
+  background: var(--surface2); color: var(--text3); border:1px solid var(--border);
+  border-radius: var(--radius-pill);
+}
+.lab-tool.is-on { color: var(--cyan); border-color: var(--cyan-a2); background: var(--cyan-dim); }
+#labReset { margin-left:auto; }
+
+.lab-stage {
+  position:relative; flex:1; min-height:0; overflow:hidden;
+  touch-action:none; user-select:none; -webkit-user-select:none;
+  background: radial-gradient(ellipse at 50% 45%, var(--surface) 0%, var(--bg) 70%);
+}
+.lab-edges {
+  position:absolute; inset:0; width:100%; height:100%; overflow:visible; pointer-events:none;
+}
+.lab-nodes { position:absolute; inset:0; }
+
+/* Il nodo resta identico; cambia solo chi lo posiziona. La transform arriva
+   da JS in --t (traslazione proiettata + scala di profondità). */
+.lab .lab-nodes .dna-node {
+  left:0; top:0; transform: var(--t); transition:none; will-change: transform, opacity;
+}
+/* Stesso trucco del DNA (vedi .dna-node:active in styles.css): la pressione
+   si somma al posizionamento invece di sostituirlo. */
+.lab .lab-nodes .dna-node:active { transform: var(--t) scale(.94); }
+.lab .lab-nodes .dna-node.no-label .dna-node__label { visibility:hidden; }
+.lab .lab-edges .dna-edge { transition:none; }
+
+.lab-fps {
+  position:absolute; right:8px; bottom:6px; font-size:var(--fs-2xs); color: var(--text3);
+  pointer-events:none; font-variant-numeric: tabular-nums;
+}
+
+.lab-panel { margin:0; padding:10px 14px 12px; min-height:84px; border-top:1px solid var(--border); }
+.lab-panel .dna-panel__head strong { font-size:var(--fs-base); }
