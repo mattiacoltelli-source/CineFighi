@@ -1027,6 +1027,14 @@ function nodeButton(n, hops) {
   </button>`;
 }
 
+// Il segno dei collegamenti ancora chiusi. Film, regista e attore ne hanno
+// pochi: il numero dice quanto manca e si arriva a "finito". Persona e genere
+// ne hanno centinaia (+180, +146), un numero che non dice niente e che
+// nessuno aprirebbe tutto: lì solo "+", cioè "c'è altro".
+function piuLabel(node, restano) {
+  return node.type === "persona" || node.type === "genere" ? "+" : `+${restano}`;
+}
+
 // Per la vista spaziale: lo stesso nodo di nodeButton (stesse classi fisse,
 // stesso contenuto) senza posizione né profondità, che lì decide la
 // proiezione. E lo stesso arco di edgeLine, senza coordinate.
@@ -1037,12 +1045,12 @@ function nodeShell(n) {
     lovedLevel(n) ? `is-loved-${lovedLevel(n)}` : ""
   ].filter(Boolean).join(" ");
   // "+N": un nodo aperto che ha ancora altri collegamenti non mostrati. Un
-  // tocco sul pallino li apre (tapMore); il tocco sul nodo resta quello di
+  // tocco sul segno li apre (tapMore); il tocco sul nodo resta quello di
   // sempre (apre/richiude). Solo nella vista spaziale: questa funzione la
   // usa solo lei.
   const restano = n.expanded ? remainingCount(net, index, n.id) : 0;
   const piu = restano > 0
-    ? `<span class="dna-node__more" data-more="${escapeHtml(n.id)}" role="button" aria-label="Mostra altri ${restano} collegamenti">${restano > 99 ? "99+" : `+${restano}`}</span>`
+    ? `<span class="dna-node__more" data-more="${escapeHtml(n.id)}" role="button" aria-label="Mostra altri ${restano} collegamenti">${piuLabel(n, restano)}</span>`
     : "";
   return { cls, html: `${nodeInner(n)}${piu}<span class="dna-node__label">${escapeHtml(n.label)}</span>` };
 }
@@ -1238,7 +1246,7 @@ function renderPanel(node) {
 
   const restano = dnaView === "spatial" && node.expanded ? remainingCount(net, index, node.id) : 0;
   const chiudi = node.expanded
-    ? `<span class="dna-panel__hint">${restano ? `Tocca ${restano > 99 ? "99+" : `+${restano}`} per mostrarne altri · toccalo di nuovo per richiudere` : "Toccalo di nuovo per richiudere"}</span>`
+    ? `<span class="dna-panel__hint">${restano ? `Tocca ${piuLabel(node, restano)} per mostrarne altri · toccalo di nuovo per richiudere` : "Toccalo di nuovo per richiudere"}</span>`
     : `<span class="dna-panel__hint">Toccalo per aprire i collegamenti</span>`;
 
   // "Scheda →" sta nella riga del titolo e non in fondo: su un telefono

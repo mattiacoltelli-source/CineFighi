@@ -1469,18 +1469,19 @@ body:has(.app.dna-schermo-intero #screen-tonight:not(.hidden)) .bottom-nav {
 .dna-spatial .dna-edge { transition:none; }
 
 /* "+N" (vedi nodeShell in dna-view.js): i collegamenti di un nodo aperto che
-   non sono ancora in rete. Pastiglia ciano come il focus, in alto a sinistra
-   (il pallino verde "aperto" sta a destra). L'area di tocco è più larga della
-   pastiglia: un dito non centra un bersaglio da 20px. */
+   non sono ancora in rete. Solo il segno, in ciano come l'anello del nodo
+   attivo, in alto a sinistra (il pallino verde "aperto" sta a destra). Senza
+   sfondo, quindi un alone scuro attorno alle cifre per leggerlo anche sopra
+   una locandina chiara. L'area di tocco resta larga anche se non si vede: un
+   dito non centra un bersaglio da 12px. */
 .dna-node__more {
-  position:absolute; top:-6px; left:0; z-index:1;
-  min-width:24px; height:20px; padding:0 6px; border-radius: var(--radius-pill);
-  display:flex; align-items:center; justify-content:center;
-  background: var(--cyan); color: var(--on-cyan); border:2px solid var(--surface);
-  font-family: var(--font-display); font-weight:800; font-size:var(--fs-xs); line-height:1;
-  box-sizing:content-box;
+  position:absolute; top:-5px; left:1px; z-index:1;
+  color: var(--cyan); opacity:.9;
+  font-family: var(--font-display); font-weight:800; font-size:var(--fs-md); line-height:1;
+  text-shadow: 0 0 3px var(--bg), 0 0 3px var(--bg), 0 1px 2px var(--bg);
+  -webkit-tap-highlight-color: transparent;
 }
-.dna-node__more::before { content:""; position:absolute; inset:-12px -10px; }
+.dna-node__more::before { content:""; position:absolute; inset:-14px -12px; }
 
 /* Percorso nel pannello della vista spaziale. */
 .dna-path { display:flex; flex-wrap:wrap; align-items:center; gap:4px 6px; margin:2px 0 6px; }
