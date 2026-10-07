@@ -654,3 +654,60 @@ test("un percorso lungo mostra la radice, i puntini e gli ultimi quattro passagg
   expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
   expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
 });
+
+// Parole giuste nei pannelli: partendo da un'altra persona non si parla di
+// "tuoi" amati, con una persona sola non si ripete lo stesso numero, regista e
+// attore dicono quali sono i titoli più amati, e prima del primo tocco
+// l'istruzione "tocca per aprire" c'è una volta sola.
+test("pannelli: parole giuste, niente doppioni, titoli del regista", async ({ page }) => {
+  const scritture = soloLettura(page);
+  const guasti = osserva(page);
+  await entra(page);
+  await vaiA(page, "tonight");
+  await page.locator("#dnaNodes .dna-node.is-root").waitFor({ state: "visible", timeout: 30_000 });
+
+  // Prima del primo tocco: l'istruzione è nel riquadro, non anche nel pannello.
+  await expect(page.locator("#dnaStartHint")).toBeVisible();
+  await expect(page.locator("#dnaPanel")).not.toContainText("Toccalo per aprire i collegamenti");
+
+  const clicca = async (tipo: string) => {
+    const id = await page.evaluate((t: string) =>
+      [...document.querySelectorAll<HTMLElement>(`#dnaNodes .dna-node--${t}`)]
+        .find(n => !n.classList.contains("is-focus") && !n.classList.contains("is-root"))?.dataset.node, tipo);
+    expect(id, `nessun nodo ${tipo}`).toBeTruthy();
+    await page.evaluate((i: string) => (document.querySelector(`#dnaNodes [data-node="${i}"]`) as HTMLElement).click(), id!);
+    await page.waitForTimeout(700);
+  };
+  const pannello = async () => (await page.locator("#dnaPanel .dna-panel__full").evaluate(e => e.textContent || "")).replace(/\s+/g, " ");
+
+  // Tutto il gruppo: regista con i titoli più amati e i chip, senza frase doppia.
+  await toccaNodo(page, "#dnaNodes .dna-node.is-root");
+  await clicca("regista");
+  let t = await pannello();
+  expect(t, "il regista non dice quali sono i titoli più amati").toContain("Più amati:");
+  expect(t).toContain("Chi lo ama di più (su ");
+  expect(t, "la frase che ripete il numero dei chip è tornata").not.toContain("Tra i tuoi amati");
+  await clicca("film");
+  for (let i = 0; i < 5 && !(await page.locator("#dnaNodes .dna-node--persona:not(.is-root)").count()); i++) await clicca("film");
+  if (await page.locator("#dnaNodes .dna-node--persona:not(.is-root)").count()) {
+    await clicca("persona");
+    t = await pannello();
+    expect(t, "la persona non dice quanto ha amato").toMatch(/ha amato \d+ titol/);
+  }
+
+  // Una persona sola, diversa da te: niente "tuoi", niente numero ripetuto.
+  await page.locator("#dnaPeopleBtn").click();
+  await page.locator('#dnaPeopleList .dna-sheet__row[data-user="Gabri"]').click();
+  await page.locator("#dnaPeopleDoneBtn").click();
+  await page.locator("#dnaNodes .dna-node.is-root").waitFor({ state: "visible", timeout: 30_000 });
+  await toccaNodo(page, "#dnaNodes .dna-node.is-root");
+  await clicca("genere");
+  t = await pannello();
+  expect(t, "parla di 'tuoi' amati ma si parte da un'altra persona").not.toContain("tuoi");
+  expect(t).toContain("Il percorso");
+  expect(t, "il genere con una persona sola non dice 'Ha amato N titoli in questo genere'").toMatch(/Ha amato \d+ titol\w* in questo genere/);
+  expect(t, "con una persona sola resta il chip che ripete il numero").not.toContain("Chi lo ama di più");
+
+  expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
+  expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
+});

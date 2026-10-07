@@ -1250,10 +1250,13 @@ function renderPanel(node) {
   if (!panel || !node) return;
 
   const restano = node.expanded ? remainingCount(net, index, node.id) : 0;
+  // Prima del primo tocco la rete è il solo nodo e il riquadro dice già "tocca
+  // il tuo nodo per aprire": la stessa istruzione qui sarebbe un doppione.
+  const primoTocco = !node.expanded && net.nodes.size === 1;
   const chiudi = !node.expanded
-    ? `<span class="dna-panel__hint">Toccalo per aprire i collegamenti</span>`
+    ? (primoTocco ? "" : `<span class="dna-panel__hint">Toccalo per aprire i collegamenti</span>`)
     : restano
-      ? `<span class="dna-panel__hint">Toccalo per mostrarne altri (${piuLabel(node, restano)})</span>`
+      ? `<span class="dna-panel__hint">Toccalo per mostrarne altri${piuLabel(node, restano) === "+" ? "" : ` (${piuLabel(node, restano)})`}</span>`
       : `<span class="dna-panel__hint">Toccalo di nuovo per richiudere</span>`;
 
   // "Scheda →" sta nella riga del titolo e non in fondo: su un telefono
@@ -1392,7 +1395,8 @@ function percorsoHtml(node) {
       ? `<span class="dna-path__chip is-here">${nome}</span>`
       : `<button type="button" class="dna-path__chip" data-trail="${escapeHtml(id)}">${nome}</button>`;
   };
-  return `<div class="dna-path"><span class="dna-path__label">Il tuo percorso</span>${visti.map(chip).join(`<span class="dna-path__sep">›</span>`)}</div>`;
+  const mio = riferimento() === ctx?.currentUser;
+  return `<div class="dna-path"><span class="dna-path__label">${mio ? "Il tuo percorso" : "Il percorso"}</span>${visti.map(chip).join(`<span class="dna-path__sep">›</span>`)}</div>`;
 }
 
 const countChip = (nome, n) =>
@@ -1450,11 +1454,14 @@ function panelBody(node) {
     const genere = new Map();
     for (const x of insieme) for (const g of x.film.genres) genere.set(g, (genere.get(g) || 0) + 1);
     const top = [...genere.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 2).map(([g]) => g);
+    // Chi è (quanto ha amato e cosa), poi che cosa avete in comune.
+    const suoi = (m.topGenres || []).slice(0, 2).map(g => escapeHtml(g.genere));
     return `
       ${percorso}
+      <p class="dna-panel__line">${escapeHtml(node.label)} ha amato ${titoliIn(m.liked || 0)}${suoi.length ? `, soprattutto ${suoi.join(" e ")}` : ""}.</p>
       <p class="dna-panel__line">${insieme.length ? `${escapeHtml(nomeVisto(rif))} e ${escapeHtml(node.label)} avete amato in comune <strong>${titoliIn(insieme.length)}</strong>.` : `${escapeHtml(nomeVisto(rif))} e ${escapeHtml(node.label)} non avete titoli amati in comune.`}</p>
       ${insieme.length ? `<p class="dna-panel__line">Ad esempio: ${insieme.slice(0, 3).map(x => escapeHtml(x.film.title)).join(" · ")}.</p>` : ""}
-      ${top.length ? `<p class="dna-panel__line">Soprattutto: ${top.map(escapeHtml).join(" · ")}.</p>` : ""}`;
+      ${top.length ? `<p class="dna-panel__line">In comune soprattutto ${top.map(escapeHtml).join(" e ")}.</p>` : ""}`;
   }
 
   if (node.type === "film") {
@@ -1469,24 +1476,34 @@ function panelBody(node) {
       ${fansHtml(fans)}`;
   }
 
-  // Genere, regista, attore: chi li ama, e quanto ci sei dentro tu.
+  // Genere, regista, attore: chi li ama e quanto. Il numero dei titoli amati
+  // da ciascuno sta nei chip (anche il tuo): niente frase che lo ripeta.
   const key = node.id.slice(node.id.indexOf(":") + 1);
   const voci = node.type === "genere" ? index.byGenre.get(key)
     : node.type === "regista" ? index.byDirector.get(key) : index.byActor.get(key);
+  const totale = (voci || []).length;
   const tally = new Map();
-  let tuoi = 0;
   for (const e of voci || []) {
     const film = index.films.get(e.id);
-    if (!film) continue;
-    if (film.fans.some(f => f.name === rif)) tuoi++;
-    for (const f of film.fans) tally.set(f.name, (tally.get(f.name) || 0) + 1);
+    if (film) for (const f of film.fans) tally.set(f.name, (tally.get(f.name) || 0) + 1);
   }
   const chi = [...tally.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 4);
+  // I titoli più amati di un regista o di un attore (sono pochi): tre, poi "e altri N".
+  const titoli = (node.type === "regista" || node.type === "attore") && (m.titoli || []).length
+    ? `<p class="dna-panel__line">Più amati: ${m.titoli.map(t => escapeHtml(t)).join(" · ")}${totale > m.titoli.length ? ` e altri ${totale - m.titoli.length}` : ""}.</p>`
+    : "";
+  // Con una persona sola il chip sarebbe uno e ripeterebbe il totale: una riga.
+  const unica = index.byPerson.size === 1;
+  const soggetto = node.type === "genere" ? "in questo genere" : node.type === "regista" ? "di questo regista" : "con questo attore";
+  const chiHtml = !chi.length ? ""
+    : unica
+      ? `<p class="dna-panel__line">${rif === ctx?.currentUser ? "Hai" : "Ha"} amato ${titoliIn(totale)} ${soggetto}.</p>`
+      : `<p class="dna-panel__line dna-panel__label">Chi lo ama di più (su ${titoliIn(totale)} amati)</p><div class="dna-fans">${chi.map(([n, t]) => countChip(n, t)).join("")}</div>`;
   return `
     ${percorso}
     ${incontro}
-    <p class="dna-panel__line">${tuoi ? `Tra i tuoi amati: <strong>${titoliIn(tuoi)}</strong> su ${(voci || []).length}.` : `Nessuno dei tuoi amati ne fa parte (${titoliIn((voci || []).length)} nel gruppo).`}</p>
-    ${chi.length ? `<p class="dna-panel__line dna-panel__label">Chi lo ama di più (titoli)</p><div class="dna-fans">${chi.map(([n, t]) => countChip(n, t)).join("")}</div>` : ""}`;
+    ${titoli}
+    ${chiHtml}`;
 }
 
 // ─── EVENTI ──────────────────────────────────────────────────────────────────
