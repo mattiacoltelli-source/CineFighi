@@ -192,29 +192,6 @@
         <button class="io-gruppo-btn" data-mode="group">Gruppo</button>
       </div>
 
-      <div class="section">
-        <div class="stats-grid">
-          <div class="stat-card"><div class="stat-card__num" id="statSeen">0</div><div class="stat-card__label">Titoli visti</div></div>
-          <div class="stat-card"><div class="stat-card__num" id="statWatch">0</div><div class="stat-card__label">In watchlist</div></div>
-          <div class="stat-card"><div class="stat-card__num" id="statMovies">0</div><div class="stat-card__label">Film visti</div></div>
-          <div class="stat-card"><div class="stat-card__num" id="statSeries">0</div><div class="stat-card__label">Serie viste</div></div>
-        </div>
-      </div>
-
-      <div class="section">
-        <div class="taste-block">
-          <div class="taste-block__header">
-            <div class="taste-block__title">Generi più votati</div>
-            <div class="genre-view-toggle" id="genreViewToggle" role="group" aria-label="Vista generi">
-              <button type="button" class="genre-view-btn active" data-genre-view="bars" aria-pressed="true">Barre</button>
-              <button type="button" class="genre-view-btn" data-genre-view="bubbles" aria-pressed="false">Bolle</button>
-            </div>
-          </div>
-          <div id="genreBars"></div>
-          <div class="taste-block__legend taste-block__legend--foot" id="genreLegend">★ media voto</div>
-        </div>
-      </div>
-
       <div class="section" id="classificaSection">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
           <h3 class="section__title" style="margin:0;">🏆 Classifica</h3>
@@ -233,6 +210,29 @@
           <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
           <span class="rank-expand-btn__label">Mostra tutti</span> <span class="rank-expand-btn__count"></span>
         </button>
+      </div>
+
+      <div class="section">
+        <div class="stats-strip">
+          <div class="stats-strip__item"><b class="stats-strip__num" id="statSeen">0</b><span class="stats-strip__label">Visti</span></div>
+          <div class="stats-strip__item"><b class="stats-strip__num" id="statWatch">0</b><span class="stats-strip__label">Watchlist</span></div>
+          <div class="stats-strip__item"><b class="stats-strip__num" id="statMovies">0</b><span class="stats-strip__label">Film</span></div>
+          <div class="stats-strip__item"><b class="stats-strip__num" id="statSeries">0</b><span class="stats-strip__label">Serie</span></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="taste-block">
+          <div class="taste-block__header">
+            <div class="taste-block__title">Generi più votati</div>
+            <div class="genre-view-toggle" id="genreViewToggle" role="group" aria-label="Vista generi">
+              <button type="button" class="genre-view-btn active" data-genre-view="bars" aria-pressed="true">Barre</button>
+              <button type="button" class="genre-view-btn" data-genre-view="bubbles" aria-pressed="false">Bolle</button>
+            </div>
+          </div>
+          <div id="genreBars"></div>
+          <div class="taste-block__legend taste-block__legend--foot" id="genreLegend">★ media voto</div>
+        </div>
       </div>
     </section>
 
