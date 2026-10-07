@@ -533,6 +533,13 @@ export function pickNeighbours(net, index, sourceId, limit = 5) {
   return picked;
 }
 
+// Quanti collegamenti di un nodo non sono ancora in rete (sola lettura: stessi
+// candidati di pickNeighbours, senza scegliere). Serve alla vista spaziale per
+// dire "+N" su un nodo aperto che ha ancora altri rami da mostrare.
+export function remainingCount(net, index, id) {
+  return neighboursOf(index, id).filter(n => !net.linked.has(edgeKey(id, n.id))).length;
+}
+
 // Apre un nodo: aggiunge fino a `limit` vicini e i relativi archi.
 // Ritorna gli id dei nodi NUOVI (quelli già presenti hanno solo un arco in più).
 export function expand(net, index, id, limit = 5) {

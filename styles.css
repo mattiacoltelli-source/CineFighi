@@ -1468,6 +1468,31 @@ body:has(.app.dna-schermo-intero #screen-tonight:not(.hidden)) .bottom-nav {
 .dna-spatial .dna-node.no-label .dna-node__label { visibility:hidden; }
 .dna-spatial .dna-edge { transition:none; }
 
+/* "+N" (vedi nodeShell in dna-view.js): i collegamenti di un nodo aperto che
+   non sono ancora in rete. Pastiglia ciano come il focus, in alto a sinistra
+   (il pallino verde "aperto" sta a destra). L'area di tocco è più larga della
+   pastiglia: un dito non centra un bersaglio da 20px. */
+.dna-node__more {
+  position:absolute; top:-6px; left:0; z-index:1;
+  min-width:24px; height:20px; padding:0 6px; border-radius: var(--radius-pill);
+  display:flex; align-items:center; justify-content:center;
+  background: var(--cyan); color: var(--on-cyan); border:2px solid var(--surface);
+  font-family: var(--font-display); font-weight:800; font-size:var(--fs-xs); line-height:1;
+  box-sizing:content-box;
+}
+.dna-node__more::before { content:""; position:absolute; inset:-12px -10px; }
+
+/* Percorso nel pannello della vista spaziale. */
+.dna-path { display:flex; flex-wrap:wrap; align-items:center; gap:4px 6px; margin:2px 0 6px; }
+.dna-path__label { flex-basis:100%; font-size:var(--fs-xs); color: var(--text3); text-transform:uppercase; letter-spacing:.4px; }
+.dna-path__chip {
+  max-width:46%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  padding:2px 8px; border-radius: var(--radius-pill); background: var(--surface2);
+  border:1px solid var(--surface3); font-size:var(--fs-xs); color: var(--text2);
+}
+.dna-path__chip.is-here { border-color: var(--cyan-a3); color: var(--cyan); background: var(--cyan-dim); }
+.dna-path__sep { color: var(--text3); font-size:var(--fs-xs); }
+
 .dna-panel { margin-top:12px; min-height:88px; }
 .dna-panel__head { display:flex; align-items:center; gap:8px; margin-bottom:4px; }
 .dna-panel__head strong { flex:1; min-width:0; }

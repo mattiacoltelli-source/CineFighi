@@ -457,3 +457,32 @@ test("la vista spaziale mostra la stessa rete e si torna al piatto senza perdere
   expect(guasti, `guasti nella vista spaziale:\n${guasti.join("\n")}`).toEqual([]);
   expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
 });
+
+// "+N" della vista spaziale: un nodo aperto con altri collegamenti non
+// mostrati lo dice, e un tocco sul pallino ne apre altri SENZA richiudere il
+// nodo (il tocco sul nodo resta apri/richiudi). Il pannello spaziale parla
+// del legame con chi guardi, non del solo nodo.
+test("vista spaziale: il +N apre altri collegamenti e il pannello racconta il legame", async ({ page }) => {
+  const scritture = soloLettura(page);
+  const guasti = osserva(page);
+  await entra(page);
+  await vaiA(page, "tonight");
+  await page.locator('#dnaViewToggle [data-dna-view="spatial"]').click();
+  await page.locator("#dnaSpatial .dna-node.is-root").waitFor({ state: "visible", timeout: 30_000 });
+  await toccaNodo(page, "#dnaSpatial .dna-node.is-root");
+
+  const piu = page.locator("#dnaSpatial .dna-node.is-root .dna-node__more");
+  await expect(piu, "la radice aperta non mostra il +N").toHaveCount(1);
+  const prima = await page.locator("#dnaSpatial .dna-node").count();
+  await piu.evaluate(b => (b as HTMLElement).click());
+  await page.waitForTimeout(800);
+  expect(await page.locator("#dnaSpatial .dna-node").count(), "il +N non ha aperto altri nodi").toBeGreaterThan(prima);
+  await expect(page.locator("#dnaSpatial .dna-node.is-root"), "il +N ha richiuso il nodo").toHaveClass(/is-open/);
+
+  // Pannello: a schermo intero nasce chiuso, si apre toccando il titolo.
+  await page.locator("#dnaPanelPeek").click();
+  await expect(page.locator("#dnaPanel")).toContainText("Chi ti somiglia di più");
+
+  expect(guasti, `guasti nella vista spaziale:\n${guasti.join("\n")}`).toEqual([]);
+  expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
+});
