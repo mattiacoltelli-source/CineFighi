@@ -26,7 +26,11 @@
 import { hopsFrom } from "./dna.js?v=3d4c7cf";
 
 const F = 560;                               // focale: più bassa = prospettiva più forte
-const DEPTH = [-30, 70, 260, 440, 600];      // z per 0,1,2,3,4+ salti dal nodo attivo
+// z per 0,1,2,3,4+ salti dal nodo attivo. Il nodo attivo e i suoi vicini
+// stanno sul piano z=0, cioè a scala 1: grandi esattamente come nella vista
+// piatta (stesso nodo, stesse distanze). La profondità comincia dai nodi a 2
+// salti, quelli che devono sembrare più lontani.
+const DEPTH = [0, 0, 200, 380, 540];
 const OPAC = [1, 1, .6, .34, .2];            // = .dna-h0..h4: panoramica e rete piatta
 const OPAC_ZONA = [1, 1, .5, .1, 0];         // a zoom normale: la tua zona, il resto nella nebbia
 const FOG_Z = 380;                           // quanto allontanarsi per diradare la nebbia
