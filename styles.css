@@ -1288,6 +1288,10 @@ body:has(.app.dna-schermo-intero #screen-tonight:not(.hidden)) .bottom-nav {
   position:absolute; left:50%; top:50%; width:0; height:0;
   transition: transform .2s ease-out; will-change: transform;
 }
+/* Dopo un'apertura la camera scivola con la stessa durata dei nodi che
+   escono dal genitore (vedi animaCrescita in dna-view.js), invece di arrivare
+   prima di loro. Prima di .is-dragging: il dito vince sempre. */
+.dna-canvas.is-growing { transition: transform .42s var(--ease); }
 /* Mentre il dito è giù la camera deve seguirlo 1:1: con la transizione
    attiva resterebbe indietro di 200ms e sembrerebbe scollata dal gesto. */
 .dna-canvas.is-dragging { transition:none; }

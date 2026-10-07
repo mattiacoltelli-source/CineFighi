@@ -1025,10 +1025,8 @@ function render() {
     .slice(0, MAX_DOM_NODES);
   const shown = new Set(visible.map(n => n.id));
 
-  edgesEl.innerHTML = net.edges
-    .filter(e => shown.has(e.a) && shown.has(e.b))
-    .map(e => edgeLine(e, hops))
-    .join("");
+  const shownEdges = net.edges.filter(e => shown.has(e.a) && shown.has(e.b));
+  edgesEl.innerHTML = shownEdges.map(e => edgeLine(e, hops)).join("");
 
   nodesEl.innerHTML = visible.map(n => nodeButton(n, hops)).join("");
 
@@ -1037,6 +1035,7 @@ function render() {
   if (pendingNewIds) {
     const nuoviIds = pendingNewIds;
     pendingNewIds = null;
+    animaCrescita(nuoviIds, shownEdges);
     const focus = net.nodes.get(focusId);
     if (focus) {
       // Solo focus + figli appena nati: un genitore già aperto da prima (e
@@ -1084,6 +1083,55 @@ function render() {
 
   updateViewAllButton();
   renderPanel(net.nodes.get(focusId));
+}
+
+// ─── CRESCITA DEI RAMI ───────────────────────────────────────────────────────
+// I nodi appena aperti non compaiono più di scatto al loro posto: escono dal
+// genitore e ci scivolano in ~0,4s, e i loro archi crescono insieme a loro.
+// Solo transform/opacity con le Web Animations (compositor, nessun loop JS):
+// a fine animazione restano le regole CSS di sempre, posizione compresa —
+// left/top sono già quelli finali dal primo istante, cambia solo come ci si
+// arriva.
+const CRESCITA_MS = 420;
+const CRESCITA_SFASAMENTO_MS = 25;   // un filo di sequenza fra fratelli
+const CRESCITA_EASE = "cubic-bezier(.22,1,.36,1)";   // = --ease in styles.css
+
+function animaCrescita(nuoviIds, shownEdges) {
+  if (!nuoviIds.length || typeof Element.prototype.animate !== "function") return;
+  if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+
+  // La camera si sposta con la stessa durata, non in 0,2s davanti ai nodi.
+  const canvas = el("dnaCanvas");
+  canvas?.classList.add("is-growing");
+  setTimeout(() => canvas?.classList.remove("is-growing"), CRESCITA_MS + 80);
+
+  const nuovi = new Set(nuoviIds);
+  nuoviIds.forEach((id, i) => {
+    const n = net.nodes.get(id);
+    const p = n && net.nodes.get(n.parent);
+    const btn = el("dnaNodes")?.querySelector(`[data-node="${CSS.escape(id)}"]`);
+    if (!n || !p || p.x === null || !btn) return;
+    const dx = (p.x - n.x).toFixed(1), dy = (p.y - n.y).toFixed(1);
+    btn.animate(
+      [{ transform: `translate(-50%, -50%) translate(${dx}px, ${dy}px) scale(.35)`, opacity: 0 }, {}],
+      { duration: CRESCITA_MS, delay: i * CRESCITA_SFASAMENTO_MS, easing: CRESCITA_EASE, fill: "backwards" }
+    );
+  });
+
+  // L'arco cresce dall'estremo già presente verso il nodo nuovo, con la stessa
+  // curva: l'estremità resta attaccata al nodo per tutto il tragitto.
+  const lines = el("dnaEdges")?.children || [];
+  shownEdges.forEach((e, k) => {
+    const nuovoA = nuovi.has(e.a), nuovoB = nuovi.has(e.b);
+    if (nuovoA === nuovoB || !lines[k]) return;
+    const origine = net.nodes.get(nuovoA ? e.b : e.a);
+    const i = nuoviIds.indexOf(nuovoA ? e.a : e.b);
+    lines[k].style.transformOrigin = `${origine.x.toFixed(1)}px ${origine.y.toFixed(1)}px`;
+    lines[k].animate(
+      [{ transform: "scale(0)" }, { transform: "scale(1)" }],
+      { duration: CRESCITA_MS, delay: i * CRESCITA_SFASAMENTO_MS, easing: CRESCITA_EASE, fill: "backwards" }
+    );
+  });
 }
 
 // Il pannello è il posto dove sta l'informazione: la rete mostra i
