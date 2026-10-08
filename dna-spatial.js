@@ -57,9 +57,10 @@ const Z_MIN_ORBIT = -3600;                   // in orbita si può allontanarsi m
 const MARGINE_X = 64, MARGINE_Y = 150;        // spazio da lasciare ai bordi (e al pannello in basso)
 const LONG_MS = 420;                          // tocco lungo su un nodo = ci si vola sopra
 const DIP_MAX = 340;                         // quanto si allarga la camera a metà di un volo tra nodi
-const S_TARGET = 0.9;                        // scala a cui devono stare i collegamenti di un nodo (grandezza quasi normale)
+const PESO_BARICENTRO = 0.35;                // quanto i nuovi nodi preferiscono i vuoti vicino al centro della rete
+const S_TARGET = 0.8;                        // scala a cui devono stare i collegamenti di un nodo (grandezza quasi normale)
 const S_FIT_MIN_PIATTA = 0.4;                 // "3D" usa il layout piatto di dna.js, che non si può comprimere: lì ci si allarga di più
-const S_FIT_MIN = 0.8;                       // quanto si può rimpicciolire per far stare un nodo aperto per intero
+const S_FIT_MIN = 0.6;                       // quanto si può rimpicciolire per far stare un nodo aperto per intero
 const RAGGIO_SFERA = 1.7;                    // la sfera si apre più larga del ventaglio piatto
 const MAX_TILT = 0.14;                       // ~8°
 const DRAG_THRESHOLD = 8;                    // come la vista piatta
@@ -132,8 +133,12 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     // La sfera è un ellissoide adattato allo schermo: ai lati c'è poco posto
     // (telefono in verticale), sopra e sotto molto di più. I collegamenti di un
     // nodo stanno così dentro lo schermo a grandezza normale, senza rimpicciolirli.
-    const kx = Math.max(0.35, Math.min(1, (W / 2 - MARGINE_X) / S_TARGET / R));
-    const ky = Math.max(0.5, Math.min(1, (H / 2 - MARGINE_Y) / S_TARGET / R));
+    const kx = Math.max(0.8, Math.min(1, (W / 2 - MARGINE_X) / S_TARGET / R));
+    const ky = Math.max(0.8, Math.min(1, (H / 2 - MARGINE_Y) / S_TARGET / R));
+    const cen = { x: 0, y: 0, z: 0 };
+    for (const q of pos3.values()) { cen.x += q.x; cen.y += q.y; cen.z += q.z; }
+    const nn = Math.max(1, pos3.size);
+    cen.x /= nn; cen.y /= nn; cen.z /= nn;
     for (const n of net.nodes.values()) {
       if (pos3.has(n.id)) continue;
       const pp = pos3.get(n.parent) || pos3.get(net.rootId);
@@ -145,10 +150,15 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       }
       let best = null, bestD = -1;
       for (const d of DIREZIONI) {
-        if (fuori && d[0] * fuori[0] + d[1] * fuori[1] + d[2] * fuori[2] < -0.1) continue;
+        if (fuori && d[0] * fuori[0] + d[1] * fuori[1] + d[2] * fuori[2] < -0.75) continue;   // solo non tornare indietro verso il nonno
         const x = pp.x + d[0] * R * kx, y = pp.y + d[1] * R * ky, z = pp.z + d[2] * R * Z_SCHIACCIATA;
         let m = Infinity;
-        for (const q of pos3.values()) { const dd = Math.hypot(q.x - x, q.y - y, q.z - z); if (dd < m) m = dd; }
+        // Conta soprattutto la distanza SULLO SCHERMO (x,y): due nodi a profondità
+        // diverse ma sulla stessa linea di vista si sovrapporrebbero comunque.
+        for (const q of pos3.values()) { const dd = Math.hypot(q.x - x, q.y - y) + 0.15 * Math.abs(q.z - z); if (dd < m) m = dd; }
+        // Leggera attrazione verso il baricentro della rete: i nuovi nodi
+        // riempiono i vuoti attorno invece di allungarla a striscia.
+        m -= PESO_BARICENTRO * Math.hypot(x - cen.x, y - cen.y, z - cen.z);
         if (m > bestD) { bestD = m; best = { x, y, z }; }
       }
       pos3.set(n.id, best || { x: pp.x + R, y: pp.y, z: pp.z });
@@ -264,8 +274,15 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     const f = net.nodes.get(id);
     if (!f) return;
     const ids = [id];
+    // I collegamenti "a lunga distanza" (un nodo di un altro ramo) possono stare
+    // lontano per natura: non si rimpicciolisce tutto per inseguirli.
+    const wf = worldPos(id), lim = radius() * RAGGIO_SFERA * 1.5;
     for (const e of net.edges) {
-      if (e.a === id) ids.push(e.b); else if (e.b === id) ids.push(e.a);
+      const o = e.a === id ? e.b : e.b === id ? e.a : null;
+      if (!o) continue;
+      const wo = worldPos(o);
+      if (wf && wo && Math.hypot(wo.x - wf.x, wo.y - wf.y, wo.z - wf.z) > lim) continue;
+      ids.push(o);
     }
     if (ids.length < 2) return;
     const mx = W / 2 - MARGINE_X, my = H / 2 - MARGINE_Y;

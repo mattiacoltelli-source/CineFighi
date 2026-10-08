@@ -984,8 +984,11 @@ test("Sfera: il nodo toccato e i suoi collegamenti non vengono mai tagliati", as
         const [a, b] = (l.dataset.k || "|").split("|");
         if (a === id) vic.add(b); if (b === id) vic.add(a);
       }
+      const fr = document.querySelector("#dnaSpatial .dna-node.is-focus")!.getBoundingClientRect();
+      // Solo i collegamenti "vicini": un nodo di un altro ramo può stare lontano.
+      const vicino = (el: HTMLElement) => { const r = el.getBoundingClientRect(); return Math.hypot(r.left - fr.left, r.top - fr.top) < 300; };
       return [...document.querySelectorAll<HTMLElement>("#dnaSpatial .dna-node")]
-        .filter(el => el.style.display !== "none" && vic.has(el.dataset.node!))
+        .filter(el => el.style.display !== "none" && vic.has(el.dataset.node!) && vicino(el))
         .filter(el => { const q = el.getBoundingClientRect(); return q.left < c.left - 1 || q.right > c.right + 1 || q.top < c.top; })
         .map(el => el.dataset.node);
     });
