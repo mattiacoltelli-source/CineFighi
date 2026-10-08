@@ -215,13 +215,16 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       if (!q) return;
       let sx = 0, sy = 0, sz = 0, k = 0;
       for (const nid of newIds) { const m = pos3.get(nid); if (m) { sx += m.x - q.x; sy += m.y - q.y; sz += m.z - q.z; k++; } }
-      if (k) { sx /= k + 1; sy /= k + 1; sz /= k + 1; }
+      if (k && !orbit) { sx /= k + 1; sy /= k + 1; sz /= k + 1; } else { sx = sy = sz = 0; }
+      // In orbita il nodo attivo è il fulcro: sta esattamente al centro, e la
+      // rotazione gira attorno a lui.
       const l = Math.hypot(sx, sy, sz), cap = r * 0.5, f2 = l > cap ? cap / l : 1;
       cam.tx = q.x + sx * f2; cam.ty = q.y + sy * f2; cam.tcz = q.z + sz * f2;
       cam.tz = 0; cam.vx = cam.vy = 0;
       return;
     }
     cam.tcz = 0;
+    if (orbit) { cam.tx = f.x; cam.ty = f.y; cam.tz = 0; cam.vx = cam.vy = 0; return; }
     let minX = f.x, maxX = f.x, minY = f.y, maxY = f.y;
     for (const nid of newIds) {
       const n = net.nodes.get(nid);
@@ -234,6 +237,13 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     cam.ty = clamp((minY + maxY) / 2, f.y);
     cam.tz = 0;
     cam.vx = cam.vy = 0;
+  }
+
+  // Posizione "nel mondo" di un nodo, nelle stesse coordinate della camera.
+  function worldPos(id) {
+    if (sfera) return pos3.get(id) || null;
+    const n = net.nodes.get(id);
+    return n && n.x !== null ? { x: n.x, y: n.y, z: 0 } : null;
   }
 
   function bounds() {
@@ -301,7 +311,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     };
     ease("x", "tx", pointersDown ? 30 : 120, 0.05);
     ease("y", "ty", pointersDown ? 30 : 120, 0.05);
-    ease("z", "tz", 90, 0.1);
+    ease("z", "tz", orbit && pointersDown ? 30 : 90, 0.1);
     ease("cz", "tcz", pointersDown ? 30 : 120, 0.05);
     if (!pointersDown && !orbit) { cam.tyaw = 0; cam.tpitch = 0; }
     const tauRot = orbit && pointersDown ? 45 : 160;   // in orbita segue il dito da vicino
@@ -429,12 +439,14 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     if (pts.size === 1) {
       dragged = false;
       gesture = nuovoGesto(e.clientX, e.clientY);
+      gesture.nodo = orbit ? e.target.closest?.(".dna-node")?.dataset.node || null : null;
       cam.vx = cam.vy = 0;
     } else if (pts.size === 2) {
       const [p, q] = [...pts.values()];
       dragged = true;
+      const r0 = container.getBoundingClientRect();
       gesture = { mode: "pinch", d0: Math.hypot(p.x - q.x, p.y - q.y) || 1, s0: scaleAtCam(cam.tz),
-        mx0: (p.x + q.x) / 2, my0: (p.y + q.y) / 2, tx0: cam.tx, ty0: cam.ty };
+        mx0: (p.x + q.x) / 2, my0: (p.y + q.y) / 2, tx0: cam.tx, ty0: cam.ty, rx: r0.left + W / 2, ry: r0.top + H / 2 };
       try { container.setPointerCapture(e.pointerId); } catch {}
     }
     kick();
@@ -452,10 +464,15 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       if (orbit) {
         // In orbita due dita spostano anche il centro (un dito è occupato a ruotare):
         // approssimato sul piano della rete, meno efficace se la scena è molto girata.
-        const sc = scaleAt(focusPlane());
-        const mx = (p.x + q.x) / 2, my = (p.y + q.y) / 2;
-        cam.tx = gesture.tx0 - (mx - gesture.mx0) / sc * Math.max(0.35, Math.cos(cam.tyaw));
-        cam.ty = gesture.ty0 - (my - gesture.my0) / sc * Math.max(0.35, Math.cos(cam.tpitch));
+        // Lo zoom va verso le dita: il punto della rete sotto di loro resta lì
+        // (e se le dita si spostano, la rete le segue). t = t0 + o0/s0 - o/s,
+        // con o = scostamento delle dita dal centro dello schermo.
+        const sc = scaleAtCam(cam.tz);
+        const mx = (p.x + q.x) / 2 - gesture.rx, my = (p.y + q.y) / 2 - gesture.ry;
+        const m0x = gesture.mx0 - gesture.rx, m0y = gesture.my0 - gesture.ry;
+        const fx = Math.max(0.35, Math.cos(cam.tyaw)), fy = Math.max(0.35, Math.cos(cam.tpitch));
+        cam.tx = gesture.tx0 + (m0x / gesture.s0 - mx / sc) / fx;
+        cam.ty = gesture.ty0 + (m0y / gesture.s0 - my / sc) / fy;
         clampCam();
       }
       kick();
@@ -468,6 +485,13 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
         if (Math.hypot(ox, oy) < DRAG_THRESHOLD) return;
         dragged = true;
         try { container.setPointerCapture(e.pointerId); } catch {}
+      }
+      // Il gesto è partito su un nodo: la rotazione gira attorno a lui, che
+      // scivola al centro (stessa morbidezza della camera).
+      if (gesture.nodo) {
+        const w = worldPos(gesture.nodo);
+        if (w) { cam.tx = w.x; cam.ty = w.y; if (sfera) cam.tcz = w.z; clampCam(); }
+        gesture.nodo = null;
       }
       cam.tyaw = gesture.yaw0 - ox * ORBIT_K;
       cam.tpitch = Math.max(-PITCH_MAX, Math.min(PITCH_MAX, gesture.pitch0 - oy * ORBIT_K));

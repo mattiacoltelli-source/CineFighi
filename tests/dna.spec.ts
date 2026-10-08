@@ -916,3 +916,49 @@ test("piatto: la rete continua a scorrere dopo lo swipe e si ferma da sola", asy
   expect(scritture).toEqual([]);
   expect(guasti).toEqual([]);
 });
+
+// Lab 3D: il nodo toccato diventa il fulcro (sta al centro dello schermo), e un
+// trascinamento che parte da un nodo ruota attorno a quel nodo.
+test("Sfera: il nodo toccato va al centro e il trascinamento da un nodo lo prende come fulcro", async ({ page }) => {
+  const scritture = soloLettura(page);
+  const guasti = osserva(page);
+  await entra(page);
+  await vaiA(page, "tonight");
+  await page.locator("#dnaNodes .dna-node.is-root").waitFor({ state: "visible", timeout: 30_000 });
+  await page.locator('#dnaViewToggle [data-dna-view="sphere"]').click();
+  await page.locator("#dnaSpatial .dna-node.is-root").waitFor({ state: "visible" });
+  await toccaNodo(page, "#dnaSpatial .dna-node.is-root");
+  await page.waitForTimeout(900);
+
+  const distDalCentro = (sel: string) => page.evaluate((s) => {
+    const c = document.getElementById("dnaSpatial")!.getBoundingClientRect();
+    const r = document.querySelector(s)!.getBoundingClientRect();
+    return Math.hypot(r.left + r.width / 2 - (c.left + c.width / 2), r.top + r.height / 2 - (c.top + c.height / 2));
+  }, sel);
+  expect(await distDalCentro("#dnaSpatial .dna-node.is-root"), "il nodo aperto non è al centro").toBeLessThan(14);
+
+  const vicino = await page.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>("#dnaSpatial .dna-node")]
+      .find(n => !n.classList.contains("is-focus") && n.style.display !== "none")?.dataset.node);
+  expect(vicino).toBeTruthy();
+  await toccaNodo(page, `#dnaSpatial [data-node="${vicino}"]`);
+  await page.waitForTimeout(1200);
+  expect(await distDalCentro(`#dnaSpatial [data-node="${vicino}"]`), "il nodo toccato non è al centro").toBeLessThan(14);
+
+  // Trascinamento che parte da un nodo diverso dal fulcro.
+  const altro = await page.evaluate((v) =>
+    [...document.querySelectorAll<HTMLElement>("#dnaSpatial .dna-node")]
+      .find(n => n.dataset.node !== v && n.style.display !== "none" && +(n.style.opacity || 1) > 0.5)?.dataset.node, vicino);
+  if (altro) {
+    const b = (await page.locator(`#dnaSpatial [data-node="${altro}"]`).boundingBox())!;
+    const x = b.x + b.width / 2, y = b.y + b.height / 2;
+    await page.mouse.move(x, y); await page.mouse.down();
+    for (let i = 1; i <= 10; i++) { await page.mouse.move(x + i * 3, y + i * 2); await page.waitForTimeout(16); }
+    await page.mouse.up();
+    await page.waitForTimeout(1200);
+    expect(await distDalCentro(`#dnaSpatial [data-node="${altro}"]`), "il nodo da cui parte il drag non è il fulcro").toBeLessThan(40);
+  }
+
+  expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
+  expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
+});
