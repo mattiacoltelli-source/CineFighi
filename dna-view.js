@@ -1678,10 +1678,9 @@ function applyViewMode() {
   if (dnaView === "spatial") spatial?.show(); else spatial?.hide();
 }
 
-// Trascinamento a un dito per guardarsi intorno. 1:1, senza inerzia e senza
-// pinch: un trascinamento diretto è già quello che il pollice si aspetta,
-// mentre l'inerzia fatta male è la prima cosa che tradisce un finto nativo.
-// Serve perché i nodi ai bordi del riquadro sono tagliati a metà e prima
+// Trascinamento a un dito per guardarsi intorno. 1:1 mentre il dito è giù; al
+// rilascio la rete continua a scorrere e rallenta da sola, con la stessa
+// inerzia (costante di decadimento) della vista Spaziale. Serve perché i nodi ai bordi del riquadro sono tagliati a metà e prima
 // l'unico modo di raggiungerli era toccarli, cioè espanderli.
 let dragged = false;
 
@@ -1690,6 +1689,35 @@ function bindPan() {
   if (!stage) return;
 
   let pid = null, x0 = 0, y0 = 0, baseX = 0, baseY = 0, lim = null;
+  // Inerzia: velocità in px/ms (media mobile, come in dna-spatial.js) e il
+  // frame che la consuma. Un nuovo tocco la ferma subito.
+  let vx = 0, vy = 0, lx = 0, ly = 0, lt = 0, glide = 0;
+  const GLIDE_TAU = 260, GLIDE_MIN = 0.02;
+
+  const stopGlide = () => {
+    if (!glide) return;
+    cancelAnimationFrame(glide); glide = 0;
+    stage.classList.remove("is-panning");
+    applyCamera(true);
+  };
+  const startGlide = () => {
+    let prev = performance.now();
+    const step = now => {
+      const dt = Math.min(48, now - prev); prev = now;
+      const L = panLimits();
+      const nx = Math.min(L.maxX, Math.max(L.minX, panX + vx * dt));
+      const ny = Math.min(L.maxY, Math.max(L.minY, panY + vy * dt));
+      if (nx === panX) vx = 0;   // arrivato al bordo: niente rimbalzo né sforzo
+      if (ny === panY) vy = 0;
+      panX = nx; panY = ny;
+      const k = Math.exp(-dt / GLIDE_TAU);
+      vx *= k; vy *= k;
+      applyCamera(false);
+      if (Math.abs(vx) + Math.abs(vy) > GLIDE_MIN) glide = requestAnimationFrame(step);
+      else { glide = 0; stage.classList.remove("is-panning"); applyCamera(true); }
+    };
+    glide = requestAnimationFrame(step);
+  };
 
   stage.addEventListener("pointerdown", e => {
     if (!net || pid !== null || e.button > 0) return;
@@ -1701,8 +1729,10 @@ function bindPan() {
     // c'è niente da scoprire trascinandolo, solo PAN_MARGIN di gioco a vuoto
     // che lo spostava via dal centro senza motivo. Si sblocca al primo tap.
     if (net.nodes.size <= 1) return;
+    stopGlide();
     pid = e.pointerId;
     dragged = false;
+    vx = vy = 0; lx = e.clientX; ly = e.clientY; lt = performance.now();
     x0 = e.clientX; y0 = e.clientY;
     baseX = panX; baseY = panY;
     lim = panLimits();
@@ -1721,6 +1751,10 @@ function bindPan() {
     }
     panX = Math.min(lim.maxX, Math.max(lim.minX, baseX + dx));
     panY = Math.min(lim.maxY, Math.max(lim.minY, baseY + dy));
+    const now = performance.now(), dtm = Math.max(1, now - lt);
+    vx = vx * 0.6 + ((e.clientX - lx) / dtm) * 0.4;
+    vy = vy * 0.6 + ((e.clientY - ly) / dtm) * 0.4;
+    lx = e.clientX; ly = e.clientY; lt = now;
     applyCamera(false);   // niente transizione mentre il dito è giù: deve seguirlo
   });
 
@@ -1728,8 +1762,10 @@ function bindPan() {
     if (e.pointerId !== pid) return;
     try { stage.releasePointerCapture(pid); } catch {}
     pid = null;
-    stage.classList.remove("is-panning");
-    applyCamera(true);
+    // Dito fermo prima di staccarlo: niente scivolata.
+    const fermo = performance.now() - lt > 90;
+    if (dragged && !fermo && Math.abs(vx) + Math.abs(vy) > GLIDE_MIN * 4) { startGlide(); }
+    else { stage.classList.remove("is-panning"); applyCamera(true); }
     // Il click arriva DOPO il pointerup: il flag deve sopravvivere fino a lì,
     // e sparire subito dopo, altrimenti il tap successivo verrebbe ignorato.
     if (dragged) setTimeout(() => { dragged = false; }, 0);
