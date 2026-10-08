@@ -153,7 +153,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
   const pos3 = new Map();       // id -> { x, y, z }: posizioni della vista Sfera
   const vis = new Map();        // id -> { h, th, grow, dom, cache }
   const edgeDom = new Map();    // "a|b" -> <line>
-  const cam = { x: 0, y: 0, z: 0, tx: 0, ty: 0, tz: 0, cz: 0, tcz: 0, yaw: 0, pitch: 0, tyaw: 0, tpitch: 0, wyaw: 0, wpitch: 0, vx: 0, vy: 0, q: Q_ID, tq: Q_ID, M: eulerMat(0, 0), spin: 0, viaggio: null, crescita: null };
+  const cam = { x: 0, y: 0, z: 0, tx: 0, ty: 0, tz: 0, cz: 0, tcz: 0, yaw: 0, pitch: 0, tyaw: 0, tpitch: 0, wyaw: 0, wpitch: 0, vx: 0, vy: 0, q: Q_ID, tq: Q_ID, M: eulerMat(0, 0), spin: 0, viaggio: null, crescita: null, orienta: null };
   let W = 0, H = 0;
   let dragged = false;
 
@@ -484,6 +484,15 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       moving = true;
       if (u >= 1) { mixG = 1; cam.crescita = null; cam.q = cam.tq = Q_ID; c.fine?.(); }
     }
+    // Assestamento della scena dopo l'arrivo a una tappa: ruota attorno al nodo, che sta
+    // al centro, quindi resta fermo mentre i vicini gli girano attorno (si vede la profondità).
+    if (cam.orienta) {
+      const o = cam.orienta, u = Math.max(0, Math.min(1, (now - o.t0) / o.dur));
+      const e = u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
+      cam.q = cam.tq = qSlerp(o.qa, o.qb, e);
+      moving = true;
+      if (u >= 1) cam.orienta = null;
+    }
     // Viaggio del tour: la camera si sposta in modo continuo (partenza e arrivo
     // dolci) dal punto in cui è fino al nodo di destinazione, quindi le locandine
     // che stanno in mezzo le scorrono davanti. Scrive sia la posizione sia il suo
@@ -494,9 +503,15 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       const pt = v.curva ? v.curva(e) : { x: v.a.x + (v.b.x - v.a.x) * e, y: v.a.y + (v.b.y - v.a.y) * e, cz: v.a.cz + (v.b.cz - v.a.cz) * e };
       cam.tx = cam.x = pt.x;
       cam.ty = cam.y = pt.y;
-      cam.tcz = cam.cz = pt.cz;
-      cam.tz = cam.z = v.a.z + (v.b.z - v.a.z) * e;
-      // L'orientazione si muove insieme alla camera: si arriva "di lato".
+      // La profondità (avvicinarsi al piano del nodo) cambia la scala di tutto attorno al centro,
+      // proprio come lo zoom: la si fa alla fine, quando il nodo è già al centro, altrimenti un
+      // nodo dietro il piano sembra allontanarsi un attimo prima di arrivare.
+      cam.tcz = cam.cz = v.a.cz + (v.b.cz - v.a.cz) * e * e * e;
+      // Lo zoom: avvicinarsi ingrandisce tutto attorno al centro e allontanerebbe il nodo
+      // di destinazione finché non è centrato, quindi si avvicina SOLO alla fine; allontanarsi
+      // lo accorcia, quindi si fa subito. Così il nodo si avvicina al centro in modo costante.
+      const ez = v.b.z > v.a.z ? e * e * e : 1 - Math.pow(1 - e, 3);
+      cam.tz = cam.z = v.a.z + (v.b.z - v.a.z) * ez;
       if (v.qa) { cam.q = cam.tq = qSlerp(v.qa, v.qb, e); }
       moving = true;
       if (u >= 1) { const fine = v.fine; cam.viaggio = null; fine?.(); }
@@ -934,7 +949,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
         inquadra(focusId);
         const tzFinale = cam.tz;
         Object.assign(cam, salva);
-        cam.viaggio = null; cam.spin = 0; cam.vx = cam.vy = 0; cam.wyaw = cam.wpitch = 0;
+        cam.viaggio = null; cam.orienta = null; cam.spin = 0; cam.vx = cam.vy = 0; cam.wyaw = cam.wpitch = 0;
         const zStart = F - F / Math.max(0.1, zoom);
         cam.crescita = { t0: performance.now(), dur: ms, panX, panY, zoom, zStart, tzFinale, swing: qNorm(qMul(qAsseX(-0.2), qAsseY(0.55))), fine: risolvi };
         mixG = 0;
@@ -951,7 +966,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     // aprirlo né farlo diventare attivo. Risolve all'arrivo.
     // `via`: id dei nodi da sorvolare lungo i collegamenti, nell'ordine; `yaw`/`pitch`:
     // la leggera rotazione con cui si arriva; `lato`: da che parte curva il volo diretto.
-    tourVai(id, ms, { via = [], yaw = 0, pitch = 0, lato = 1 } = {}) {
+    tourVai(id, ms, { via = [], yaw = 0, pitch = 0 } = {}) {
       const w = worldPos(id);
       if (!w) return Promise.resolve();
       // Quello di prima si spegne, quello di arrivo emerge man mano che ci si avvicina.
@@ -964,33 +979,51 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
         cam.vx = cam.vy = 0; cam.spin = 0; cam.wyaw = cam.wpitch = 0;
         cam.tz = 0;
         clampCam();
+        // L'inquadratura si calcola con l'orientazione con cui si ARRIVERÀ (la scena si
+        // assesta dopo l'arrivo, vedi tourOrienta): così i collegamenti restano dentro.
+        const tqPrima = cam.tq;
+        cam.tq = qNorm(qMul(qAsseX(pitch), qAsseY(yaw)));
         inquadra(id);
+        cam.tq = tqPrima;
         const a = { x: da.x, y: da.y, cz: da.cz, z: da.z };
         const b = { x: cam.tx, y: cam.ty, cz: cam.tcz, z: cam.tz };
         cam.tx = a.x; cam.ty = a.y; cam.tcz = a.cz; cam.tz = a.z;   // si parte da dove si è
         // Se si è già lì (la prima tappa è il tuo nodo, dove la camera sta già) non
         // serve aspettare un intero viaggio.
         const lontano = Math.hypot(b.x - a.x, b.y - a.y, b.cz - a.cz) + Math.abs(b.z - a.z) * 0.5;
-        // Percorso: la camera sorvola i nodi intermedi (se ce ne sono); altrimenti il
-        // volo diretto fa un arco leggero di lato invece di una retta.
-        const punti = [a];
-        for (const vid of via) { const q = worldPos(vid); if (q) punti.push({ x: q.x, y: q.y, cz: sfera ? q.z : 0 }); }
-        if (punti.length === 1 && lontano >= 40) {
-          const dx = b.x - a.x, dy = b.y - a.y, dl = Math.hypot(dx, dy) || 1, len = Math.hypot(dx, dy, b.cz - a.cz);
-          punti.push({ x: (a.x + b.x) / 2 + (dy / dl) * len * 0.16 * lato, y: (a.y + b.y) / 2 - (dx / dl) * len * 0.16 * lato, cz: (a.cz + b.cz) / 2 });
+        // Percorso: DIRITTO verso il nodo. La camera sorvola i nodi intermedi lungo i
+        // collegamenti solo se stanno davvero sulla strada (fra partenza e arrivo, poco
+        // lontani dalla retta): un nodo fuori mano farebbe sembrare che la camera
+        // sbagli direzione. Niente archi laterali e niente rotazione durante il viaggio.
+        const ab = { x: b.x - a.x, y: b.y - a.y, z: b.cz - a.cz };
+        const len2 = ab.x * ab.x + ab.y * ab.y + ab.z * ab.z || 1;
+        const sulla = [];
+        for (const vid of via) {
+          const q = worldPos(vid);
+          if (!q) continue;
+          const qa = { x: q.x - a.x, y: q.y - a.y, z: (sfera ? q.z : 0) - a.cz };
+          const t = (qa.x * ab.x + qa.y * ab.y + qa.z * ab.z) / len2;
+          const lat = Math.hypot(qa.x - t * ab.x, qa.y - t * ab.y, qa.z - t * ab.z);
+          if (t > 0.08 && t < 0.92 && lat < 0.3 * Math.sqrt(len2)) sulla.push({ t, p: { x: q.x, y: q.y, cz: sfera ? q.z : 0 } });
         }
-        punti.push({ x: b.x, y: b.y, cz: b.cz });
-        const durata = lontano < 40 ? Math.min(ms, 600) : ms * (1 + Math.min(0.9, 0.45 * via.length));
+        sulla.sort((m, n) => m.t - n.t);
+        const punti = [a, ...sulla.map(x => x.p), { x: b.x, y: b.y, cz: b.cz }];
+        const durata = lontano < 40 ? Math.min(ms, 600) : ms * (1 + Math.min(0.9, 0.45 * sulla.length));
         cam.viaggio = {
           a, b, t0: performance.now(), dur: durata, fine: risolvi,
-          curva: punti.length > 2 ? creaCurva(punti) : null,
-          qa: cam.tq, qb: qNorm(qMul(qAsseX(pitch), qAsseY(yaw)))
+          curva: punti.length > 2 ? creaCurva(punti) : null
         };
         kick();
       });
     },
+    // Dopo l'arrivo: la scena si assesta (yaw, pitch) in `ms`, ruotando attorno al nodo centrato.
+    tourOrienta(yaw, pitch, ms) {
+      cam.orienta = { t0: performance.now(), dur: ms, qa: cam.tq, qb: qNorm(qMul(qAsseX(pitch), qAsseY(yaw))) };
+      kick();
+    },
     // Panoramica sulla rete intera e un giro completo attorno, in `ms`.
     tourRuota(ms) {
+      cam.orienta = null;
       for (const f of enfasi.values()) f.kT = 0;
       cam.vx = cam.vy = 0; cam.wyaw = cam.wpitch = 0;
       // Durante il giro la rete deve stare dentro lo schermo da ogni lato: si
@@ -1013,6 +1046,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     // Fine del tour. `torna`: la camera rientra piano sul nodo attivo; altrimenti
     // resta dov'è (si è presa la mano), senza scatti.
     tourFine(torna = true) {
+      cam.orienta = null;
       if (cam.crescita) { cam.crescita = null; mixG = 1; cam.q = cam.tq = Q_ID; }
       for (const f of enfasi.values()) f.kT = 0;
       cam.spin = 0; nodeKT = 1;

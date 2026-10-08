@@ -1427,3 +1427,69 @@ test("Piatto: il Tour trasforma la rete in 3D con un effetto a crescita e poi pa
   expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
   expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
 });
+
+// Tour: durante ogni viaggio il nodo di destinazione si avvicina al centro dello schermo in
+// modo costante (la camera non "sbaglia direzione": niente archi, rotazione o zoom che lo
+// allontanino prima di arrivare).
+test("3D: nel tour la camera va diritta al nodo di destinazione", async ({ page }) => {
+  test.setTimeout(120_000);
+  const guasti = osserva(page);
+  await entra(page);
+  await vaiA(page, "tonight");
+  await page.locator("#dnaNodes .dna-node.is-root").waitFor({ state: "visible", timeout: 30_000 });
+  await page.locator('#dnaViewToggle [data-dna-view="sphere"]').click();
+  await page.locator("#dnaSpatial .dna-node.is-root").waitFor({ state: "visible" });
+  await toccaNodo(page, "#dnaSpatial .dna-node.is-root");
+  for (let i = 0; i < 3; i++) {
+    await page.evaluate(() => (document.querySelector("#dnaSpatial .dna-node.is-root .dna-node__more") as HTMLElement | null)?.click());
+    await page.waitForTimeout(800);
+  }
+  await page.evaluate(() => {
+    const w = window as unknown as { __rec: [number, Record<string, number[]>, string | null][]; __ev: [number, string][]; __fin: boolean };
+    w.__rec = []; w.__ev = []; w.__fin = false;
+    const t0 = performance.now();
+    let ultimo = "", avviato = false;
+    const f = () => {
+      const t = performance.now() - t0;
+      const c = document.getElementById("dnaSpatial")!.getBoundingClientRect();
+      const m: Record<string, number[]> = {};
+      for (const n of document.querySelectorAll<HTMLElement>("#dnaSpatial .dna-node")) {
+        if (n.style.display === "none") continue;
+        const r = n.getBoundingClientRect();
+        m[n.dataset.node!] = [r.left + r.width / 2 - c.left - c.width / 2, r.top + r.height / 2 - c.top - c.height / 2];
+      }
+      const cap = document.getElementById("dnaTourCap")!;
+      const chiave = cap.classList.contains("is-on") ? cap.querySelector("strong")!.textContent! : "";
+      if (chiave !== ultimo) { w.__ev.push([t, chiave]); ultimo = chiave; }
+      const foc = document.querySelector<HTMLElement>("#dnaSpatial .dna-node.is-tour-focus");
+      w.__rec.push([t, m, foc ? foc.dataset.node! : null]);
+      const st = document.getElementById("dnaTourBtn")!.textContent === "Stop";
+      if (st) avviato = true;
+      if (t < 40000 && (st || !avviato)) requestAnimationFrame(f); else w.__fin = true;
+    };
+    requestAnimationFrame(f);
+  });
+  await avviaTourModo(page, "Il mio");
+  // Si guardano le prime sei tappe (circa 26 secondi), poi si ferma.
+  await page.waitForTimeout(26_000);
+  await page.locator("#dnaTourBtn").click();
+  await page.waitForFunction(() => (window as unknown as { __fin: boolean }).__fin === true, null, { timeout: 20_000 });
+  const { rec, ev } = await page.evaluate(() => ({ rec: (window as unknown as { __rec: [number, Record<string, number[]>, string | null][] }).__rec, ev: (window as unknown as { __ev: [number, string][] }).__ev }));
+  const arrivi = ev.filter(e => e[1]);
+  const spenti = ev.filter(e => !e[1]).map(e => e[0]);
+  const idDopo = (t: number) => { let id: string | null = null; for (const r of rec) { if (r[0] > t) break; if (r[2]) id = r[2]; } return id; };
+  let verificati = 0;
+  for (const [t, nome] of arrivi.slice(1)) {   // la prima tappa è dove si è già
+    const id = idDopo(t + 300);
+    const inizio = [...spenti].filter(x => x < t).pop();
+    if (!id || inizio === undefined) continue;
+    const d = rec.filter(r => r[0] >= inizio && r[0] <= t && r[1][id]).map(r => Math.hypot(r[1][id][0], r[1][id][1]));
+    if (d.length < 20) continue;
+    verificati++;
+    const salita = Math.max(0, ...d.map(x => x - d[0]));
+    expect(salita, `verso "${nome}" il nodo si è allontanato dal centro di ${salita.toFixed(0)}px prima di arrivare`).toBeLessThan(6);
+    expect(d[d.length - 1], `la camera non è arrivata su "${nome}"`).toBeLessThan(25);
+  }
+  expect(verificati, "nessun viaggio verificato").toBeGreaterThanOrEqual(2);
+  expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
+});
