@@ -53,6 +53,8 @@ const FOG_Z = 380;                           // quanto allontanarsi per diradare
 const FLATTEN = 0.75;                        // in panoramica la profondità si appiattisce di tanto
 const LABEL_MIN_SCALE = .62;                 // sotto, l'etichetta sarebbe illeggibile
 const Z_MIN = -1500, Z_MAX = 170;
+const Z_MIN_ORBIT = -3600;                   // in orbita si può allontanarsi molto di più: la veduta d insieme
+const RAGGIO_SFERA = 1.7;                    // la sfera si apre più larga del ventaglio piatto
 const MAX_TILT = 0.14;                       // ~8°
 const DRAG_THRESHOLD = 8;                    // come la vista piatta
 const CULL_MARGIN = 90;
@@ -93,6 +95,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
   const depthOf = (h) => lerpTable(orbit ? DEPTH_ORBIT : DEPTH, h) * (1 - FLATTEN * nebbia());
   const focusPlane = () => depthOf(0);
   const scaleAt = (z) => F / Math.max(1, F + z - cam.z);
+  const zMin = () => (orbit ? Z_MIN_ORBIT : Z_MIN);
   const scaleAtCam = (tz) => F / Math.max(1, F + focusPlane() - tz);
   function opacityAt(h) {
     const f = nebbia();
@@ -118,7 +121,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
 
   function layout3d() {
     if (!pos3.has(net.rootId)) pos3.set(net.rootId, { x: 0, y: 0, z: 0 });
-    const R = radius();
+    const R = radius() * RAGGIO_SFERA;
     for (const n of net.nodes.values()) {
       if (pos3.has(n.id)) continue;
       const pp = pos3.get(n.parent) || pos3.get(net.rootId);
@@ -277,7 +280,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     cam.ty = (b.minY + b.maxY) / 2;
     cam.tcz = (b.minZ + b.maxZ) / 2;
     // A nebbia diradata il piano del nodo attivo è a z = DEPTH[0] * (1 - FLATTEN).
-    cam.tz = Math.max(Z_MIN, Math.min(-FOG_Z, F + DEPTH[0] * (1 - FLATTEN) - F / sFit));
+    cam.tz = Math.max(zMin(), Math.min(-FOG_Z, F + DEPTH[0] * (1 - FLATTEN) - F / sFit));
     cam.vx = cam.vy = 0;
     if (orbit) { cam.tyaw = giroPiuVicino(cam.tyaw); cam.tpitch = 0; }   // la panoramica è una mappa: di fronte
   }
@@ -460,7 +463,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       // Proporzionale: la rete si ingrandisce quanto si allargano le dita.
       const [p, q] = [...pts.values()];
       const sNew = gesture.s0 * Math.hypot(p.x - q.x, p.y - q.y) / gesture.d0;
-      cam.tz = Math.max(Z_MIN, Math.min(Z_MAX, F + focusPlane() - F / Math.max(0.05, sNew)));
+      cam.tz = Math.max(zMin(), Math.min(Z_MAX, F + focusPlane() - F / Math.max(0.05, sNew)));
       if (orbit) {
         // In orbita due dita spostano anche il centro (un dito è occupato a ruotare):
         // approssimato sul piano della rete, meno efficace se la scena è molto girata.
@@ -557,7 +560,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     if (!net || !active) return;
     e.preventDefault();
     const sNew = scaleAtCam(cam.tz) * Math.exp(-e.deltaY * 0.0015);
-    cam.tz = Math.max(Z_MIN, Math.min(Z_MAX, F + focusPlane() - F / sNew));
+    cam.tz = Math.max(zMin(), Math.min(Z_MAX, F + focusPlane() - F / sNew));
     kick();
   }, { passive: false });
 
