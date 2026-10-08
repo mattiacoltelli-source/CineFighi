@@ -54,6 +54,9 @@ const FLATTEN = 0.75;                        // in panoramica la profondità si 
 const LABEL_MIN_SCALE = .62;                 // sotto, l'etichetta sarebbe illeggibile
 const Z_MIN = -1500, Z_MAX = 170;
 const Z_MIN_ORBIT = -3600;                   // in orbita si può allontanarsi molto di più: la veduta d insieme
+const MARGINE_X = 64, MARGINE_Y = 120;        // spazio da lasciare ai bordi (e al pannello in basso)
+const DIP_MAX = 340;                         // quanto si allarga la camera a metà di un volo tra nodi
+const S_FIT_MIN = 0.4;                       // quanto si può rimpicciolire per far stare un nodo aperto per intero
 const RAGGIO_SFERA = 1.7;                    // la sfera si apre più larga del ventaglio piatto
 const MAX_TILT = 0.14;                       // ~8°
 const DRAG_THRESHOLD = 8;                    // come la vista piatta
@@ -191,6 +194,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       if (!line) {
         line = document.createElementNS("http://www.w3.org/2000/svg", "line");
         edgesEl.appendChild(line);
+        line.dataset.k = k;
         edgeDom.set(k, line);
       }
       const cls = `${edgeClass(e)}${e.a === focusId || e.b === focusId ? " is-focus" : ""}`;
@@ -224,10 +228,11 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       const l = Math.hypot(sx, sy, sz), cap = r * 0.5, f2 = l > cap ? cap / l : 1;
       cam.tx = q.x + sx * f2; cam.ty = q.y + sy * f2; cam.tcz = q.z + sz * f2;
       cam.tz = 0; cam.vx = cam.vy = 0;
+      if (orbit) inquadra(id);
       return;
     }
     cam.tcz = 0;
-    if (orbit) { cam.tx = f.x; cam.ty = f.y; cam.tz = 0; cam.vx = cam.vy = 0; return; }
+    if (orbit) { cam.tx = f.x; cam.ty = f.y; cam.tz = 0; cam.vx = cam.vy = 0; inquadra(id); return; }
     let minX = f.x, maxX = f.x, minY = f.y, maxY = f.y;
     for (const nid of newIds) {
       const n = net.nodes.get(nid);
@@ -242,6 +247,41 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     cam.vx = cam.vy = 0;
   }
 
+  // In orbita il nodo aperto deve vedersi INTERO, con tutti i suoi collegamenti
+  // (figli e genitore): se non ci stanno allo zoom normale, la camera si
+  // allontana quel tanto che basta (mai oltre S_FIT_MIN, per non ridurli a
+  // puntini). Calcolato sulla camera di destinazione, senza aspettare l'animazione.
+  function inquadra(id) {
+    const f = net.nodes.get(id);
+    if (!f) return;
+    const ids = [id];
+    for (const e of net.edges) {
+      if (e.a === id) ids.push(e.b); else if (e.b === id) ids.push(e.a);
+    }
+    if (ids.length < 2) return;
+    const mx = W / 2 - MARGINE_X, my = H / 2 - MARGINE_Y;
+    const cy_ = Math.cos(cam.tyaw), sy_ = Math.sin(cam.tyaw), cp = Math.cos(cam.tpitch), sp = Math.sin(cam.tpitch);
+    const fp = focusPlane();
+    const entra = (tz) => {
+      for (const nid of ids) {
+        const w = worldPos(nid), n = net.nodes.get(nid);
+        if (!w) continue;
+        let dx = w.x - cam.tx, dy = w.y - cam.ty;
+        let dz = sfera ? w.z - cam.tcz : lerpTable(DEPTH_ORBIT, vis.get(nid)?.th ?? 2) - fp;
+        [dx, dz] = [dx * cy_ + dz * sy_, -dx * sy_ + dz * cy_];
+        [dy, dz] = [dy * cp + dz * sp, -dy * sp + dz * cp];
+        const den = F + (sfera ? 0 : fp) + dz - tz;
+        if (den < NEAR) return false;
+        const sc = Math.min(F / den, S_MAX_ORBIT);
+        if (Math.abs(dx) * sc > mx || Math.abs(dy) * sc > my) return false;
+      }
+      return true;
+    };
+    const limite = F + fp - F / S_FIT_MIN;   // tz a cui la scala del fulcro scende a S_FIT_MIN
+    let tz = cam.tz;
+    while (!entra(tz) && tz > Math.max(zMin(), limite)) tz -= 40;
+    cam.tz = Math.max(tz, Math.max(zMin(), limite));
+  }
   // Posizione "nel mondo" di un nodo, nelle stesse coordinate della camera.
   function worldPos(id) {
     if (sfera) return pos3.get(id) || null;
@@ -426,6 +466,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     else onTap(b.dataset.node);
   });
 
+  let viaggio = 0;
   const pts = new Map();
   let gesture = null, ultimoTocco = 0;
 
@@ -578,6 +619,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       if (nuova) clear();
       const snap = nuova || !vis.size;
       net = nextNet;
+      const prevFocus = focusId, prevTx = cam.tx, prevTy = cam.ty, prevTcz = cam.tcz;
       focusId = nextFocusId;
       measure();
       sync(snap);
@@ -587,6 +629,17 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
         Object.assign(cam, { x: f.x, y: f.y, z: 0, cz: fz, tx: f.x, ty: f.y, tz: 0, tcz: fz, yaw: 0, pitch: 0, tyaw: 0, tpitch: 0, vx: 0, vy: 0 });
       }
       aimAt(focusId, newIds || []);
+      // Volo da un nodo all'altro: a metà strada la camera si allarga un po'
+      // (si vede dove si va) e poi si riavvicina, invece di scivolare in piano.
+      if (orbit && !snap && prevFocus !== focusId) {
+        const dist = Math.hypot(cam.tx - prevTx, cam.ty - prevTy, sfera ? cam.tcz - prevTcz : 0);
+        const dip = Math.min(DIP_MAX, dist * 0.45);
+        if (dip > 30) {
+          const tzFinale = cam.tz, gettone = ++viaggio;
+          cam.tz = Math.max(zMin(), tzFinale - dip);
+          setTimeout(() => { if (gettone === viaggio) { cam.tz = tzFinale; kick(); } }, 260);
+        }
+      }
       if (snap) { cam.x = cam.tx; cam.y = cam.ty; cam.cz = cam.tcz; draw(); }
       kick();
     },

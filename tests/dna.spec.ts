@@ -962,3 +962,49 @@ test("Sfera: il nodo toccato va al centro e il trascinamento da un nodo lo prend
   expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
   expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
 });
+
+// Lab 3D: il nodo aperto e tutti i suoi collegamenti stanno sempre interi
+// nel riquadro (la camera si allarga quanto serve), anche toccando nodi lontani.
+test("Sfera: il nodo toccato e i suoi collegamenti non vengono mai tagliati", async ({ page }) => {
+  const scritture = soloLettura(page);
+  const guasti = osserva(page);
+  await entra(page);
+  await vaiA(page, "tonight");
+  await page.locator("#dnaNodes .dna-node.is-root").waitFor({ state: "visible", timeout: 30_000 });
+  await page.locator('#dnaViewToggle [data-dna-view="sphere"]').click();
+  await page.locator("#dnaSpatial .dna-node.is-root").waitFor({ state: "visible" });
+
+  const tagliati = async () => {
+    await page.waitForTimeout(1300);
+    return page.evaluate(() => {
+      const c = document.getElementById("dnaSpatial")!.getBoundingClientRect();
+      const id = (document.querySelector("#dnaSpatial .dna-node.is-focus") as HTMLElement).dataset.node!;
+      const vic = new Set([id]);
+      for (const l of document.querySelectorAll<SVGElement>("#dnaSpatial line")) {
+        const [a, b] = (l.dataset.k || "|").split("|");
+        if (a === id) vic.add(b); if (b === id) vic.add(a);
+      }
+      return [...document.querySelectorAll<HTMLElement>("#dnaSpatial .dna-node")]
+        .filter(el => el.style.display !== "none" && vic.has(el.dataset.node!))
+        .filter(el => { const q = el.getBoundingClientRect(); return q.left < c.left - 1 || q.right > c.right + 1 || q.top < c.top; })
+        .map(el => el.dataset.node);
+    });
+  };
+  await toccaNodo(page, "#dnaSpatial .dna-node.is-root");
+  await page.evaluate(() => (document.querySelector("#dnaSpatial .dna-node.is-root .dna-node__more") as HTMLElement | null)?.click());
+  expect(await tagliati(), "dopo l'apertura qualche collegamento è tagliato").toEqual([]);
+  for (let i = 0; i < 3; i++) {
+    const id = await page.evaluate(() => {
+      const c = document.getElementById("dnaSpatial")!.getBoundingClientRect();
+      const d = (x: Element) => { const r = x.getBoundingClientRect(); return Math.hypot(r.left + r.width / 2 - c.left - c.width / 2, r.top + r.height / 2 - c.top - c.height / 2); };
+      return [...document.querySelectorAll<HTMLElement>("#dnaSpatial .dna-node")]
+        .filter(n => n.style.display !== "none" && !n.classList.contains("is-focus") && +(n.style.opacity || 1) > 0.5)
+        .sort((a, b) => d(b) - d(a))[0]?.dataset.node;
+    });
+    if (!id) break;
+    await page.evaluate(i => (document.querySelector(`#dnaSpatial [data-node="${i}"]`) as HTMLElement).click(), id);
+    expect(await tagliati(), `toccando ${id} qualche collegamento è tagliato`).toEqual([]);
+  }
+  expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
+  expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
+});
