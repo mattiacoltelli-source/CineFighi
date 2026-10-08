@@ -417,7 +417,7 @@ test("la vista spaziale mostra la stessa rete e si torna al piatto senza perdere
   await vaiA(page, "tonight");
   await page.locator("#dnaNodes .dna-node").first().waitFor({ state: "visible", timeout: 30_000 });
 
-  await page.locator('#dnaViewToggle [data-dna-view="spatial"]').click();
+  await page.locator('#dnaViewToggle [data-dna-view="sphere"]').click();
   await expect(page.locator("#dnaSpatial")).not.toHaveClass(/hidden/);
   await expect(page.locator("#dnaCanvas")).toHaveClass(/hidden/);
   await page.locator("#dnaSpatial .dna-node.is-root").waitFor({ state: "visible" });
@@ -467,7 +467,7 @@ test("vista spaziale: il +N apre altri collegamenti e il pannello racconta il le
   const guasti = osserva(page);
   await entra(page);
   await vaiA(page, "tonight");
-  await page.locator('#dnaViewToggle [data-dna-view="spatial"]').click();
+  await page.locator('#dnaViewToggle [data-dna-view="sphere"]').click();
   await page.locator("#dnaSpatial .dna-node.is-root").waitFor({ state: "visible", timeout: 30_000 });
   await toccaNodo(page, "#dnaSpatial .dna-node.is-root");
 
@@ -496,7 +496,7 @@ for (const vista of ["flat", "spatial"] as const) {
     const guasti = osserva(page);
     await entra(page);
     await vaiA(page, "tonight");
-    if (vista === "spatial") await page.locator('#dnaViewToggle [data-dna-view="spatial"]').click();
+    if (vista === "spatial") await page.locator('#dnaViewToggle [data-dna-view="sphere"]').click();
     const nodi = vista === "spatial" ? "#dnaSpatial .dna-node" : "#dnaNodes .dna-node";
     await page.locator(`${nodi}.is-root`).waitFor({ state: "visible", timeout: 30_000 });
 
@@ -598,7 +598,7 @@ for (const vista of ["flat", "spatial"] as const) {
     const guasti = osserva(page);
     await entra(page);
     await vaiA(page, "tonight");
-    if (vista === "spatial") await page.locator('#dnaViewToggle [data-dna-view="spatial"]').click();
+    if (vista === "spatial") await page.locator('#dnaViewToggle [data-dna-view="sphere"]').click();
     const nodi = vista === "spatial" ? "#dnaSpatial" : "#dnaNodes";
     await page.locator(`${nodi} .dna-node.is-root`).waitFor({ state: "visible", timeout: 30_000 });
     const clicca = async (tipo: string) => {
@@ -787,59 +787,6 @@ test("più persone: riga verde sempre, pannello senza doppioni, schermo intero i
   await toccaNodo(page, "#dnaNodes .dna-node.is-root");
   await page.locator("#dnaPanelPeek").click();
   await expect(page.locator("#dnaPanel")).toContainText(/Amati da entrambi: \d+ titol/);
-
-  expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
-  expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
-});
-
-// Laboratorio 3D (voce "3D" del selettore): un dito ruota la scena attorno al
-// nodo attivo; "Frontale" compare solo a scena girata e la riporta dritta.
-test("3D: un dito ruota la scena e Frontale la riporta dritta", async ({ page }) => {
-  const scritture = soloLettura(page);
-  const guasti = osserva(page);
-  await entra(page);
-  await vaiA(page, "tonight");
-  await page.locator("#dnaNodes .dna-node.is-root").waitFor({ state: "visible", timeout: 30_000 });
-  await page.locator('#dnaViewToggle [data-dna-view="orbit"]').click();
-  await page.locator("#dnaSpatial .dna-node.is-root").waitFor({ state: "visible" });
-  await toccaNodo(page, "#dnaSpatial .dna-node.is-root");
-  await page.waitForTimeout(500);
-
-  const posizioni = () => page.evaluate(() =>
-    Object.fromEntries([...document.querySelectorAll<HTMLElement>("#dnaSpatial .dna-node")]
-      .filter(n => n.style.display !== "none")
-      .map(n => { const r = n.getBoundingClientRect(); return [n.dataset.node!, [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)]]; })));
-  const prima = await posizioni();
-  await expect(page.locator(".dna-spatial__front")).toBeHidden();
-
-  // Un dito che trascina ruota (non sposta soltanto).
-  const st = (await page.locator("#dnaStage").boundingBox())!;
-  await page.mouse.move(st.x + st.width / 2, st.y + st.height * 0.7);
-  await page.mouse.down();
-  for (let i = 1; i <= 12; i++) { await page.mouse.move(st.x + st.width / 2 + i * 12, st.y + st.height * 0.7 - i * 6); await page.waitForTimeout(16); }
-  await page.mouse.up();
-  await page.waitForTimeout(700);
-  const girata = await posizioni();
-  const comuni = Object.keys(prima).filter(id => girata[id]);
-  expect(comuni.length, "ruotando sono spariti quasi tutti i nodi").toBeGreaterThan(2);
-  const spostati = comuni.filter(id => Math.hypot(girata[id][0] - prima[id][0], girata[id][1] - prima[id][1]) > 25).length;
-  expect(spostati, "il trascinamento non ha ruotato la scena").toBeGreaterThan(1);
-  await expect(page.locator(".dna-spatial__front")).toBeVisible();
-
-  // "Frontale" la riporta dritta e sparisce.
-  await page.locator(".dna-spatial__front").click();
-  await page.waitForTimeout(900);
-  await expect(page.locator(".dna-spatial__front")).toBeHidden();
-  const dopo = await posizioni();
-  const tornati = comuni.filter(id => dopo[id] && Math.hypot(dopo[id][0] - prima[id][0], dopo[id][1] - prima[id][1]) < 12).length;
-  expect(tornati, "Frontale non riporta i nodi dov'erano").toBeGreaterThan(comuni.length / 2);
-
-  // Il tocco sui nodi funziona anche in 3D.
-  const vicino = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>("#dnaSpatial .dna-node")]
-    .find(n => n.style.display !== "none" && !n.classList.contains("is-focus"))?.dataset.node);
-  await page.evaluate((i: string) => (document.querySelector(`#dnaSpatial [data-node="${i}"]`) as HTMLElement).click(), vicino!);
-  await page.waitForTimeout(700);
-  await expect(page.locator(`#dnaSpatial [data-node="${vicino}"]`)).toHaveClass(/is-focus/);
 
   expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
   expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
@@ -1191,6 +1138,66 @@ test("Sfera: la rotazione è una trackball, gli assi restano quelli dello scherm
   const v = await misura(0, 60);
   expect(v.my, "verticale: i nodi non si muovono in verticale").toBeGreaterThan(25);
   expect(v.mx, "verticale: i nodi si muovono anche in orizzontale").toBeLessThan(v.my * 0.3);
+  expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
+  expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
+});
+
+// Vista Piatta: pizzicando ci si allontana e si vede la rete nel suo insieme
+// (tutti i nodi, non solo i 32 più vicini); il doppio tocco sul vuoto fa lo
+// stesso e di nuovo torna com'era.
+test("piatto: lo zoom indietro mostra la rete intera e il doppio tocco la inquadra", async ({ page }) => {
+  const scritture = soloLettura(page);
+  const guasti = osserva(page);
+  await entra(page);
+  await vaiA(page, "tonight");
+  await page.locator("#dnaNodes .dna-node.is-root").waitFor({ state: "visible", timeout: 30_000 });
+  await toccaNodo(page, ".dna-node.is-root");
+  // Si apre parecchio, finché il budget di 32 nodi non conta più.
+  for (let i = 0; i < 8; i++) {
+    await page.evaluate((k) => {
+      const f = document.querySelector<HTMLElement>("#dnaNodes .dna-node.is-focus .dna-node__more");
+      if (f) { f.click(); return; }
+      const l = [...document.querySelectorAll<HTMLElement>("#dnaNodes .dna-node")].filter(n => !n.classList.contains("is-focus"));
+      l[k % l.length]?.click();
+    }, i);
+    await page.waitForTimeout(550);
+  }
+  const trasf = () => page.evaluate(() => (document.getElementById("dnaCanvas") as HTMLElement).style.transform);
+  const scala = async () => +(/scale\(([\d.]+)\)/.exec(await trasf())?.[1] ?? 1);
+  expect(await scala(), "partiamo da zoom 1").toBe(1);
+  const nodiPrima = await page.locator("#dnaNodes .dna-node").count();
+
+  const c = await page.context().newCDPSession(page);
+  const st = (await page.locator("#dnaStage").boundingBox())!;
+  const cx = st.x + st.width / 2, cy = st.y + st.height * 0.4;
+  const send = (type: string, pts: number[][]) => c.send("Input.dispatchTouchEvent", { type, touchPoints: pts.map((q, i) => ({ x: q[0], y: q[1], id: i })) } as never);
+  let d = 140;
+  await send("touchStart", [[cx - d, cy], [cx + d, cy]]);
+  for (let i = 1; i <= 36; i++) { d = 140 - i * 3.5; await send("touchMove", [[cx - d, cy], [cx + d, cy]]); await page.waitForTimeout(16); }
+  await send("touchEnd", []);
+  await page.waitForTimeout(800);
+  const z = await scala();
+  expect(z, "il pizzico non ha allontanato la rete").toBeLessThan(0.8);
+  expect(await page.locator("#dnaNodes .dna-node").count(), "da lontano la rete non si è allargata a tutti i nodi").toBeGreaterThanOrEqual(nodiPrima);
+
+  // Doppio tocco sul vuoto: torna com'era, e ancora: la rete intera.
+  const doppio = async () => {
+    // Un punto davvero vuoto (niente nodi né pannelli sotto il dito).
+    const [x, y] = await page.evaluate(([bx, by, bw, bh]) => {
+      for (let r = 0.3; r < 0.7; r += 0.04) for (let c = 0.06; c < 0.95; c += 0.07) {
+        const px = bx + bw * c, py = by + bh * r;
+        const t = document.elementFromPoint(px, py) as HTMLElement | null;
+        if (t && !t.closest(".dna-node, button, .dna-sheet, .dna-panel")) return [px, py];
+      }
+      return [bx + bw * 0.5, by + bh * 0.5];
+    }, [st.x, st.y, st.width, st.height]);
+    await page.mouse.click(x, y); await page.waitForTimeout(90); await page.mouse.click(x, y); await page.waitForTimeout(700);
+  };
+  await doppio();
+  expect(await scala(), "il doppio tocco non ha riportato lo zoom a 1").toBe(1);
+  await doppio();
+  expect(await scala(), "il doppio tocco non ha inquadrato la rete intera").toBeLessThan(0.8);
+
   expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
   expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
 });

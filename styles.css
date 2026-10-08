@@ -1306,6 +1306,8 @@ body:has(.app.dna-schermo-intero #screen-tonight:not(.hidden)) .bottom-nav {
 /* Mentre il dito è giù la camera deve seguirlo 1:1: con la transizione
    attiva resterebbe indietro di 200ms e sembrerebbe scollata dal gesto. */
 .dna-canvas.is-dragging { transition:none; }
+/* Rete vista da lontano: i nomi sarebbero illeggibili e si accavallerebbero. */
+.dna-canvas.is-zoom-far .dna-node__label { display:none; }
 .dna-edges {
   position:absolute; left:0; top:0; width:1px; height:1px;
   overflow:visible; pointer-events:none;

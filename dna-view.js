@@ -102,7 +102,7 @@ let panelExpanded = false;
 let ctx = null;
 let sheetOpen = false;
 
-// Vista Piatta (questo file, quella di sempre) o Spaziale (dna-spatial.js):
+// Vista Piatta (questo file, quella di sempre) o 3D (dna-spatial.js):
 // stessa rete, stesso pannello, stesse persone — cambia solo come la si
 // guarda. Interruttore nell'angolo del riquadro; la scelta resta sul
 // dispositivo, come Barre/Bolle nelle Statistiche (è una preferenza visiva,
@@ -111,15 +111,17 @@ const DNA_VIEW_KEY = "cinefighiDnaView";
 function getDnaView() {
   try {
     const v = localStorage.getItem(DNA_VIEW_KEY);
-    return v === "spatial" || v === "orbit" || v === "sphere" ? v : "flat";
+    // "spatial"/"orbit" sono le vecchie voci (Spaziale e la prova 3D): chi le aveva
+    // salvate passa alla vista 3D, che le ha sostituite.
+    return v === "spatial" || v === "orbit" || v === "sphere" ? "sphere" : "flat";
   } catch { return "flat"; }
 }
 function setDnaView(v) {
   try { localStorage.setItem(DNA_VIEW_KEY, v); } catch {}
 }
 let dnaView = getDnaView();
-// "Spaziale" e la prova "3D" (orbita) usano lo stesso disegno: cambia solo il gesto.
-const inSpaziale = () => dnaView === "spatial" || dnaView === "orbit" || dnaView === "sphere";
+// La vista 3D è l'unica che passa da dna-spatial.js.
+const inSpaziale = () => dnaView === "sphere";
 let spatial = null;
 
 // Spostamento manuale della camera rispetto al nodo attivo (vedi il
@@ -127,6 +129,15 @@ let spatial = null;
 // un nodo ricentra sempre, quindi non ci si perde mai fuori dalla rete.
 let panX = 0;
 let panY = 0;
+// Zoom della vista Piatta: 1 = com'è sempre stato. Si può solo allontanarsi (la
+// grandezza di locandine e nodi a 1 è quella giusta per leggere), pizzicando o
+// con la rotella, o con un doppio tocco sul vuoto per vedere la rete intera.
+// Allontanandosi il DOM si allarga: oltre ZOOM_RETE_INTERA tutti i nodi della
+// rete vengono disegnati, non solo i 32 più vicini alla camera.
+let zoom = 1;
+const ZOOM_RETE_INTERA = 0.8;
+const ZOOM_SENZA_ETICHETTE = 0.55;
+const MAX_DOM_NODES_INTERA = 160;
 let shownIds = [];          // i nodi davvero nel DOM all'ultimo render
 
 // Dopo un'apertura la camera non deve centrarsi con la media pesata della
@@ -236,6 +247,7 @@ export function showDna({ db, users, currentUser }) {
       return;
     }
     net = createNetwork(index, radice);
+    zoom = 1;
     focusId = net.rootId;
     trail = [net.rootId];
     panX = 0; panY = 0;
@@ -829,7 +841,7 @@ function bindFullscreenToggle() {
     // La misura del riquadro è appena cambiata di scatto (niente transizione
     // lì, vedi CSS): ricentra subito, non al prossimo tocco — altrimenti per
     // un istante la rete resterebbe disegnata sulla misura vecchia.
-    if (net) { panX = 0; panY = 0; render(); }
+    if (net) { panX = 0; panY = 0; zoom = 1; render(); }
   });
 }
 
@@ -1099,10 +1111,12 @@ function render() {
   const hops = hopsFrom(net, focusId);
 
   // Budget: prima i più vicini alla camera, a parità l'id (ordine stabile).
+  const reteIntera = zoom < ZOOM_RETE_INTERA;
+  eraReteIntera = reteIntera;
   const visible = [...net.nodes.values()]
-    .filter(n => n.x !== null && (hops.get(n.id) ?? Infinity) <= DOM_MAX_HOPS)
-    .sort((a, b) => (hops.get(a.id) - hops.get(b.id)) || a.id.localeCompare(b.id))
-    .slice(0, MAX_DOM_NODES);
+    .filter(n => n.x !== null && (reteIntera || (hops.get(n.id) ?? Infinity) <= DOM_MAX_HOPS))
+    .sort((a, b) => ((hops.get(a.id) ?? 99) - (hops.get(b.id) ?? 99)) || a.id.localeCompare(b.id))
+    .slice(0, reteIntera ? MAX_DOM_NODES_INTERA : MAX_DOM_NODES);
   const shown = new Set(visible.map(n => n.id));
 
   const shownEdges = net.edges.filter(e => shown.has(e.a) && shown.has(e.b));
@@ -1236,7 +1250,8 @@ function applyCamera(animata = true) {
   if (!canvas || !net) return;
   const focus = net.nodes.get(focusId) || net.nodes.get(net.rootId);
   canvas.classList.toggle("is-dragging", !animata);
-  canvas.style.transform = `translate(${(-focus.x + panX).toFixed(1)}px, ${(-focus.y + panY).toFixed(1)}px)`;
+  canvas.classList.toggle("is-zoom-far", zoom < ZOOM_SENZA_ETICHETTE);
+  canvas.style.transform = `scale(${zoom.toFixed(3)}) translate(${(-focus.x + panX).toFixed(1)}px, ${(-focus.y + panY).toFixed(1)}px)`;
 }
 
 // Fin dove si può trascinare: quanto basta a portare al centro qualunque
@@ -1680,7 +1695,7 @@ function applyViewMode() {
     btn.setAttribute("aria-pressed", on ? "true" : "false");
   }
   el("dnaCanvas")?.classList.toggle("hidden", inSpaziale());
-  spatial?.setModo({ orbita: dnaView === "orbit" || dnaView === "sphere", sfera: dnaView === "sphere" });
+  spatial?.setModo({ orbita: dnaView === "sphere", sfera: dnaView === "sphere" });
   if (inSpaziale()) spatial?.show(); else spatial?.hide();
 }
 
@@ -1689,6 +1704,36 @@ function applyViewMode() {
 // inerzia (costante di decadimento) della vista Spaziale. Serve perché i nodi ai bordi del riquadro sono tagliati a metà e prima
 // l'unico modo di raggiungerli era toccarli, cioè espanderli.
 let dragged = false;
+
+// Misure della rete intera (in coordinate del canvas): serve a sapere fin dove
+// ha senso allontanarsi e dove sta il centro.
+function misureRete() {
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const n of net?.nodes.values() ?? []) {
+    if (n.x === null) continue;
+    x0 = Math.min(x0, n.x); x1 = Math.max(x1, n.x);
+    y0 = Math.min(y0, n.y); y1 = Math.max(y1, n.y);
+  }
+  if (!isFinite(x0)) return null;
+  return { cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, w: x1 - x0 + 140, h: y1 - y0 + 150 };
+}
+// Zoom a cui la rete intera sta nel riquadro.
+function zoomAdatto() {
+  const stage = el("dnaStage"), r = misureRete();
+  if (!stage || !r) return 1;
+  return Math.min(1, stage.clientWidth / r.w, stage.clientHeight / r.h);
+}
+// Più in là non serve: poco oltre quello che fa stare tutta la rete.
+const zoomMin = () => Math.max(0.18, Math.min(0.75, zoomAdatto() * 0.92));
+
+// Ridisegna se il cambio di zoom ha attraversato la soglia della rete intera
+// (si passa da 32 nodi a tutti, o viceversa); altrimenti la camera basta.
+let eraReteIntera = false;
+function aggiornaZoom(animata) {
+  const ora = zoom < ZOOM_RETE_INTERA;
+  if (ora !== eraReteIntera) { eraReteIntera = ora; render(); }
+  applyCamera(animata);
+}
 
 function bindPan() {
   const stage = el("dnaStage");
@@ -1699,6 +1744,11 @@ function bindPan() {
   // frame che la consuma. Un nuovo tocco la ferma subito.
   let vx = 0, vy = 0, lx = 0, ly = 0, lt = 0, glide = 0;
   const GLIDE_TAU = 260, GLIDE_MIN = 0.02;
+  // Due dita: pizzico (zoom verso le dita) + spostamento.
+  const dita = new Map();
+  let pinch = null, ultimoTocco = 0;
+
+  const centro = () => { const r = stage.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; };
 
   const stopGlide = () => {
     if (!glide) return;
@@ -1725,9 +1775,42 @@ function bindPan() {
     glide = requestAnimationFrame(step);
   };
 
+  // Doppio tocco sul vuoto: la rete intera, e di nuovo per tornare com'era.
+  const reteInteraOnormale = () => {
+    const r = misureRete(), focus = net.nodes.get(focusId) || net.nodes.get(net.rootId);
+    if (zoom < 0.99 || !r || !focus) { zoom = 1; panX = 0; panY = 0; }
+    else {
+      zoom = Math.max(0.18, zoomAdatto() * 0.95);
+      panX = focus.x - r.cx; panY = focus.y - r.cy;
+      const L = panLimits(); panX = Math.min(L.maxX, Math.max(L.minX, panX)); panY = Math.min(L.maxY, Math.max(L.minY, panY));
+    }
+    aggiornaZoom(true);
+  };
+
+  const iniziaPinch = () => {
+    const [p, q] = [...dita.values()];
+    const c = centro();
+    pinch = { d0: Math.hypot(p.x - q.x, p.y - q.y) || 1, z0: zoom, p0x: panX, p0y: panY,
+      mx0: (p.x + q.x) / 2 - c.x, my0: (p.y + q.y) / 2 - c.y };
+    dragged = true;
+    stage.classList.add("is-panning");
+  };
+  const muoviPinch = () => {
+    const [p, q] = [...dita.values()];
+    const c = centro();
+    const z = Math.max(zoomMin(), Math.min(1, pinch.z0 * Math.hypot(p.x - q.x, p.y - q.y) / pinch.d0));
+    const mx = (p.x + q.x) / 2 - c.x, my = (p.y + q.y) / 2 - c.y;
+    // Il punto della rete sotto le dita resta lì: schermo = z * (mondo + pan).
+    const L = panLimits();
+    panX = Math.min(L.maxX, Math.max(L.minX, mx / z - pinch.mx0 / pinch.z0 + pinch.p0x));
+    panY = Math.min(L.maxY, Math.max(L.minY, my / z - pinch.my0 / pinch.z0 + pinch.p0y));
+    zoom = z;
+    aggiornaZoom(false);
+  };
+
   stage.addEventListener("pointerdown", e => {
-    if (!net || pid !== null || e.button > 0) return;
-    // In vista spaziale i gesti sono suoi (dna-spatial.js).
+    if (!net || e.button > 0) return;
+    // In vista 3D i gesti sono suoi (dna-spatial.js).
     if (inSpaziale()) return;
     // Il selettore è dentro al riquadro: lì i tocchi sono suoi, non della rete.
     if (e.target.closest(".dna-sheet")) return;
@@ -1736,6 +1819,14 @@ function bindPan() {
     // che lo spostava via dal centro senza motivo. Si sblocca al primo tap.
     if (net.nodes.size <= 1) return;
     stopGlide();
+    dita.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (dita.size === 2) {
+      pid = null;
+      try { stage.setPointerCapture(e.pointerId); } catch {}
+      iniziaPinch();
+      return;
+    }
+    if (dita.size > 2) return;
     pid = e.pointerId;
     dragged = false;
     vx = vy = 0; lx = e.clientX; ly = e.clientY; lt = performance.now();
@@ -1745,8 +1836,10 @@ function bindPan() {
   });
 
   stage.addEventListener("pointermove", e => {
+    if (dita.has(e.pointerId)) dita.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch && dita.size >= 2) { muoviPinch(); return; }
     if (e.pointerId !== pid) return;
-    const dx = e.clientX - x0, dy = e.clientY - y0;
+    const dx = (e.clientX - x0), dy = (e.clientY - y0);
     if (!dragged) {
       if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
       dragged = true;
@@ -1755,18 +1848,37 @@ function bindPan() {
       // scrollare la pagina a metà trascinamento.
       try { stage.setPointerCapture(pid); } catch {}
     }
-    panX = Math.min(lim.maxX, Math.max(lim.minX, baseX + dx));
-    panY = Math.min(lim.maxY, Math.max(lim.minY, baseY + dy));
+    // Il dito si muove in pixel dello schermo; la rete in unità del canvas.
+    panX = Math.min(lim.maxX, Math.max(lim.minX, baseX + dx / zoom));
+    panY = Math.min(lim.maxY, Math.max(lim.minY, baseY + dy / zoom));
     const now = performance.now(), dtm = Math.max(1, now - lt);
-    vx = vx * 0.6 + ((e.clientX - lx) / dtm) * 0.4;
-    vy = vy * 0.6 + ((e.clientY - ly) / dtm) * 0.4;
+    vx = vx * 0.6 + ((e.clientX - lx) / dtm / zoom) * 0.4;
+    vy = vy * 0.6 + ((e.clientY - ly) / dtm / zoom) * 0.4;
     lx = e.clientX; ly = e.clientY; lt = now;
     applyCamera(false);   // niente transizione mentre il dito è giù: deve seguirlo
   });
 
   const fine = e => {
+    const eraPinch = !!pinch;
+    dita.delete(e.pointerId);
+    try { stage.releasePointerCapture(e.pointerId); } catch {}
+    if (pinch) {
+      if (dita.size >= 2) { iniziaPinch(); return; }
+      pinch = null;
+      if (dita.size === 1) {
+        // Resta un dito: continua a spostare senza salti.
+        const [id, p] = [...dita.entries()][0];
+        pid = id; x0 = p.x; y0 = p.y; baseX = panX; baseY = panY; lim = panLimits();
+        vx = vy = 0; lx = p.x; ly = p.y; lt = performance.now();
+        return;
+      }
+      pid = null;
+      stage.classList.remove("is-panning");
+      applyCamera(true);
+      setTimeout(() => { dragged = false; }, 0);
+      return;
+    }
     if (e.pointerId !== pid) return;
-    try { stage.releasePointerCapture(pid); } catch {}
     pid = null;
     // Dito fermo prima di staccarlo: niente scivolata.
     const fermo = performance.now() - lt > 90;
@@ -1775,9 +1887,28 @@ function bindPan() {
     // Il click arriva DOPO il pointerup: il flag deve sopravvivere fino a lì,
     // e sparire subito dopo, altrimenti il tap successivo verrebbe ignorato.
     if (dragged) setTimeout(() => { dragged = false; }, 0);
+    else if (!eraPinch && e.type === "pointerup" && !e.target.closest(".dna-node, .dna-sheet, button")) {
+      const ora = performance.now();
+      if (ora - ultimoTocco < 320) { ultimoTocco = 0; reteInteraOnormale(); }
+      else ultimoTocco = ora;
+    }
   };
   stage.addEventListener("pointerup", fine);
   stage.addEventListener("pointercancel", fine);
+
+  // Rotella (computer): zoom verso il puntatore.
+  stage.addEventListener("wheel", e => {
+    if (!net || inSpaziale() || net.nodes.size <= 1) return;
+    e.preventDefault();
+    const c = centro();
+    const z0 = zoom, z = Math.max(zoomMin(), Math.min(1, z0 * Math.exp(-e.deltaY * 0.0015)));
+    if (z === z0) return;
+    const mx = e.clientX - c.x, my = e.clientY - c.y, L = panLimits();
+    panX = Math.min(L.maxX, Math.max(L.minX, panX + mx / z - mx / z0));
+    panY = Math.min(L.maxY, Math.max(L.minY, panY + my / z - my / z0));
+    zoom = z;
+    aggiornaZoom(false);
+  }, { passive: false });
 }
 
 function bindPeople() {
@@ -1826,4 +1957,5 @@ export function resetDna() {
   net = null;
   panX = 0;
   panY = 0;
+  zoom = 1;
 }
