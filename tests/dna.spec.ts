@@ -886,3 +886,33 @@ test("Sfera: i nodi stanno a profondità diverse e la scena ruota", async ({ pag
   expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
   expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
 });
+
+// Vista Piatto: dopo uno swipe veloce la rete continua a scorrere un po' (come
+// in Spaziale) e poi si ferma; uno swipe che finisce col dito fermo no.
+test("piatto: la rete continua a scorrere dopo lo swipe e si ferma da sola", async ({ page }) => {
+  const scritture = soloLettura(page);
+  const guasti = osserva(page);
+  await entra(page);
+  await vaiA(page, "tonight");
+  await page.locator("#dnaNodes .dna-node.is-root").waitFor({ state: "visible", timeout: 30_000 });
+  await toccaNodo(page, ".dna-node.is-root");
+  await page.evaluate(() => (document.querySelector("#dnaNodes .dna-node.is-root .dna-node__more") as HTMLElement | null)?.click());
+  await page.waitForTimeout(900);
+
+  const tr = () => page.evaluate(() => (document.getElementById("dnaCanvas") as HTMLElement).style.transform);
+  const st = (await page.locator("#dnaStage").boundingBox())!;
+  const x0 = st.x + st.width * 0.75, y0 = st.y + st.height * 0.5;
+  await page.mouse.move(x0, y0); await page.mouse.down();
+  for (let i = 1; i <= 8; i++) { await page.mouse.move(x0 - 6 * i, y0); await page.waitForTimeout(16); }
+  await page.mouse.up();
+  const alRilascio = await tr();
+  await page.waitForTimeout(120);
+  const dopo = await tr();
+  expect(dopo, "dopo lo swipe la rete si è fermata di colpo").not.toBe(alRilascio);
+  await page.waitForTimeout(1800);
+  const a = await tr(); await page.waitForTimeout(200);
+  expect(await tr(), "la scivolata non si ferma mai").toBe(a);
+
+  expect(scritture).toEqual([]);
+  expect(guasti).toEqual([]);
+});
