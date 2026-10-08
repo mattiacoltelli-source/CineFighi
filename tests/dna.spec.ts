@@ -1076,35 +1076,34 @@ test("Sfera: la rotazione a un dito è libera a 360° e non si blocca", async ({
   const pos = () => page.evaluate(() => Object.fromEntries([...document.querySelectorAll<HTMLElement>("#dnaSpatial .dna-node")]
     .filter(n => n.style.display !== "none").map(n => { const r = n.getBoundingClientRect(); return [n.dataset.node!, [r.left + r.width / 2, r.top + r.height / 2]]; })));
   const st = (await page.locator("#dnaStage").boundingBox())!;
-  const K = 0.008;
-  // Un giro completo = 2π / K pixel, a tratti da 170px per restare nello schermo.
-  const giro = async (asse: "x" | "y") => {
-    const tot = (2 * Math.PI) / K, tratti = Math.ceil(tot / 170), passo = tot / tratti;
-    for (let t = 0; t < tratti; t++) {
-      // Si parte da un punto vuoto: un dito su un nodo lo prenderebbe come fulcro.
-      const [x, y] = await page.evaluate(([bx, by, bw, bh]) => {
-        for (let r = 0.9; r > 0.55; r -= 0.03) for (let c = 0.1; c < 0.95; c += 0.08) {
-          const px = bx + bw * c, py = by + bh * r;
-          if (!document.elementsFromPoint(px, py).some(e => (e as HTMLElement).classList?.contains("dna-node"))) return [px, py];
-        }
-        return [bx + bw * 0.5, by + bh * 0.9];
-      }, [st.x, st.y, st.width, st.height]);
-      await page.mouse.move(x, y); await page.mouse.down();
-      for (let i = 1; i <= 17; i++) { await page.mouse.move(x + (asse === "x" ? (passo * i) / 17 : 0), y - (asse === "y" ? (passo * i) / 17 : 0)); await page.waitForTimeout(12); }
-      await page.waitForTimeout(160);   // dito fermo: nessuna scia
-      await page.mouse.up();
-      await page.waitForTimeout(250);
-    }
-    await page.waitForTimeout(500);
+  const colpo = async (asse: "x" | "y") => {
+    // Si parte da un punto vuoto: un dito su un nodo non cambierebbe nulla, ma così è più pulito.
+    const [x, y] = await page.evaluate(([bx, by, bw, bh]) => {
+      for (let r = 0.9; r > 0.55; r -= 0.03) for (let c = 0.1; c < 0.95; c += 0.08) {
+        const px = bx + bw * c, py = by + bh * r;
+        if (!document.elementsFromPoint(px, py).some(e => (e as HTMLElement).classList?.contains("dna-node"))) return [px, py];
+      }
+      return [bx + bw * 0.5, by + bh * 0.9];
+    }, [st.x, st.y, st.width, st.height]);
+    await page.mouse.move(x, y); await page.mouse.down();
+    for (let i = 1; i <= 17; i++) { await page.mouse.move(x + (asse === "x" ? 10 * i : 0), y - (asse === "y" ? 10 * i : 0)); await page.waitForTimeout(12); }
+    await page.waitForTimeout(160);   // dito fermo: nessuna scia
+    await page.mouse.up();
+    await page.waitForTimeout(450);
   };
-  const prima = await pos();
-  await giro("y");
-  const dopoY = await pos();
-  await giro("x");
-  const dopoX = await pos();
-  const scarto = (a: Record<string, number[]>) => Math.max(...Object.keys(prima).filter(k => a[k]).map(k => Math.hypot(a[k][0] - prima[k][0], a[k][1] - prima[k][1])));
-  expect(scarto(dopoY), "un giro verticale completo non riporta la scena com'era (bloccata?)").toBeLessThan(25);
-  expect(scarto(dopoX), "un giro orizzontale completo non riporta la scena com'era").toBeLessThan(25);
+  const mosso = (a: Record<string, number[]>, b: Record<string, number[]>) =>
+    Math.max(...Object.keys(a).filter(k => b[k]).map(k => Math.hypot(a[k][0] - b[k][0], a[k][1] - b[k][1])));
+  // Tanti colpi nella stessa direzione, ben oltre i vecchi limiti (~72°): la scena
+  // deve muoversi a ogni colpo, in verticale e in orizzontale.
+  for (const asse of ["y", "x"] as const) {
+    let prima = await pos();
+    for (let n = 1; n <= 8; n++) {
+      await colpo(asse);
+      const dopo = await pos();
+      expect(mosso(prima, dopo), `colpo ${n} sull'asse ${asse}: la scena non si è mossa (bloccata?)`).toBeGreaterThan(15);
+      prima = dopo;
+    }
+  }
 
   expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
   expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
@@ -1149,6 +1148,49 @@ test("Sfera: toccando un nodo con molti collegamenti si vedono tutti, interi", a
       .map(el => el.dataset.node);
   }, id);
   expect(fuori, `collegamenti di ${id} tagliati o fuori schermo`).toEqual([]);
+  expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
+  expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
+});
+
+// Lab 3D, trackball: da qualunque inclinazione, trascinare in orizzontale muove
+// i nodi in orizzontale sullo schermo e in verticale in verticale.
+test("Sfera: la rotazione è una trackball, gli assi restano quelli dello schermo", async ({ page }) => {
+  const scritture = soloLettura(page);
+  const guasti = osserva(page);
+  await entra(page);
+  await vaiA(page, "tonight");
+  await page.locator("#dnaNodes .dna-node.is-root").waitFor({ state: "visible", timeout: 30_000 });
+  await page.locator('#dnaViewToggle [data-dna-view="sphere"]').click();
+  await page.locator("#dnaSpatial .dna-node.is-root").waitFor({ state: "visible" });
+  await toccaNodo(page, "#dnaSpatial .dna-node.is-root");
+  await page.evaluate(() => (document.querySelector("#dnaSpatial .dna-node.is-root .dna-node__more") as HTMLElement | null)?.click());
+  await page.waitForTimeout(1300);
+
+  const st = (await page.locator("#dnaStage").boundingBox())!;
+  const snap = () => page.evaluate(() => Object.fromEntries([...document.querySelectorAll<HTMLElement>("#dnaSpatial .dna-node")]
+    .filter(n => n.style.display !== "none").map(n => { const r = n.getBoundingClientRect(); return [n.dataset.node!, [r.left + r.width / 2, r.top + r.height / 2]]; })));
+  const drag = async (dx: number, dy: number) => {
+    const x = st.x + st.width * 0.15, y = st.y + st.height * 0.9;
+    await page.mouse.move(x, y); await page.mouse.down();
+    for (let i = 1; i <= 15; i++) { await page.mouse.move(x + (dx * i) / 15, y + (dy * i) / 15); await page.waitForTimeout(14); }
+    await page.waitForTimeout(160);
+    await page.mouse.up();
+    await page.waitForTimeout(700);
+  };
+  const misura = async (dx: number, dy: number) => {
+    const a = await snap(); await drag(dx, dy); const c = await snap();
+    const ks = Object.keys(a).filter(k => c[k]);
+    return { mx: ks.reduce((s, k) => s + Math.abs(c[k][0] - a[k][0]), 0) / ks.length, my: ks.reduce((s, k) => s + Math.abs(c[k][1] - a[k][1]), 0) / ks.length };
+  };
+  for (const inclina of [0, 1, 2]) {
+    if (inclina) await drag(0, -150);   // ~90° alla volta
+    const h = await misura(60, 0);
+    expect(h.mx, `orizzontale dopo ${inclina * 90}° di inclinazione: i nodi non si muovono in orizzontale`).toBeGreaterThan(25);
+    expect(h.my, `orizzontale dopo ${inclina * 90}° di inclinazione: i nodi si muovono anche in verticale`).toBeLessThan(h.mx * 0.3);
+  }
+  const v = await misura(0, 60);
+  expect(v.my, "verticale: i nodi non si muovono in verticale").toBeGreaterThan(25);
+  expect(v.mx, "verticale: i nodi si muovono anche in orizzontale").toBeLessThan(v.my * 0.3);
   expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
   expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
 });

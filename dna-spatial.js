@@ -72,6 +72,39 @@ const MAX_TILT = 0.14;                       // ~8°
 const DRAG_THRESHOLD = 8;                    // come la vista piatta
 const CULL_MARGIN = 90;
 
+// Rotazione della scena come quaternione [w,x,y,z] (trackball: i gesti ruotano
+// attorno agli assi dello SCHERMO, da qualunque inclinazione). La matrice 3x3
+// (riga per riga) porta un vettore del mondo nel sistema della camera.
+const Q_ID = [1, 0, 0, 0];
+const qMul = (a, b) => [
+  a[0] * b[0] - a[1] * b[1] - a[2] * b[2] - a[3] * b[3],
+  a[0] * b[1] + a[1] * b[0] + a[2] * b[3] - a[3] * b[2],
+  a[0] * b[2] - a[1] * b[3] + a[2] * b[0] + a[3] * b[1],
+  a[0] * b[3] + a[1] * b[2] - a[2] * b[1] + a[3] * b[0]
+];
+const qNorm = (q) => { const l = Math.hypot(q[0], q[1], q[2], q[3]) || 1; return [q[0] / l, q[1] / l, q[2] / l, q[3] / l]; };
+const qAsseX = (a) => [Math.cos(a / 2), Math.sin(a / 2), 0, 0];
+const qAsseY = (a) => [Math.cos(a / 2), 0, Math.sin(a / 2), 0];
+const qSlerp = (a, b, t) => {
+  let d = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
+  if (d < 0) { b = [-b[0], -b[1], -b[2], -b[3]]; d = -d; }   // la via più breve
+  if (d > 0.9995) return qNorm([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t, a[3] + (b[3] - a[3]) * t]);
+  const th = Math.acos(d), sa = Math.sin((1 - t) * th) / Math.sin(th), sb = Math.sin(t * th) / Math.sin(th);
+  return [a[0] * sa + b[0] * sb, a[1] * sa + b[1] * sb, a[2] * sa + b[2] * sb, a[3] * sa + b[3] * sb];
+};
+const qMat = ([w, x, y, z]) => [
+  1 - 2 * (y * y + z * z), 2 * (x * y - w * z), 2 * (x * z + w * y),
+  2 * (x * y + w * z), 1 - 2 * (x * x + z * z), 2 * (y * z - w * x),
+  2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y)
+];
+// Gli stessi due angoli (yaw, pitch) della vista Spaziale: matrice equivalente.
+const eulerMat = (yaw, pitch) => {
+  const c = Math.cos(yaw), s = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
+  return [c, 0, s, -sp * s, cp, sp * c, -cp * s, -sp, cp * c];
+};
+// Angolo (rad) fra la rotazione q e la vista frontale.
+const qAngolo = (q) => 2 * Math.acos(Math.min(1, Math.abs(q[0])));
+
 const lerpTable = (tab, h) => {
   const i = Math.max(0, Math.min(tab.length - 1, h));
   const lo = Math.floor(i), hi = Math.min(tab.length - 1, lo + 1);
@@ -99,7 +132,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
   const pos3 = new Map();       // id -> { x, y, z }: posizioni della vista Sfera
   const vis = new Map();        // id -> { h, th, grow, dom, cache }
   const edgeDom = new Map();    // "a|b" -> <line>
-  const cam = { x: 0, y: 0, z: 0, tx: 0, ty: 0, tz: 0, cz: 0, tcz: 0, yaw: 0, pitch: 0, tyaw: 0, tpitch: 0, wyaw: 0, wpitch: 0, vx: 0, vy: 0 };
+  const cam = { x: 0, y: 0, z: 0, tx: 0, ty: 0, tz: 0, cz: 0, tcz: 0, yaw: 0, pitch: 0, tyaw: 0, tpitch: 0, wyaw: 0, wpitch: 0, vx: 0, vy: 0, q: Q_ID, tq: Q_ID, M: eulerMat(0, 0) };
   let W = 0, H = 0;
   let dragged = false;
 
@@ -292,15 +325,14 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
   // stanno nel riquadro (con i margini).
   function entrano(ids, tz) {
     const mx = W / 2 - MARGINE_X, my = H / 2 - MARGINE_Y;
-    const cy_ = Math.cos(cam.tyaw), sy_ = Math.sin(cam.tyaw), cp = Math.cos(cam.tpitch), sp = Math.sin(cam.tpitch);
+    const T = orbit ? qMat(cam.tq) : eulerMat(cam.tyaw, cam.tpitch);
     const fp = focusPlane();
     for (const nid of ids) {
       const w = worldPos(nid);
       if (!w) continue;
       let dx = w.x - cam.tx, dy = w.y - cam.ty;
       let dz = sfera ? w.z - cam.tcz : lerpTable(DEPTH_ORBIT, vis.get(nid)?.th ?? 2) - fp;
-      [dx, dz] = [dx * cy_ + dz * sy_, -dx * sy_ + dz * cy_];
-      [dy, dz] = [dy * cp + dz * sp, -dy * sp + dz * cp];
+      [dx, dy, dz] = [T[0] * dx + T[1] * dy + T[2] * dz, T[3] * dx + T[4] * dy + T[5] * dz, T[6] * dx + T[7] * dy + T[8] * dz];
       const den = F + (sfera ? 0 : fp) + dz - tz;
       if (den < NEAR) return false;
       const sc = Math.min(F / den, S_MAX_ORBIT);
@@ -385,7 +417,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     cam.tz = Math.max(zMin(), Math.min(-FOG_Z, F + DEPTH[0] * (1 - FLATTEN) - F / sFit));
     cam.vx = cam.vy = 0;
     if (orbit) {
-      cam.tyaw = giroPiuVicino(cam.tyaw); cam.tpitch = giroPiuVicino(cam.tpitch); cam.wyaw = cam.wpitch = 0;   // la panoramica è una mappa: di fronte
+      cam.tq = Q_ID; cam.wyaw = cam.wpitch = 0;   // la panoramica è una mappa: di fronte
       // Zoom il più vicino possibile che fa stare tutta la rete nel riquadro.
       const ids = [...net.nodes.keys()];
       let tz = Z_MAX;
@@ -426,15 +458,27 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     ease("z", "tz", orbit && pointersDown ? 30 : 90, 0.1);
     ease("cz", "tcz", pointersDown ? 30 : 120, 0.05);
     if (!pointersDown && !orbit) { cam.tyaw = 0; cam.tpitch = 0; }
-    if (orbit && !pointersDown && (Math.abs(cam.wyaw) + Math.abs(cam.wpitch) > 0.00004)) {
-      cam.tyaw += cam.wyaw * dt; cam.tpitch += cam.wpitch * dt;
-      const k = Math.exp(-dt / SPIN_TAU);
-      cam.wyaw *= k; cam.wpitch *= k;
-      moving = true;
-    }
     const tauRot = orbit && pointersDown ? 45 : 160;   // in orbita segue il dito da vicino
-    ease("yaw", "tyaw", tauRot, 0.0005);
-    ease("pitch", "tpitch", tauRot, 0.0005);
+    if (orbit) {
+      // Scia: la rotazione continua attorno agli assi dello schermo e rallenta.
+      if (!pointersDown && (Math.abs(cam.wyaw) + Math.abs(cam.wpitch) > 0.00004)) {
+        cam.tq = qNorm(qMul(qMul(qAsseX(cam.wpitch * dt), qAsseY(cam.wyaw * dt)), cam.tq));
+        const k = Math.exp(-dt / SPIN_TAU);
+        cam.wyaw *= k; cam.wpitch *= k;
+        moving = true;
+      }
+      // La rotazione mostrata insegue quella di destinazione lungo la via più breve.
+      const d = Math.abs(cam.q[0] * cam.tq[0] + cam.q[1] * cam.tq[1] + cam.q[2] * cam.tq[2] + cam.q[3] * cam.tq[3]);
+      if (d < 0.9999999) {
+        cam.q = qNorm(qSlerp(cam.q, cam.tq, 1 - Math.exp(-dt / tauRot)));
+        moving = true;
+      } else cam.q = cam.tq;
+      cam.M = qMat(cam.q);
+    } else {
+      ease("yaw", "tyaw", tauRot, 0.0005);
+      ease("pitch", "tpitch", tauRot, 0.0005);
+      cam.M = eulerMat(cam.yaw, cam.pitch);
+    }
 
     for (const v of vis.values()) {
       const h = approach(v.h, v.th, dt, 140);
@@ -464,14 +508,8 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       dz = depthOf(v.h) - focusPlane();
     }
     let dx = wx - cam.x, dy = wy - cam.y;
-    if (cam.yaw) {
-      const c = Math.cos(cam.yaw), s = Math.sin(cam.yaw);
-      [dx, dz] = [dx * c + dz * s, -dx * s + dz * c];
-    }
-    if (cam.pitch) {
-      const c = Math.cos(cam.pitch), s = Math.sin(cam.pitch);
-      [dy, dz] = [dy * c + dz * s, -dy * s + dz * c];
-    }
+    const M = cam.M;
+    [dx, dy, dz] = [M[0] * dx + M[1] * dy + M[2] * dz, M[3] * dx + M[4] * dy + M[5] * dz, M[6] * dx + M[7] * dy + M[8] * dz];
     const z = (sfera ? 0 : focusPlane()) + dz;
     const denom = F + z - cam.z;
     if (denom < NEAR) return { x: 0, y: 0, s: 0, z, dietro: true };   // dietro la camera
@@ -524,14 +562,13 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
 
   // "Frontale": compare solo in orbita, quando la scena è girata.
   const frontBtn = container.querySelector(".dna-spatial__front");
-  const giroPiuVicino = (a) => Math.round(a / (2 * Math.PI)) * 2 * Math.PI;
   let frontMostrato = null;
   function aggiornaFrontale() {
     if (!frontBtn) return;
-    const girata = orbit && (Math.abs(cam.tyaw - giroPiuVicino(cam.tyaw)) > 0.06 || Math.abs(cam.tpitch - giroPiuVicino(cam.tpitch)) > 0.06);
+    const girata = orbit && qAngolo(cam.tq) > 0.06;
     if (girata !== frontMostrato) { frontMostrato = girata; frontBtn.classList.toggle("hidden", !girata); }
   }
-  frontBtn?.addEventListener("click", () => { cam.tyaw = giroPiuVicino(cam.tyaw); cam.tpitch = giroPiuVicino(cam.tpitch); cam.wyaw = cam.wpitch = 0; kick(); });
+  frontBtn?.addEventListener("click", () => { cam.tq = Q_ID; cam.wyaw = cam.wpitch = 0; kick(); });
 
   // ─── gesti ─────────────────────────────────────────────────────────────────
   nodesEl.addEventListener("click", e => {
@@ -629,10 +666,13 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
         // specchiato, ed è giusto così). Se la scena è vista di taglio non
         // diventa infinito: il denominatore ha un minimo.
         const vx = m0x / gesture.s0 - mx / sc, vy = m0y / gesture.s0 - my / sc;
-        const cy_ = Math.cos(cam.tyaw), sy_ = Math.sin(cam.tyaw), cp_ = Math.cos(cam.tpitch), sp_ = Math.sin(cam.tpitch);
-        const fix = (c) => (c < 0 ? -1 : 1) * Math.max(0.3, Math.abs(c));
-        const ax = fix(cy_), ay = fix(cp_);
-        const ntx = gesture.tx0 + vx / ax, nty = gesture.ty0 + vy / ay + (sp_ * sy_ * vx) / (ax * ay);
+        // Dal mondo allo schermo, per un punto sul piano del fulcro, è la parte 2x2
+        // in alto a sinistra della matrice di rotazione: la si inverte (con un
+        // minimo al determinante, per la scena vista di taglio).
+        const T = qMat(cam.tq);
+        let det = T[0] * T[4] - T[1] * T[3];
+        det = (det < 0 ? -1 : 1) * Math.max(0.2, Math.abs(det));
+        const ntx = gesture.tx0 + (T[4] * vx - T[1] * vy) / det, nty = gesture.ty0 + (-T[3] * vx + T[0] * vy) / det;
         const tnow = performance.now(), dtp = Math.max(1, tnow - (gesture.pt || tnow - 16));
         // Velocità del centro (unità del mondo per ms): al rilascio la vista continua a scivolare.
         cam.vx = cam.vx * 0.6 + ((ntx - cam.tx) / dtp) * 0.4;
@@ -655,18 +695,20 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
         cam.wyaw = cam.wpitch = 0; cam.vx = cam.vy = 0;
         try { container.setPointerCapture(e.pointerId); } catch {}
       }
-      // Rotazione libera a 360° su entrambi gli assi, a incrementi: ogni
-      // movimento del dito aggiunge la sua parte, senza salti alla soglia e senza
-      // limiti. Se la scena è capovolta (pitch oltre 90°) l'orizzontale cambia
-      // segno, così la scena segue il dito anche da lì.
+      // Trackball: ogni movimento del dito ruota la scena attorno agli assi dello
+      // schermo (a destra = attorno al verticale, su/giù = attorno all'orizzontale),
+      // a incrementi: nessun salto alla soglia, nessun limite, nessun "verso"
+      // che cambia quando la scena è inclinata o capovolta. Più si è vicini,
+      // più la rotazione è lenta e precisa; da lontano è più rapida.
       const now = performance.now();
       const ddx = e.clientX - gesture.lx, ddy = e.clientY - gesture.ly, dtm = Math.max(1, now - gesture.lt);
-      const sg = Math.cos(cam.tpitch) >= 0 ? 1 : -1;
-      const dyaw = sg * ddx * ORBIT_K, dpitch = -ddy * ORBIT_K;
-      cam.tyaw += dyaw; cam.tpitch += dpitch;
-      // Velocità (rad/ms) per la scia al rilascio, con media mobile.
-      cam.wyaw = cam.wyaw * 0.6 + (dyaw / dtm) * 0.4;
-      cam.wpitch = cam.wpitch * 0.6 + (dpitch / dtm) * 0.4;
+      const zoom = scaleAtCam(cam.tz);
+      const K = ORBIT_K * Math.max(0.45, Math.min(1.5, Math.pow(zoom, -0.6)));
+      const ay = ddx * K, ax = ddy * K;
+      cam.tq = qNorm(qMul(qMul(qAsseX(ax), qAsseY(ay)), cam.tq));
+      // Velocità angolare (rad/ms) per la scia al rilascio, con media mobile.
+      cam.wyaw = cam.wyaw * 0.6 + (ay / dtm) * 0.4;
+      cam.wpitch = cam.wpitch * 0.6 + (ax / dtm) * 0.4;
       gesture.lx = e.clientX; gesture.ly = e.clientY; gesture.lt = now;
       kick();
       return;
@@ -759,7 +801,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       if (snap) {
         const f = sfera ? (pos3.get(focusId) || { x: 0, y: 0, z: 0 }) : net.nodes.get(focusId);
         const fz = sfera ? f.z : 0;
-        Object.assign(cam, { x: f.x, y: f.y, z: 0, cz: fz, tx: f.x, ty: f.y, tz: 0, tcz: fz, yaw: 0, pitch: 0, tyaw: 0, tpitch: 0, vx: 0, vy: 0 });
+        Object.assign(cam, { x: f.x, y: f.y, z: 0, cz: fz, tx: f.x, ty: f.y, tz: 0, tcz: fz, yaw: 0, pitch: 0, tyaw: 0, tpitch: 0, vx: 0, vy: 0, q: Q_ID, tq: Q_ID, wyaw: 0, wpitch: 0, M: eulerMat(0, 0) });
       }
       aimAt(focusId, newIds || []);
       // Volo da un nodo all'altro: a metà strada la camera si allarga un po'
@@ -775,7 +817,8 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       sfera = orbit && !!sf;
       F = orbit ? F_ORBIT : F_BASE;
       cam.z = cam.tz = 0;
-      if (!orbit) { cam.tyaw = cam.tpitch = 0; cam.yaw = cam.pitch = 0; }
+      if (!orbit) { cam.tyaw = cam.tpitch = 0; cam.yaw = cam.pitch = 0; cam.M = eulerMat(0, 0); }
+      cam.q = cam.tq = Q_ID; cam.wyaw = cam.wpitch = 0;
       for (const v of vis.values()) v.cache = {};
       risistema();
       kick();
