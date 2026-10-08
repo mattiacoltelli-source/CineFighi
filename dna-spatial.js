@@ -496,7 +496,8 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
         if (w) { cam.tx = w.x; cam.ty = w.y; if (sfera) cam.tcz = w.z; clampCam(); }
         gesture.nodo = null;
       }
-      cam.tyaw = gesture.yaw0 - ox * ORBIT_K;
+      // Orizzontale: segno invertito su indicazione dell uso reale (a destra la parte lontana segue il dito).
+      cam.tyaw = gesture.yaw0 + ox * ORBIT_K;
       cam.tpitch = Math.max(-PITCH_MAX, Math.min(PITCH_MAX, gesture.pitch0 - oy * ORBIT_K));
       kick();
       return;
