@@ -45,8 +45,9 @@ const NEAR = 140;                            // sotto questa distanza un nodo è
 // (un po' schiacciata in profondità) attorno a lui, dalla parte opposta al
 // nodo da cui si arriva. Le posizioni sono SOLO per la vista 3D: la rete vera
 // (node.x/node.y) resta quella di sempre, e le altre viste non cambiano.
-const N_DIREZIONI = 72;                      // direzioni candidate sulla sfera
-const Z_SCHIACCIATA = 0.8;                   // la profondità è l'80% del raggio: meno nodi uno sull'altro
+const N_DIREZIONI = 120;                     // direzioni candidate sulla sfera
+const Z_SCHIACCIATA = 1.7;                   // la sfera si allunga in profondità (z) molto più che sullo schermo: è lì che c'è spazio
+const PESO_Z = 0.3;                          // quanto conta la distanza in profondità nello scegliere dove mettere un nodo
 const OPAC = [1, 1, .6, .34, .2];            // = .dna-h0..h4: panoramica e rete piatta
 const OPAC_ZONA = [1, 1, .5, .1, 0];         // a zoom normale: la tua zona, il resto nella nebbia
 const FOG_Z = 380;                           // quanto allontanarsi per diradare la nebbia
@@ -134,7 +135,8 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     // (telefono in verticale), sopra e sotto molto di più. I collegamenti di un
     // nodo stanno così dentro lo schermo a grandezza normale, senza rimpicciolirli.
     const kx = Math.max(0.8, Math.min(1, (W / 2 - MARGINE_X) / S_TARGET / R));
-    const ky = Math.max(0.8, Math.min(1, (H / 2 - MARGINE_Y) / S_TARGET / R));
+    // In verticale c'è molto più posto che in larghezza: la sfera si allunga (fino a 1,5x).
+    const ky = Math.max(0.8, Math.min(1.5, (H / 2 - MARGINE_Y) / S_TARGET / R));
     const cen = { x: 0, y: 0, z: 0 };
     for (const q of pos3.values()) { cen.x += q.x; cen.y += q.y; cen.z += q.z; }
     const nn = Math.max(1, pos3.size);
@@ -155,7 +157,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
         let m = Infinity;
         // Conta soprattutto la distanza SULLO SCHERMO (x,y): due nodi a profondità
         // diverse ma sulla stessa linea di vista si sovrapporrebbero comunque.
-        for (const q of pos3.values()) { const dd = Math.hypot(q.x - x, q.y - y) + 0.15 * Math.abs(q.z - z); if (dd < m) m = dd; }
+        for (const q of pos3.values()) { const dd = Math.hypot(q.x - x, q.y - y) + PESO_Z * Math.abs(q.z - z); if (dd < m) m = dd; }
         // Leggera attrazione verso il baricentro della rete: i nuovi nodi
         // riempiono i vuoti attorno invece di allungarla a striscia.
         m -= PESO_BARICENTRO * Math.hypot(x - cen.x, y - cen.y, z - cen.z);
@@ -270,13 +272,33 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
   // (figli e genitore): se non ci stanno allo zoom normale, la camera si
   // allontana quel tanto che basta (mai oltre S_FIT_MIN, per non ridurli a
   // puntini). Calcolato sulla camera di destinazione, senza aspettare l'animazione.
+  // true se tutti gli id, proiettati con la camera di destinazione e zoom tz,
+  // stanno nel riquadro (con i margini).
+  function entrano(ids, tz) {
+    const mx = W / 2 - MARGINE_X, my = H / 2 - MARGINE_Y;
+    const cy_ = Math.cos(cam.tyaw), sy_ = Math.sin(cam.tyaw), cp = Math.cos(cam.tpitch), sp = Math.sin(cam.tpitch);
+    const fp = focusPlane();
+    for (const nid of ids) {
+      const w = worldPos(nid);
+      if (!w) continue;
+      let dx = w.x - cam.tx, dy = w.y - cam.ty;
+      let dz = sfera ? w.z - cam.tcz : lerpTable(DEPTH_ORBIT, vis.get(nid)?.th ?? 2) - fp;
+      [dx, dz] = [dx * cy_ + dz * sy_, -dx * sy_ + dz * cy_];
+      [dy, dz] = [dy * cp + dz * sp, -dy * sp + dz * cp];
+      const den = F + (sfera ? 0 : fp) + dz - tz;
+      if (den < NEAR) return false;
+      const sc = Math.min(F / den, S_MAX_ORBIT);
+      if (Math.abs(dx) * sc > mx || Math.abs(dy) * sc > my) return false;
+    }
+    return true;
+  }
   function inquadra(id) {
     const f = net.nodes.get(id);
     if (!f) return;
     const ids = [id];
     // I collegamenti "a lunga distanza" (un nodo di un altro ramo) possono stare
     // lontano per natura: non si rimpicciolisce tutto per inseguirli.
-    const wf = worldPos(id), lim = radius() * RAGGIO_SFERA * 1.5;
+    const wf = worldPos(id), lim = radius() * RAGGIO_SFERA * 1.5 * Z_SCHIACCIATA;
     for (const e of net.edges) {
       const o = e.a === id ? e.b : e.b === id ? e.a : null;
       if (!o) continue;
@@ -285,29 +307,12 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       ids.push(o);
     }
     if (ids.length < 2) return;
-    const mx = W / 2 - MARGINE_X, my = H / 2 - MARGINE_Y;
-    const cy_ = Math.cos(cam.tyaw), sy_ = Math.sin(cam.tyaw), cp = Math.cos(cam.tpitch), sp = Math.sin(cam.tpitch);
-    const fp = focusPlane();
-    const entra = (tz) => {
-      for (const nid of ids) {
-        const w = worldPos(nid), n = net.nodes.get(nid);
-        if (!w) continue;
-        let dx = w.x - cam.tx, dy = w.y - cam.ty;
-        let dz = sfera ? w.z - cam.tcz : lerpTable(DEPTH_ORBIT, vis.get(nid)?.th ?? 2) - fp;
-        [dx, dz] = [dx * cy_ + dz * sy_, -dx * sy_ + dz * cy_];
-        [dy, dz] = [dy * cp + dz * sp, -dy * sp + dz * cp];
-        const den = F + (sfera ? 0 : fp) + dz - tz;
-        if (den < NEAR) return false;
-        const sc = Math.min(F / den, S_MAX_ORBIT);
-        if (Math.abs(dx) * sc > mx || Math.abs(dy) * sc > my) return false;
-      }
-      return true;
-    };
-    const limite = F + fp - F / (sfera ? S_FIT_MIN : S_FIT_MIN_PIATTA);   // tz a cui la scala del fulcro scende a S_FIT_MIN
+    const limite = F + focusPlane() - F / (sfera ? S_FIT_MIN : S_FIT_MIN_PIATTA);   // tz a cui la scala del fulcro scende a S_FIT_MIN
     let tz = cam.tz;
-    while (!entra(tz) && tz > Math.max(zMin(), limite)) tz -= 40;
+    while (!entrano(ids, tz) && tz > Math.max(zMin(), limite)) tz -= 40;
     cam.tz = Math.max(tz, Math.max(zMin(), limite));
   }
+
   // Posizione "nel mondo" di un nodo, nelle stesse coordinate della camera.
   function worldPos(id) {
     if (sfera) return pos3.get(id) || null;
@@ -335,8 +340,9 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
 
   function clampCam() {
     const b = bounds();
-    cam.tx = Math.max(b.minX - 60, Math.min(b.maxX + 60, cam.tx));
-    cam.ty = Math.max(b.minY - 60, Math.min(b.maxY + 60, cam.ty));
+    const m = orbit ? 240 : 60;   // in orbita più respiro: il bordo non deve "frenare" il gesto
+    cam.tx = Math.max(b.minX - m, Math.min(b.maxX + m, cam.tx));
+    cam.ty = Math.max(b.minY - m, Math.min(b.maxY + m, cam.ty));
   }
 
   function overview() {
@@ -348,7 +354,14 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     // A nebbia diradata il piano del nodo attivo è a z = DEPTH[0] * (1 - FLATTEN).
     cam.tz = Math.max(zMin(), Math.min(-FOG_Z, F + DEPTH[0] * (1 - FLATTEN) - F / sFit));
     cam.vx = cam.vy = 0;
-    if (orbit) { cam.tyaw = giroPiuVicino(cam.tyaw); cam.tpitch = 0; }   // la panoramica è una mappa: di fronte
+    if (orbit) {
+      cam.tyaw = giroPiuVicino(cam.tyaw); cam.tpitch = 0;   // la panoramica è una mappa: di fronte
+      // Zoom il più vicino possibile che fa stare tutta la rete nel riquadro.
+      const ids = [...net.nodes.keys()];
+      let tz = Z_MAX;
+      while (!entrano(ids, tz) && tz > zMin()) tz -= 40;
+      cam.tz = Math.max(zMin(), Math.min(-FOG_Z, tz));
+    }
   }
 
   // ─── animazione (gira solo mentre qualcosa si muove) ───────────────────────
@@ -574,9 +587,16 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
         const sc = scaleAtCam(cam.tz);
         const mx = (p.x + q.x) / 2 - gesture.rx, my = (p.y + q.y) / 2 - gesture.ry;
         const m0x = gesture.mx0 - gesture.rx, m0y = gesture.my0 - gesture.ry;
-        const fx = Math.max(0.35, Math.cos(cam.tyaw)), fy = Math.max(0.35, Math.cos(cam.tpitch));
-        cam.tx = gesture.tx0 + (m0x / gesture.s0 - mx / sc) / fx;
-        cam.ty = gesture.ty0 + (m0y / gesture.s0 - my / sc) / fy;
+        // Spostamento sullo schermo -> spostamento della camera nel mondo, con
+        // l'inversa della rotazione corrente (segno incluso: da dietro è
+        // specchiato, ed è giusto così). Se la scena è vista di taglio non
+        // diventa infinito: il denominatore ha un minimo.
+        const vx = m0x / gesture.s0 - mx / sc, vy = m0y / gesture.s0 - my / sc;
+        const cy_ = Math.cos(cam.tyaw), sy_ = Math.sin(cam.tyaw), cp_ = Math.cos(cam.tpitch), sp_ = Math.sin(cam.tpitch);
+        const fix = (c) => (c < 0 ? -1 : 1) * Math.max(0.3, Math.abs(c));
+        const ax = fix(cy_), ay = fix(cp_);
+        cam.tx = gesture.tx0 + vx / ax;
+        cam.ty = gesture.ty0 + vy / ay + (sp_ * sy_ * vx) / (ax * ay);
         clampCam();
       }
       kick();
