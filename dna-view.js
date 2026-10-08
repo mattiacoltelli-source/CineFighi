@@ -1925,14 +1925,15 @@ function tourMostraDidascalia(d) {
   cap.classList.remove("hidden");
   cap.querySelector("strong").textContent = d.titolo;
   cap.querySelector("span").textContent = d.tipo || "";
-  cap.classList.toggle("hidden", false);
-  requestAnimationFrame(() => cap.classList.add("is-on"));
+  // Se il tour si ferma nello stesso fotogramma, la didascalia non deve ricomparire.
+  requestAnimationFrame(() => { if (tourAttivo) cap.classList.add("is-on"); });
 }
 
 function tourAggiornaPulsante() {
   const btn = el("dnaTourBtn");
   if (!btn) return;
-  const visibile = !!net && tourModi().length > 0;
+  // Controllo economico (si fa a ogni render): i tour veri si costruiscono solo aprendo il menu o partendo.
+  const visibile = !!net && net.nodes.size >= 6;
   btn.classList.toggle("hidden", !visibile && !tourAttivo);
   btn.classList.toggle("is-on", tourAttivo);
   btn.textContent = tourAttivo ? "Stop" : "Tour";
@@ -2083,6 +2084,7 @@ function bindTour() {
   el("dnaTourBtn")?.addEventListener("click", () => {
     if (tourAttivo) { fermaTour(true); return; }
     const modi = tourModi();
+    if (!modi.length) return;
     if (modi.length === 1) { avviaTour(modi[0].id); return; }
     const menu = el("dnaTourMenu");
     if (!menu) return;
@@ -2107,10 +2109,18 @@ function bindTour() {
     if (!e.target.closest("#dnaTourMenu, #dnaTourBtn")) tourChiudiMenu();
     if (tourAttivo && !e.target.closest("#dnaTourBtn")) {
       fermaTour(false);
-      ignoraClick = true;
-      setTimeout(() => { ignoraClick = false; }, 500);
+      // Il click che segue va tolto solo se il dito è su un nodo (non deve aprirlo né chiuderlo): un
+      // pulsante (Piatto/3D, schermo intero...) deve funzionare al primo tocco.
+      if (e.target.closest(".dna-node")) {
+        ignoraClick = true;
+        setTimeout(() => { ignoraClick = false; }, 500);
+      }
     }
   }, true);
+  // Se il tocco è diventato un trascinamento il click non arriva: il flag non deve mangiare il tocco dopo.
+  const rilascio = () => { if (ignoraClick) setTimeout(() => { ignoraClick = false; }, 150); };
+  box?.addEventListener("pointerup", rilascio, true);
+  box?.addEventListener("pointercancel", rilascio, true);
   box?.addEventListener("click", e => {
     if (!ignoraClick) return;
     ignoraClick = false;

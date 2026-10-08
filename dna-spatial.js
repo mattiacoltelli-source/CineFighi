@@ -162,6 +162,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
   let orbit = false;            // laboratorio 3D: un dito ruota la scena
   let sfera = false;            // laboratorio 3D: posizioni sulla sfera invece che sul piano
   const pos3 = new Map();       // id -> { x, y, z }: posizioni della vista Sfera
+  let viviPrima = new Set();    // i nodi presenti all'ultimo layout (per accorgersi di quelli che tornano dopo una chiusura)
   const spost = new Map();      // id -> { x, y, z }: scarto che si assorbe a vista dopo un rilassamento (mostrato = pos3 + spost)
   const vis = new Map();        // id -> { h, th, grow, dom, cache }
   const edgeDom = new Map();    // "a|b" -> <line>
@@ -184,7 +185,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
 
   // ─── allineamento alla rete ────────────────────────────────────────────────
   function clear() {
-    vis.clear(); edgeDom.clear(); pos3.clear(); spost.clear();
+    vis.clear(); edgeDom.clear(); pos3.clear(); spost.clear(); viviPrima = new Set();
     nodesEl.innerHTML = ""; edgesEl.innerHTML = "";
     net = null;
   }
@@ -218,6 +219,9 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     const nn = Math.max(1, vivi.length);
     cen.x /= nn; cen.y /= nn; cen.z /= nn;
     const nuovi = [];
+    // Un ramo richiuso e riaperto ritrova le posizioni di prima, che nel frattempo possono essere state occupate: va ricontrollato.
+    let tornati = false;
+    for (const id of net.nodes.keys()) if (pos3.has(id) && !viviPrima.has(id)) { tornati = true; break; }
     for (const n of net.nodes.values()) {
       if (pos3.has(n.id)) continue;
       const pp = pos3.get(n.parent) || pos3.get(net.rootId);
@@ -255,7 +259,8 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       vivi.push(q);
       nuovi.push(n.id);
     }
-    if (nuovi.length) rilassa(R, cen.z);
+    if (nuovi.length || (tornati && viviPrima.size)) rilassa(R, cen.z);
+    viviPrima = new Set(net.nodes.keys());
   }
 
   // Dopo aver piazzato nodi nuovi: quelli che sullo schermo (a vista frontale) restano troppo
@@ -477,7 +482,8 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
   function bounds() {
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
     if (sfera) {
-      for (const q of pos3.values()) {
+      for (const [id, q] of pos3) {
+        if (net && !net.nodes.has(id)) continue;   // i nodi chiusi non contano
         minX = Math.min(minX, q.x); maxX = Math.max(maxX, q.x);
         minY = Math.min(minY, q.y); maxY = Math.max(maxY, q.y);
         minZ = Math.min(minZ, q.z); maxZ = Math.max(maxZ, q.z);
@@ -713,10 +719,10 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       const fuori = p.dietro || p.x < -CULL_MARGIN || p.x > W + CULL_MARGIN || p.y < -CULL_MARGIN || p.y > H + CULL_MARGIN;
       let o = fuori ? 0 : opacityAt(v.h) * Math.min(1, v.grow * 1.6);
       const ef = enfasi.get(id);
-      if (ef && ef.k > 0) {
-        if (o === 0 && !fuori) o = 0.05;
+      if (ef && ef.k > 0 && !fuori) {   // fuori campo (o dietro la camera) resta nascosto: la sua proiezione non è valida
+        if (o === 0) o = 0.05;
         o = o + (1 - o) * ef.k;                 // esce dalla nebbia
-        if (!fuori) p.s *= 1 + 0.32 * ef.k;      // e cresce
+        p.s *= 1 + 0.32 * ef.k;                  // e cresce
         p.z -= 2000 * ef.k;                     // e passa davanti a tutti
       }
       if (o < 0.04) o = 0;   // nella nebbia: né disegnato né toccabile
@@ -1045,7 +1051,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     // Viaggia (piano, in `ms`) fino al nodo e inquadra i suoi collegamenti, senza
     // aprirlo né farlo diventare attivo. Risolve all'arrivo.
     // `via`: id dei nodi da sorvolare lungo i collegamenti, nell'ordine; `yaw`/`pitch`:
-    // la leggera rotazione con cui si arriva; `lato`: da che parte curva il volo diretto.
+    // la leggera rotazione con cui si arriva.
     tourVai(id, ms, { via = [], yaw = 0, pitch = 0 } = {}) {
       const w = worldPos(id);
       if (!w) return Promise.resolve();
@@ -1127,10 +1133,12 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     // resta dov'è (si è presa la mano), senza scatti.
     tourFine(torna = true) {
       cam.orienta = null;
-      if (cam.crescita) { cam.crescita = null; mixG = 1; cam.q = cam.tq = Q_ID; }
       for (const f of enfasi.values()) f.kT = 0;
       cam.spin = 0; nodeKT = 1;
       cam.viaggio = null;
+      // Se ci si ferma durante la crescita Piatto→3D la si lascia finire (meno di 2 s): fermarla a
+      // metà farebbe scattare la rete sulla posizione finale e non risolverebbe la promessa di cresci().
+      if (cam.crescita) { kick(); return; }
       cam.tq = cam.q;   // si resta com'è, senza scatti
       cam.tx = cam.x; cam.ty = cam.y; cam.tcz = cam.cz; cam.tz = cam.z;
       if (torna && net) {
@@ -1138,7 +1146,11 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
         if (w) {
           const a = { x: cam.x, y: cam.y, cz: cam.cz, z: cam.z };
           cam.tx = w.x; cam.ty = w.y; if (sfera) cam.tcz = w.z;
+          // L'inquadratura si calcola con l'orientazione di ARRIVO (frontale), non con quella inclinata di ora.
+          const tqOra = cam.tq;
+          cam.tq = Q_ID;
           cam.tz = 0; clampCam(); inquadra(focusId);
+          cam.tq = tqOra;
           const b = { x: cam.tx, y: cam.ty, cz: cam.tcz, z: cam.tz };
           cam.tx = a.x; cam.ty = a.y; cam.tcz = a.cz; cam.tz = a.z;
           cam.viaggio = { a, b, t0: performance.now(), dur: 1700, fine: null, qa: cam.tq, qb: Q_ID };

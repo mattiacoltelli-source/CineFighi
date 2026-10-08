@@ -1198,7 +1198,7 @@ test("piatto: lo zoom indietro mostra la rete intera e il doppio tocco la inquad
   expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
 });
 
-// Apre il menu del Tour e sceglie una modalità ("Il mio", "Del gruppo", "Persona per persona").
+// Apre il menu del Tour e sceglie una modalità ("Il mio", "Del gruppo", "Da qui").
 async function avviaTourModo(page: import("@playwright/test").Page, etichetta: string) {
   await page.locator("#dnaTourBtn").click();
   const voce = page.locator("#dnaTourMenu button", { hasText: etichetta });
@@ -1408,10 +1408,8 @@ test("Piatto: il Tour trasforma la rete in 3D con un effetto a crescita e poi pa
   await expect(page.locator("#dnaTourBtn"), "il Tour non c'è nel Piatto").toBeVisible();
 
   // Le posizioni dei nodi nel Piatto (relative al nodo attivo, che sta al centro).
-  const centro = () => page.evaluate(() => { const c = document.getElementById("dnaStage")!.getBoundingClientRect(); return [c.left + c.width / 2, c.top + c.height / 2]; });
   const piatto = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll<HTMLElement>("#dnaNodes .dna-node")]
     .map(n => { const r = n.getBoundingClientRect(); return [n.dataset.node!, [r.left + r.width / 2, r.top + r.height / 2]]; })));
-  void centro;
   await avviaTourModo(page, "Il mio");
   await page.waitForTimeout(60);
   // Appena parte, la 3D è ancora quasi identica al Piatto: i nodi sono dove stavano.
@@ -1544,7 +1542,7 @@ test("3D: aprendo molti nodi le locandine non si accavallano", async ({ page }) 
     return { visibili: ns.length, coppie };
   });
   expect(m.visibili, "scenario troppo piccolo per misurare").toBeGreaterThan(25);
-  expect(m.coppie, `${m.coppie} coppie di locandine sovrapposte su ${m.visibili} visibili`).toBeLessThan(65);
+  expect(m.coppie, `${m.coppie} coppie di locandine sovrapposte su ${m.visibili} visibili`).toBeLessThan(50);
   expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
   expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
 });
@@ -1595,6 +1593,38 @@ test("3D: il Tour \"Da qui\" parte dal nodo attivo e si allarga con le sue cose"
   expect(tappe.filter(t => /genere ricorrente/.test(ruolo(t))).length, `più di un genere:\n${tappe.join("\n")}`).toBeLessThanOrEqual(1);
   expect(tappe.filter(t => /attore ricorrente/.test(ruolo(t))).length, `più di un attore:\n${tappe.join("\n")}`).toBeLessThanOrEqual(1);
   expect(tappe.filter(t => /Dello stesso regista|^Con /.test(ruolo(t))).length, `pochi film:\n${tappe.join("\n")}`).toBeGreaterThanOrEqual(3);
+  expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
+  expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
+});
+
+// Fermare il Tour mentre la rete cresce dal Piatto alla 3D non deve lasciare il passaggio a
+// metà: la crescita finisce, i comandi tornano, e dopo cambiare vista ferma un tour come sempre.
+test("Piatto: un tocco durante la crescita ferma il Tour senza bloccare i comandi", async ({ page }) => {
+  test.setTimeout(120_000);
+  const guasti = osserva(page);
+  const scritture = soloLettura(page);
+  await entra(page);
+  await vaiA(page, "tonight");
+  await page.locator("#dnaNodes .dna-node.is-root").waitFor({ state: "visible", timeout: 30_000 });
+  await toccaNodo(page, ".dna-node.is-root");
+  for (let i = 0; i < 2; i++) {
+    await page.evaluate(() => (document.querySelector("#dnaNodes .dna-node.is-focus .dna-node__more, #dnaNodes .dna-node.is-root .dna-node__more") as HTMLElement | null)?.click());
+    await page.waitForTimeout(800);
+  }
+  await avviaTourModo(page, "Il mio");
+  await page.waitForTimeout(500);   // la crescita dura circa 1,9 s
+  const box = (await page.locator("#dnaStage").boundingBox())!;
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height * 0.78);
+  await expect(page.locator("#dnaTourBtn")).toHaveText("Tour", { timeout: 3000 });
+  await page.waitForTimeout(2500);
+  // Si è in 3D. Si va al Piatto e si torna in 3D: la vista piatta dev'essere stata ripulita
+  // (se il passaggio restava "a metà" i nodi piatti rimanevano nel DOM).
+  await page.locator('#dnaViewToggle [data-dna-view="flat"]').click();
+  await expect(page.locator("#dnaNodes .dna-node").first()).toBeVisible();
+  await page.locator('#dnaViewToggle [data-dna-view="sphere"]').click();
+  await page.locator("#dnaSpatial .dna-node.is-root").waitFor({ state: "visible" });
+  await page.waitForTimeout(600);
+  expect(await page.locator("#dnaNodes .dna-node").count(), "la vista piatta non è stata ripulita: il passaggio è rimasto a metà").toBe(0);
   expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
   expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
 });
