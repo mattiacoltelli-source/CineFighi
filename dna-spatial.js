@@ -38,7 +38,7 @@ const DEPTH = [0, 0, 200, 380, 540];
 // la scena i livelli si vedono davvero. Il piano 0 (nodo attivo e vicini) resta
 // a scala 1 come nella vista Spaziale.
 const DEPTH_ORBIT = [0, 0, 260, 480, 680];
-const NODE_K = 1.15;                         // in orbita i nodi sono un po' più grandi (solo la grandezza, non le posizioni)
+const NODE_K = 1.4;                          // in orbita i nodi sono un po' più grandi (solo la grandezza, non le posizioni)
 const SPIN_TAU = 380;                        // ms: quanto dura la rotazione che continua dopo aver staccato il dito
 const ORBIT_K = 0.008;                       // radianti per pixel di trascinamento (~0,46°)
 const NEAR = 140;                            // sotto questa distanza un nodo è "dietro la camera"
@@ -57,7 +57,7 @@ const LABEL_MIN_SCALE = .62;                 // sotto, l'etichetta sarebbe illeg
 const Z_MIN = -1500, Z_MAX = 170;
 const Z_MAX_ORBIT = 700;                     // in orbita ci si può avvicinare molto: scala fino a ~2,5x (i nodi restano al tetto S_MAX_ORBIT)
 const Z_MIN_ORBIT = -3600;                   // in orbita si può allontanarsi molto di più: la veduta d insieme
-const MARGINE_X = 82, MARGINE_Y = 165;        // spazio da lasciare ai bordi (e al pannello in basso)
+const MARGINE_X = 94, MARGINE_Y = 175;        // spazio da lasciare ai bordi (e al pannello in basso)
 const LONG_MS = 420;                          // tocco lungo su un nodo = ci si vola sopra
 const DIP_MAX = 340;                         // quanto si allarga la camera a metà di un volo tra nodi
 const RAGGI = [0.9, 1.2, 1.55];             // lunghezze dell'arco provate: il nodo va dove c'è più spazio, anche più lontano
