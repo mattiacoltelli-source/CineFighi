@@ -1199,9 +1199,9 @@ test("piatto: lo zoom indietro mostra la rete intera e il doppio tocco la inquad
 });
 
 // Vista 3D, Tour: compare solo con la rete aperta; durante il tour la
-// didascalia racconta la tappa e il tratto percorso si illumina; un tocco sulla
+// didascalia racconta la tappa e la camera viaggia senza salti; un tocco sulla
 // rete lo ferma e restituisce i comandi.
-test("3D: il Tour parte dalla rete aperta, evidenzia il percorso e si ferma con un tocco", async ({ page }) => {
+test("3D: il Tour parte dalla rete aperta, viaggia senza salti e si ferma con un tocco", async ({ page }) => {
   const scritture = soloLettura(page);
   const guasti = osserva(page);
   await entra(page);
@@ -1220,11 +1220,20 @@ test("3D: il Tour parte dalla rete aperta, evidenzia il percorso e si ferma con 
 
   await page.locator("#dnaTourBtn").click();
   await expect(page.locator("#dnaTourBtn")).toHaveText("Stop");
-  await expect(page.locator("#dnaTourCap")).toHaveClass(/is-on/, { timeout: 4000 });
+  // La camera viaggia: nel mezzo del viaggio i nodi si stanno muovendo sullo schermo (nessun salto netto).
+  const posizioni = () => page.evaluate(() => Object.fromEntries([...document.querySelectorAll<HTMLElement>("#dnaSpatial .dna-node")]
+    .filter(n => n.style.display !== "none").map(n => { const r = n.getBoundingClientRect(); return [n.dataset.node!, [r.left, r.top]]; })));
+  await page.waitForTimeout(500);
+  const p1 = await posizioni();
+  await page.waitForTimeout(120);
+  const p2 = await posizioni();
+  const mossi = Object.keys(p1).filter(k => p2[k] && Math.hypot(p2[k][0] - p1[k][0], p2[k][1] - p1[k][1]) > 0.5).length;
+  const saltati = Object.keys(p1).filter(k => p2[k] && Math.hypot(p2[k][0] - p1[k][0], p2[k][1] - p1[k][1]) > 90).length;
+  expect(mossi, "durante il viaggio la camera non si muove").toBeGreaterThan(2);
+  expect(saltati, "durante il viaggio i nodi saltano invece di scorrere").toBe(0);
+  await expect(page.locator("#dnaTourCap")).toHaveClass(/is-on/, { timeout: 6000 });
   const testo = await page.locator("#dnaTourCap strong").textContent();
   expect(testo, "la didascalia della tappa è vuota").toBeTruthy();
-  await page.waitForTimeout(900);
-  expect(await page.locator("#dnaSpatial line.is-tour").count(), "nessun tratto è illuminato durante il tour").toBeGreaterThan(0);
 
   // Un tocco sulla rete ferma il tour; la rete non è cambiata.
   const st = (await page.locator("#dnaStage").boundingBox())!;
@@ -1232,7 +1241,6 @@ test("3D: il Tour parte dalla rete aperta, evidenzia il percorso e si ferma con 
   await expect(page.locator("#dnaTourBtn")).toHaveText("Tour");
   await expect(page.locator("#dnaTourCap")).not.toHaveClass(/is-on/);
   await page.waitForTimeout(500);
-  expect(await page.locator("#dnaSpatial line.is-tour").count(), "dopo lo stop il percorso resta illuminato").toBe(0);
   expect(await page.locator("#dnaSpatial .dna-node").count(), "il tour ha cambiato la rete").toBe(nodiPrima);
 
   expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);

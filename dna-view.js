@@ -1678,46 +1678,25 @@ function tapMore(id) {
 
 // ─── TOUR (solo vista 3D) ───────────────────────────────────────────────────
 // Dopo aver aperto dei nodi, "Tour" fa una visita guidata automatica: la
-// camera vola fra i nodi più importanti della rete GIÀ APERTA (non apre né
-// chiude niente), con una didascalia per tappa; il tratto che collega una tappa
-// alla successiva si illumina e il resto sfuma. In chiusura una panoramica con un
-// giro completo attorno alla rete. Le tappe sono scelte con regole fisse sui
-// collegamenti presenti (nessuna AI): a parità di rete è sempre lo stesso tour.
-const TOUR_TAPPA_MS = 2400;
+// camera VIAGGIA piano da un nodo importante al successivo (le locandine che
+// stanno in mezzo le scorrono davanti, nessun salto) e a ogni tappa si ferma
+// un attimo con una didascalia. Visita solo la rete GIÀ APERTA (non apre né
+// chiude niente). In chiusura una panoramica con un giro completo attorno.
+// Le tappe sono scelte con regole fisse (nessuna AI): a parità di rete il tour
+// è sempre lo stesso.
+const TOUR_VIAGGIO_MS = 2200;   // il viaggio fra due tappe
+const TOUR_SOSTA_MS = 1400;     // la sosta a ogni tappa, con la didascalia
 const TOUR_ROTAZIONE_MS = 8000;
 const TOUR_MAX_TAPPE = 7;
 let tourAttivo = false;
 let tourToken = 0;
 let tourTimer = 0;
 
-const chiaveArco = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`);
-
 function tourVicini() {
   const m = new Map();
   for (const n of net.nodes.keys()) m.set(n, []);
   for (const e of net.edges) { m.get(e.a)?.push(e.b); m.get(e.b)?.push(e.a); }
   return m;
-}
-
-// Il percorso più corto fra due nodi (ricerca in ampiezza), o null.
-function tourPercorso(da, a, vicini) {
-  if (da === a) return [da];
-  const prec = new Map([[da, null]]);
-  const coda = [da];
-  while (coda.length) {
-    const x = coda.shift();
-    for (const y of vicini.get(x) || []) {
-      if (prec.has(y)) continue;
-      prec.set(y, x);
-      if (y === a) {
-        const p = [a];
-        for (let c = prec.get(a); c !== null; c = prec.get(c)) p.unshift(c);
-        return p;
-      }
-      coda.push(y);
-    }
-  }
-  return null;
 }
 
 // Le tappe: i film più amati, i generi più "ricchi", il regista e l'attore
@@ -1798,28 +1777,17 @@ async function avviaTour() {
   tourAttivo = true;
   tourAggiornaPulsante();
   const attesa = ms => new Promise(r => { clearTimeout(tourTimer); tourTimer = setTimeout(r, ms); });
-  const vicini = tourVicini();
 
-  let da = focusId;
-  const scia = new Set();
   for (const t of tappe) {
     if (mio !== tourToken) return;
-    const percorso = tourPercorso(da, t.id, vicini) || [t.id];
-    const archi = new Set();
-    for (let i = 1; i < percorso.length; i++) archi.add(chiaveArco(percorso[i - 1], percorso[i]));
-    // Della tappa si vedono bene anche i collegamenti diretti: è ciò che si guarda.
-    const nodi = new Set(percorso);
-    for (const v of vicini.get(t.id) || []) { nodi.add(v); archi.add(chiaveArco(t.id, v)); }
-    spatial.tourImposta({ nodi, archi, scia: new Set(scia) });
-    spatial.tourVola(t.id);
+    tourMostraDidascalia(null);
+    await spatial.tourVai(t.id, TOUR_VIAGGIO_MS);   // viaggio continuo fino al nodo
+    if (mio !== tourToken) return;
     tourMostraDidascalia(tourDidascalia(t));
-    for (const k of archi) scia.add(k);
-    da = t.id;
-    await attesa(TOUR_TAPPA_MS);
+    await attesa(TOUR_SOSTA_MS);
   }
   if (mio !== tourToken) return;
   // Finale: tutta la rete e un giro completo attorno.
-  spatial.tourImposta(null);
   tourMostraDidascalia({ titolo: "La rete intera", sotto: "Un giro completo" });
   spatial.tourRuota(TOUR_ROTAZIONE_MS);
   await attesa(TOUR_ROTAZIONE_MS + 400);
