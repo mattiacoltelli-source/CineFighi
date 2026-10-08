@@ -38,7 +38,8 @@ const DEPTH = [0, 0, 200, 380, 540];
 // la scena i livelli si vedono davvero. Il piano 0 (nodo attivo e vicini) resta
 // a scala 1 come nella vista Spaziale.
 const DEPTH_ORBIT = [0, 0, 260, 480, 680];
-const PITCH_MAX = 1.25;                      // ~72°: oltre, la rete si vedrebbe di taglio
+const NODE_K = 1.15;                         // in orbita i nodi sono un po' più grandi (solo la grandezza, non le posizioni)
+const SPIN_TAU = 380;                        // ms: quanto dura la rotazione che continua dopo aver staccato il dito
 const ORBIT_K = 0.008;                       // radianti per pixel di trascinamento (~0,46°)
 const NEAR = 140;                            // sotto questa distanza un nodo è "dietro la camera"
 // LABORATORIO 3D "Sfera": i collegamenti di un nodo si dispongono su una sfera
@@ -55,13 +56,15 @@ const FLATTEN = 0.75;                        // in panoramica la profondità si 
 const LABEL_MIN_SCALE = .62;                 // sotto, l'etichetta sarebbe illeggibile
 const Z_MIN = -1500, Z_MAX = 170;
 const Z_MIN_ORBIT = -3600;                   // in orbita si può allontanarsi molto di più: la veduta d insieme
-const MARGINE_X = 64, MARGINE_Y = 150;        // spazio da lasciare ai bordi (e al pannello in basso)
+const MARGINE_X = 82, MARGINE_Y = 165;        // spazio da lasciare ai bordi (e al pannello in basso)
 const LONG_MS = 420;                          // tocco lungo su un nodo = ci si vola sopra
 const DIP_MAX = 340;                         // quanto si allarga la camera a metà di un volo tra nodi
-const PESO_BARICENTRO = 0.35;                // quanto i nuovi nodi preferiscono i vuoti vicino al centro della rete
+const RAGGI = [0.9, 1.2, 1.55];             // lunghezze dell'arco provate: il nodo va dove c'è più spazio, anche più lontano
+const PESO_LUNGHEZZA = 0.12;                 // piccolo costo per gli archi più lunghi: a parità di spazio vince il più corto
+const PESO_BARICENTRO = 0.25;                // quanto i nuovi nodi preferiscono i vuoti vicino al centro della rete
 const S_TARGET = 0.8;                        // scala a cui devono stare i collegamenti di un nodo (grandezza quasi normale)
 const S_FIT_MIN_PIATTA = 0.4;                 // "3D" usa il layout piatto di dna.js, che non si può comprimere: lì ci si allarga di più
-const S_FIT_MIN = 0.6;                       // quanto si può rimpicciolire per far stare un nodo aperto per intero
+const S_FIT_MIN = 0.55;                      // quanto si può rimpicciolire per far stare un nodo aperto per intero
 const RAGGIO_SFERA = 1.7;                    // la sfera si apre più larga del ventaglio piatto
 const MAX_TILT = 0.14;                       // ~8°
 const DRAG_THRESHOLD = 8;                    // come la vista piatta
@@ -94,7 +97,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
   const pos3 = new Map();       // id -> { x, y, z }: posizioni della vista Sfera
   const vis = new Map();        // id -> { h, th, grow, dom, cache }
   const edgeDom = new Map();    // "a|b" -> <line>
-  const cam = { x: 0, y: 0, z: 0, tx: 0, ty: 0, tz: 0, cz: 0, tcz: 0, yaw: 0, pitch: 0, tyaw: 0, tpitch: 0, vx: 0, vy: 0 };
+  const cam = { x: 0, y: 0, z: 0, tx: 0, ty: 0, tz: 0, cz: 0, tcz: 0, yaw: 0, pitch: 0, tyaw: 0, tpitch: 0, wyaw: 0, wpitch: 0, vx: 0, vy: 0 };
   let W = 0, H = 0;
   let dragged = false;
 
@@ -150,17 +153,27 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
         const ox = pp.x - gp.x, oy = pp.y - gp.y, oz = pp.z - gp.z, l = Math.hypot(ox, oy, oz) || 1;
         fuori = [ox / l, oy / l, oz / l];
       }
-      let best = null, bestD = -1;
-      for (const d of DIREZIONI) {
+      let best = null, bestD = -Infinity;
+      for (const rm of RAGGI) for (const d of DIREZIONI) {
         if (fuori && d[0] * fuori[0] + d[1] * fuori[1] + d[2] * fuori[2] < -0.75) continue;   // solo non tornare indietro verso il nonno
-        const x = pp.x + d[0] * R * kx, y = pp.y + d[1] * R * ky, z = pp.z + d[2] * R * Z_SCHIACCIATA;
+        const x = pp.x + d[0] * R * rm * kx, y = pp.y + d[1] * R * rm * ky, z = pp.z + d[2] * R * rm * Z_SCHIACCIATA;
         let m = Infinity;
         // Conta soprattutto la distanza SULLO SCHERMO (x,y): due nodi a profondità
         // diverse ma sulla stessa linea di vista si sovrapporrebbero comunque.
-        for (const q of pos3.values()) { const dd = Math.hypot(q.x - x, q.y - y) + PESO_Z * Math.abs(q.z - z); if (dd < m) m = dd; }
+        const sx = F_ORBIT / Math.max(300, F_ORBIT + z - cen.z);
+        for (const q of pos3.values()) {
+          // Distanza come la vedrebbe l'occhio (proiettata, con la prospettiva) e
+          // distanza vera nello spazio: la prima evita le sovrapposizioni che si
+          // vedono, la seconda tiene i nodi larghi anche quando si ruota.
+          const sq = F_ORBIT / Math.max(300, F_ORBIT + q.z - cen.z);
+          const vis_ = Math.hypot(q.x * sq - x * sx, q.y * sq - y * sx);
+          const vero = Math.hypot(q.x - x, q.y - y, (q.z - z) * PESO_Z * 2);
+          const dd = 0.65 * vis_ + 0.35 * vero;
+          if (dd < m) m = dd;
+        }
         // Leggera attrazione verso il baricentro della rete: i nuovi nodi
         // riempiono i vuoti attorno invece di allungarla a striscia.
-        m -= PESO_BARICENTRO * Math.hypot(x - cen.x, y - cen.y, z - cen.z);
+        m -= PESO_BARICENTRO * Math.hypot(x - cen.x, y - cen.y, z - cen.z) + PESO_LUNGHEZZA * (rm - 1) * R;
         if (m > bestD) { bestD = m; best = { x, y, z }; }
       }
       pos3.set(n.id, best || { x: pp.x + R, y: pp.y, z: pp.z });
@@ -355,7 +368,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     cam.tz = Math.max(zMin(), Math.min(-FOG_Z, F + DEPTH[0] * (1 - FLATTEN) - F / sFit));
     cam.vx = cam.vy = 0;
     if (orbit) {
-      cam.tyaw = giroPiuVicino(cam.tyaw); cam.tpitch = 0;   // la panoramica è una mappa: di fronte
+      cam.tyaw = giroPiuVicino(cam.tyaw); cam.tpitch = giroPiuVicino(cam.tpitch); cam.wyaw = cam.wpitch = 0;   // la panoramica è una mappa: di fronte
       // Zoom il più vicino possibile che fa stare tutta la rete nel riquadro.
       const ids = [...net.nodes.keys()];
       let tz = Z_MAX;
@@ -396,6 +409,12 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     ease("z", "tz", orbit && pointersDown ? 30 : 90, 0.1);
     ease("cz", "tcz", pointersDown ? 30 : 120, 0.05);
     if (!pointersDown && !orbit) { cam.tyaw = 0; cam.tpitch = 0; }
+    if (orbit && !pointersDown && (Math.abs(cam.wyaw) + Math.abs(cam.wpitch) > 0.00004)) {
+      cam.tyaw += cam.wyaw * dt; cam.tpitch += cam.wpitch * dt;
+      const k = Math.exp(-dt / SPIN_TAU);
+      cam.wyaw *= k; cam.wpitch *= k;
+      moving = true;
+    }
     const tauRot = orbit && pointersDown ? 45 : 160;   // in orbita segue il dito da vicino
     ease("yaw", "tyaw", tauRot, 0.0005);
     ease("pitch", "tpitch", tauRot, 0.0005);
@@ -442,7 +461,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     const s = F / denom;
     // La posizione segue la prospettiva piena; la GRANDEZZA del nodo ha un tetto
     // in orbita: un nodo molto vicino non deve coprire quelli attorno.
-    return { x: W / 2 + dx * s, y: H / 2 + dy * s, s: orbit ? Math.min(s, S_MAX_ORBIT) : s, z };
+    return { x: W / 2 + dx * s, y: H / 2 + dy * s, s: orbit ? Math.min(s, S_MAX_ORBIT) * NODE_K : s, z };
   }
 
   function draw() {
@@ -492,10 +511,10 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
   let frontMostrato = null;
   function aggiornaFrontale() {
     if (!frontBtn) return;
-    const girata = orbit && (Math.abs(cam.tyaw - giroPiuVicino(cam.tyaw)) > 0.06 || Math.abs(cam.tpitch) > 0.06);
+    const girata = orbit && (Math.abs(cam.tyaw - giroPiuVicino(cam.tyaw)) > 0.06 || Math.abs(cam.tpitch - giroPiuVicino(cam.tpitch)) > 0.06);
     if (girata !== frontMostrato) { frontMostrato = girata; frontBtn.classList.toggle("hidden", !girata); }
   }
-  frontBtn?.addEventListener("click", () => { cam.tyaw = giroPiuVicino(cam.tyaw); cam.tpitch = 0; kick(); });
+  frontBtn?.addEventListener("click", () => { cam.tyaw = giroPiuVicino(cam.tyaw); cam.tpitch = giroPiuVicino(cam.tpitch); cam.wyaw = cam.wpitch = 0; kick(); });
 
   // ─── gesti ─────────────────────────────────────────────────────────────────
   nodesEl.addEventListener("click", e => {
@@ -535,7 +554,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
   // Un dito: in orbita ruota la scena attorno al nodo attivo, altrimenti sposta
   // la camera (con parallax e lieve inclinazione, come sempre).
   const nuovoGesto = (x, y) => orbit
-    ? { mode: "orbit", x0: x, y0: y, yaw0: cam.tyaw, pitch0: cam.tpitch }
+    ? { mode: "orbit", x0: x, y0: y, lx: x, ly: y, lt: performance.now() }
     : { mode: "pan", x0: x, y0: y, cx: cam.tx, cy: cam.ty, lx: x, ly: y, lt: performance.now() };
 
   container.addEventListener("pointerdown", e => {
@@ -547,6 +566,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       gesture = nuovoGesto(e.clientX, e.clientY);
       gesture.nodo = orbit ? e.target.closest?.(".dna-node")?.dataset.node || null : null;
       cam.vx = cam.vy = 0;
+      cam.wyaw = cam.wpitch = 0;   // un tocco ferma la rotazione che stava continuando
       finePressione();
       if (gesture.nodo && gesture.nodo !== focusId) {
         const g = gesture;
@@ -609,6 +629,8 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
         if (Math.hypot(ox, oy) < DRAG_THRESHOLD) return;
         finePressione();
         dragged = true;
+        gesture.lx = gesture.x0; gesture.ly = gesture.y0; gesture.lt = performance.now() - 16;   // i pixel della soglia contano: la rotazione è proporzionale al dito
+        cam.wyaw = cam.wpitch = 0;
         try { container.setPointerCapture(e.pointerId); } catch {}
       }
       // Il gesto è partito su un nodo: la rotazione gira attorno a lui, che
@@ -618,9 +640,19 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
         if (w) { cam.tx = w.x; cam.ty = w.y; if (sfera) cam.tcz = w.z; clampCam(); }
         gesture.nodo = null;
       }
-      // Orizzontale: segno invertito su indicazione dell uso reale (a destra la parte lontana segue il dito).
-      cam.tyaw = gesture.yaw0 + ox * ORBIT_K;
-      cam.tpitch = Math.max(-PITCH_MAX, Math.min(PITCH_MAX, gesture.pitch0 - oy * ORBIT_K));
+      // Rotazione libera a 360° su entrambi gli assi, a incrementi: ogni
+      // movimento del dito aggiunge la sua parte, senza salti alla soglia e senza
+      // limiti. Se la scena è capovolta (pitch oltre 90°) l'orizzontale cambia
+      // segno, così la scena segue il dito anche da lì.
+      const now = performance.now();
+      const ddx = e.clientX - gesture.lx, ddy = e.clientY - gesture.ly, dtm = Math.max(1, now - gesture.lt);
+      const sg = Math.cos(cam.tpitch) >= 0 ? 1 : -1;
+      const dyaw = sg * ddx * ORBIT_K, dpitch = -ddy * ORBIT_K;
+      cam.tyaw += dyaw; cam.tpitch += dpitch;
+      // Velocità (rad/ms) per la scia al rilascio, con media mobile.
+      cam.wyaw = cam.wyaw * 0.6 + (dyaw / dtm) * 0.4;
+      cam.wpitch = cam.wpitch * 0.6 + (dpitch / dtm) * 0.4;
+      gesture.lx = e.clientX; gesture.ly = e.clientY; gesture.lt = now;
       kick();
       return;
     }
@@ -670,6 +702,8 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       gesture = nuovoGesto(p.x, p.y);
       cam.vx = cam.vy = 0;
     } else if (!pts.size) {
+      // Dito fermo prima di staccarlo: nessuna scia di rotazione.
+      if (gesture?.mode === "orbit" && performance.now() - gesture.lt > 90) cam.wyaw = cam.wpitch = 0;
       gesture = null;
       // Il click arriva dopo il pointerup: il flag deve sopravvivere fino a lì.
       if (dragged) setTimeout(() => { dragged = false; }, 0);

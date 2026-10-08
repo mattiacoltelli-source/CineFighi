@@ -1055,3 +1055,47 @@ test("Sfera: il tocco lungo su un nodo ci porta la camera sopra senza aprirlo", 
   expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
   expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
 });
+
+// Lab 3D: un dito ruota la scena a 360° in verticale e in orizzontale, senza
+// blocchi: un giro completo riporta i nodi dov'erano.
+test("Sfera: la rotazione a un dito è libera a 360° e non si blocca", async ({ page }) => {
+  const scritture = soloLettura(page);
+  const guasti = osserva(page);
+  await entra(page);
+  await vaiA(page, "tonight");
+  await page.locator("#dnaNodes .dna-node.is-root").waitFor({ state: "visible", timeout: 30_000 });
+  await page.locator('#dnaViewToggle [data-dna-view="sphere"]').click();
+  await page.locator("#dnaSpatial .dna-node.is-root").waitFor({ state: "visible" });
+  await toccaNodo(page, "#dnaSpatial .dna-node.is-root");
+  await page.evaluate(() => (document.querySelector("#dnaSpatial .dna-node.is-root .dna-node__more") as HTMLElement | null)?.click());
+  await page.waitForTimeout(1300);
+
+  const pos = () => page.evaluate(() => Object.fromEntries([...document.querySelectorAll<HTMLElement>("#dnaSpatial .dna-node")]
+    .filter(n => n.style.display !== "none").map(n => { const r = n.getBoundingClientRect(); return [n.dataset.node!, [r.left + r.width / 2, r.top + r.height / 2]]; })));
+  const st = (await page.locator("#dnaStage").boundingBox())!;
+  const K = 0.008;
+  // Un giro completo = 2π / K pixel, a tratti da 170px per restare nello schermo.
+  const giro = async (asse: "x" | "y") => {
+    const tot = (2 * Math.PI) / K, tratti = Math.ceil(tot / 170), passo = tot / tratti;
+    for (let t = 0; t < tratti; t++) {
+      const x = st.x + st.width / 2, y = st.y + st.height * 0.8;
+      await page.mouse.move(x, y); await page.mouse.down();
+      for (let i = 1; i <= 17; i++) { await page.mouse.move(x + (asse === "x" ? (passo * i) / 17 : 0), y - (asse === "y" ? (passo * i) / 17 : 0)); await page.waitForTimeout(12); }
+      await page.waitForTimeout(160);   // dito fermo: nessuna scia
+      await page.mouse.up();
+      await page.waitForTimeout(250);
+    }
+    await page.waitForTimeout(500);
+  };
+  const prima = await pos();
+  await giro("y");
+  const dopoY = await pos();
+  await giro("x");
+  const dopoX = await pos();
+  const scarto = (a: Record<string, number[]>) => Math.max(...Object.keys(prima).filter(k => a[k]).map(k => Math.hypot(a[k][0] - prima[k][0], a[k][1] - prima[k][1])));
+  expect(scarto(dopoY), "un giro verticale completo non riporta la scena com'era (bloccata?)").toBeLessThan(25);
+  expect(scarto(dopoX), "un giro orizzontale completo non riporta la scena com'era").toBeLessThan(25);
+
+  expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
+  expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
+});
