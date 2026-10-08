@@ -669,7 +669,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     : { mode: "pan", x0: x, y0: y, cx: cam.tx, cy: cam.ty, lx: x, ly: y, lt: performance.now() };
 
   container.addEventListener("pointerdown", e => {
-    if (e.button > 0 || !net || !active || e.target.closest(".dna-spatial__tour")) return;
+    if (e.button > 0 || !net || !active || e.target.closest(".dna-spatial__tour, .dna-spatial__tourmenu")) return;
     pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
     pointersDown = pts.size;
     if (pts.size === 1) {
@@ -823,7 +823,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       gesture = null;
       // Il click arriva dopo il pointerup: il flag deve sopravvivere fino a lì.
       if (dragged) setTimeout(() => { dragged = false; }, 0);
-      else if (!e.target.closest(".dna-node, .dna-spatial__tour") && net.nodes.size > 1) doppioTocco();
+      else if (!e.target.closest(".dna-node, .dna-spatial__tour, .dna-spatial__tourmenu") && net.nodes.size > 1) doppioTocco();
     }
     kick();
   }

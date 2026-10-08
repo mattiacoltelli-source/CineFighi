@@ -1494,6 +1494,18 @@ body:has(.app.dna-schermo-intero #screen-tonight:not(.hidden)) .bottom-nav {
   cursor:pointer; -webkit-tap-highlight-color: transparent;
 }
 .dna-spatial__tour.is-on { background: var(--cyan); color: #06222e; }
+/* Menu del Tour: poche voci, sotto il pulsante. */
+.dna-spatial__tourmenu {
+  position:absolute; top:44px; right:8px; z-index:5; display:flex; flex-direction:column; gap:2px; min-width:170px;
+  padding:5px; border:1px solid var(--cyan-a2); border-radius: var(--radius-md);
+  background: rgba(13,19,28,.94); backdrop-filter: blur(8px);
+}
+.dna-spatial__tourmenu button {
+  padding:11px 12px; text-align:left; background:none; border:0; border-radius: 8px;
+  color: var(--text); font-family: var(--font-display); font-weight:600; font-size: var(--fs-sm);
+  cursor:pointer; -webkit-tap-highlight-color: transparent;
+}
+.dna-spatial__tourmenu button:active { background: var(--surface2); }
 .dna-spatial__tourcap {
   position:absolute; top:52px; left:50%; z-index:4; max-width:84%; padding:7px 14px; text-align:center;
   transform: translateX(-50%); border-radius: var(--radius-md);
