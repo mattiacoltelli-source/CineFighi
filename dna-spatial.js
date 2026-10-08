@@ -55,6 +55,7 @@ const FOG_Z = 380;                           // quanto allontanarsi per diradare
 const FLATTEN = 0.75;                        // in panoramica la profondità si appiattisce di tanto
 const LABEL_MIN_SCALE = .62;                 // sotto, l'etichetta sarebbe illeggibile
 const Z_MIN = -1500, Z_MAX = 170;
+const Z_MAX_ORBIT = 700;                     // in orbita ci si può avvicinare molto: scala fino a ~2,5x (i nodi restano al tetto S_MAX_ORBIT)
 const Z_MIN_ORBIT = -3600;                   // in orbita si può allontanarsi molto di più: la veduta d insieme
 const MARGINE_X = 82, MARGINE_Y = 165;        // spazio da lasciare ai bordi (e al pannello in basso)
 const LONG_MS = 420;                          // tocco lungo su un nodo = ci si vola sopra
@@ -64,6 +65,7 @@ const PESO_LUNGHEZZA = 0.12;                 // piccolo costo per gli archi più
 const PESO_BARICENTRO = 0.25;                // quanto i nuovi nodi preferiscono i vuoti vicino al centro della rete
 const S_TARGET = 0.8;                        // scala a cui devono stare i collegamenti di un nodo (grandezza quasi normale)
 const S_FIT_MIN_PIATTA = 0.4;                 // "3D" usa il layout piatto di dna.js, che non si può comprimere: lì ci si allarga di più
+const S_FIT_TUTTI = 0.62;                    // limite dell'allargamento per vedere TUTTI i collegamenti di un nodo
 const S_FIT_MIN = 0.55;                      // quanto si può rimpicciolire per far stare un nodo aperto per intero
 const RAGGIO_SFERA = 1.7;                    // la sfera si apre più larga del ventaglio piatto
 const MAX_TILT = 0.14;                       // ~8°
@@ -107,6 +109,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
   const focusPlane = () => depthOf(0);
   const scaleAt = (z) => F / Math.max(1, F + z - cam.z);
   const zMin = () => (orbit ? Z_MIN_ORBIT : Z_MIN);
+  const zMax = () => (orbit ? Z_MAX_ORBIT : Z_MAX);
   const scaleAtCam = (tz) => F / Math.max(1, F + focusPlane() - tz);
   function opacityAt(h) {
     const f = nebbia();
@@ -305,25 +308,39 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     }
     return true;
   }
+  // Tocco su un nodo: si devono vedere BENE tutti i suoi collegamenti (tutti i
+  // film di un genere o di un regista). Prima si prova con tutti, allargando la
+  // camera fino a S_FIT_TUTTI; se nemmeno così ci stanno (un nodo di un altro
+  // ramo, lontanissimo) si inquadrano solo quelli vicini, a una grandezza decente.
   function inquadra(id) {
     const f = net.nodes.get(id);
     if (!f) return;
-    const ids = [id];
-    // I collegamenti "a lunga distanza" (un nodo di un altro ramo) possono stare
-    // lontano per natura: non si rimpicciolisce tutto per inseguirli.
+    const tutti = [id], vicini = [id];
     const wf = worldPos(id), lim = radius() * RAGGIO_SFERA * 1.5 * Z_SCHIACCIATA;
     for (const e of net.edges) {
       const o = e.a === id ? e.b : e.b === id ? e.a : null;
       if (!o) continue;
+      tutti.push(o);
       const wo = worldPos(o);
-      if (wf && wo && Math.hypot(wo.x - wf.x, wo.y - wf.y, wo.z - wf.z) > lim) continue;
-      ids.push(o);
+      if (!(wf && wo && Math.hypot(wo.x - wf.x, wo.y - wf.y, wo.z - wf.z) > lim)) vicini.push(o);
     }
-    if (ids.length < 2) return;
-    const limite = F + focusPlane() - F / (sfera ? S_FIT_MIN : S_FIT_MIN_PIATTA);   // tz a cui la scala del fulcro scende a S_FIT_MIN
-    let tz = cam.tz;
-    while (!entrano(ids, tz) && tz > Math.max(zMin(), limite)) tz -= 40;
-    cam.tz = Math.max(tz, Math.max(zMin(), limite));
+    if (tutti.length < 2) return;
+    const tzDi = (smin) => F + focusPlane() - F / smin;   // tz a cui la scala del fulcro scende a smin
+    const cerca = (ids, smin) => {
+      const limite = Math.max(zMin(), tzDi(smin));
+      let tz = cam.tz;
+      while (!entrano(ids, tz) && tz > limite) tz -= 40;
+      return entrano(ids, tz) ? tz : null;
+    };
+    if (sfera) {
+      const t1 = cerca(tutti, S_FIT_TUTTI);
+      if (t1 !== null) { cam.tz = t1; return; }
+      const t2 = cerca(vicini, S_FIT_MIN);
+      cam.tz = t2 !== null ? t2 : Math.max(zMin(), tzDi(S_FIT_MIN));
+      return;
+    }
+    const t = cerca(tutti, S_FIT_MIN_PIATTA);
+    cam.tz = t !== null ? t : Math.max(zMin(), tzDi(S_FIT_MIN_PIATTA));
   }
 
   // Posizione "nel mondo" di un nodo, nelle stesse coordinate della camera.
@@ -597,7 +614,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       // Proporzionale: la rete si ingrandisce quanto si allargano le dita.
       const [p, q] = [...pts.values()];
       const sNew = gesture.s0 * Math.hypot(p.x - q.x, p.y - q.y) / gesture.d0;
-      cam.tz = Math.max(zMin(), Math.min(Z_MAX, F + focusPlane() - F / Math.max(0.05, sNew)));
+      cam.tz = Math.max(zMin(), Math.min(zMax(), F + focusPlane() - F / Math.max(0.05, sNew)));
       if (orbit) {
         // In orbita due dita spostano anche il centro (un dito è occupato a ruotare):
         // approssimato sul piano della rete, meno efficace se la scena è molto girata.
@@ -615,8 +632,13 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
         const cy_ = Math.cos(cam.tyaw), sy_ = Math.sin(cam.tyaw), cp_ = Math.cos(cam.tpitch), sp_ = Math.sin(cam.tpitch);
         const fix = (c) => (c < 0 ? -1 : 1) * Math.max(0.3, Math.abs(c));
         const ax = fix(cy_), ay = fix(cp_);
-        cam.tx = gesture.tx0 + vx / ax;
-        cam.ty = gesture.ty0 + vy / ay + (sp_ * sy_ * vx) / (ax * ay);
+        const ntx = gesture.tx0 + vx / ax, nty = gesture.ty0 + vy / ay + (sp_ * sy_ * vx) / (ax * ay);
+        const tnow = performance.now(), dtp = Math.max(1, tnow - (gesture.pt || tnow - 16));
+        // Velocità del centro (unità del mondo per ms): al rilascio la vista continua a scivolare.
+        cam.vx = cam.vx * 0.6 + ((ntx - cam.tx) / dtp) * 0.4;
+        cam.vy = cam.vy * 0.6 + ((nty - cam.ty) / dtp) * 0.4;
+        gesture.pt = tnow;
+        cam.tx = ntx; cam.ty = nty;
         clampCam();
       }
       kick();
@@ -630,15 +652,8 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
         finePressione();
         dragged = true;
         gesture.lx = gesture.x0; gesture.ly = gesture.y0; gesture.lt = performance.now() - 16;   // i pixel della soglia contano: la rotazione è proporzionale al dito
-        cam.wyaw = cam.wpitch = 0;
+        cam.wyaw = cam.wpitch = 0; cam.vx = cam.vy = 0;
         try { container.setPointerCapture(e.pointerId); } catch {}
-      }
-      // Il gesto è partito su un nodo: la rotazione gira attorno a lui, che
-      // scivola al centro (stessa morbidezza della camera).
-      if (gesture.nodo) {
-        const w = worldPos(gesture.nodo);
-        if (w) { cam.tx = w.x; cam.ty = w.y; if (sfera) cam.tcz = w.z; clampCam(); }
-        gesture.nodo = null;
       }
       // Rotazione libera a 360° su entrambi gli assi, a incrementi: ogni
       // movimento del dito aggiunge la sua parte, senza salti alla soglia e senza
@@ -699,9 +714,11 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     pointersDown = pts.size;
     if (pts.size === 1 && gesture?.mode === "pinch") {
       const [p] = [...pts.values()];
+      if (orbit && performance.now() - (gesture.pt || 0) > 90) cam.vx = cam.vy = 0;   // dita ferme: niente scia
       gesture = nuovoGesto(p.x, p.y);
-      cam.vx = cam.vy = 0;
+      if (!orbit) cam.vx = cam.vy = 0;   // in orbita la scia dello spostamento a due dita si tiene
     } else if (!pts.size) {
+      if (gesture?.mode === "pinch" && performance.now() - (gesture.pt || 0) > 90) cam.vx = cam.vy = 0;   // dita ferme: niente scia
       // Dito fermo prima di staccarlo: nessuna scia di rotazione.
       if (gesture?.mode === "orbit" && performance.now() - gesture.lt > 90) cam.wyaw = cam.wpitch = 0;
       gesture = null;
@@ -718,7 +735,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     if (!net || !active) return;
     e.preventDefault();
     const sNew = scaleAtCam(cam.tz) * Math.exp(-e.deltaY * 0.0015);
-    cam.tz = Math.max(zMin(), Math.min(Z_MAX, F + focusPlane() - F / sNew));
+    cam.tz = Math.max(zMin(), Math.min(zMax(), F + focusPlane() - F / sNew));
     kick();
   }, { passive: false });
 
