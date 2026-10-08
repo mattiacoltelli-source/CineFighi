@@ -108,6 +108,24 @@ const eulerMat = (yaw, pitch) => {
   return [c, 0, s, -sp * s, cp, sp * c, -cp * s, -sp, cp * c];
 };
 
+// Curva morbida (Catmull-Rom) per la camera del tour: passa per tutti i punti dati
+// ed è percorsa in proporzione alla distanza, così la velocità non cambia da un
+// tratto all'altro. P = [{x,y,cz}], almeno due punti. Restituisce e∈[0,1] -> punto.
+function creaCurva(P) {
+  const L = [0];
+  for (let i = 1; i < P.length; i++) L.push(L[i - 1] + Math.hypot(P[i].x - P[i - 1].x, P[i].y - P[i - 1].y, P[i].cz - P[i - 1].cz));
+  const tot = L[L.length - 1] || 1;
+  const cr = (a, b, c, d, t) => 0.5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t * t + (-a + 3 * b - 3 * c + d) * t * t * t);
+  return (e) => {
+    const f = Math.max(0, Math.min(1, e)) * tot;
+    let i = 1;
+    while (i < P.length - 1 && L[i] < f) i++;
+    const t = (f - L[i - 1]) / ((L[i] - L[i - 1]) || 1);
+    const p0 = P[Math.max(0, i - 2)], p1 = P[i - 1], p2 = P[i], p3 = P[Math.min(P.length - 1, i + 1)];
+    return { x: cr(p0.x, p1.x, p2.x, p3.x, t), y: cr(p0.y, p1.y, p2.y, p3.y, t), cz: cr(p0.cz, p1.cz, p2.cz, p3.cz, t) };
+  };
+}
+
 const lerpTable = (tab, h) => {
   const i = Math.max(0, Math.min(tab.length - 1, h));
   const lo = Math.floor(i), hi = Math.min(tab.length - 1, lo + 1);
@@ -457,10 +475,13 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     if (cam.viaggio) {
       const v = cam.viaggio, u = Math.max(0, Math.min(1, (now - v.t0) / v.dur));
       const e = u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
-      cam.tx = cam.x = v.a.x + (v.b.x - v.a.x) * e;
-      cam.ty = cam.y = v.a.y + (v.b.y - v.a.y) * e;
-      cam.tcz = cam.cz = v.a.cz + (v.b.cz - v.a.cz) * e;
+      const pt = v.curva ? v.curva(e) : { x: v.a.x + (v.b.x - v.a.x) * e, y: v.a.y + (v.b.y - v.a.y) * e, cz: v.a.cz + (v.b.cz - v.a.cz) * e };
+      cam.tx = cam.x = pt.x;
+      cam.ty = cam.y = pt.y;
+      cam.tcz = cam.cz = pt.cz;
       cam.tz = cam.z = v.a.z + (v.b.z - v.a.z) * e;
+      // L'orientazione si muove insieme alla camera: si arriva "di lato".
+      if (v.qa) { cam.q = cam.tq = qSlerp(v.qa, v.qb, e); }
       moving = true;
       if (u >= 1) { const fine = v.fine; cam.viaggio = null; fine?.(); }
     }
@@ -862,7 +883,9 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     // ── Tour ──
     // Viaggia (piano, in `ms`) fino al nodo e inquadra i suoi collegamenti, senza
     // aprirlo né farlo diventare attivo. Risolve all'arrivo.
-    tourVai(id, ms) {
+    // `via`: id dei nodi da sorvolare lungo i collegamenti, nell'ordine; `yaw`/`pitch`:
+    // la leggera rotazione con cui si arriva; `lato`: da che parte curva il volo diretto.
+    tourVai(id, ms, { via = [], yaw = 0, pitch = 0, lato = 1 } = {}) {
       const w = worldPos(id);
       if (!w) return Promise.resolve();
       // Quello di prima si spegne, quello di arrivo emerge man mano che ci si avvicina.
@@ -882,7 +905,21 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
         // Se si è già lì (la prima tappa è il tuo nodo, dove la camera sta già) non
         // serve aspettare un intero viaggio.
         const lontano = Math.hypot(b.x - a.x, b.y - a.y, b.cz - a.cz) + Math.abs(b.z - a.z) * 0.5;
-        cam.viaggio = { a, b, t0: performance.now(), dur: lontano < 40 ? Math.min(ms, 600) : ms, fine: risolvi };
+        // Percorso: la camera sorvola i nodi intermedi (se ce ne sono); altrimenti il
+        // volo diretto fa un arco leggero di lato invece di una retta.
+        const punti = [a];
+        for (const vid of via) { const q = worldPos(vid); if (q) punti.push({ x: q.x, y: q.y, cz: sfera ? q.z : 0 }); }
+        if (punti.length === 1 && lontano >= 40) {
+          const dx = b.x - a.x, dy = b.y - a.y, dl = Math.hypot(dx, dy) || 1, len = Math.hypot(dx, dy, b.cz - a.cz);
+          punti.push({ x: (a.x + b.x) / 2 + (dy / dl) * len * 0.16 * lato, y: (a.y + b.y) / 2 - (dx / dl) * len * 0.16 * lato, cz: (a.cz + b.cz) / 2 });
+        }
+        punti.push({ x: b.x, y: b.y, cz: b.cz });
+        const durata = lontano < 40 ? Math.min(ms, 600) : ms * (1 + Math.min(0.9, 0.45 * via.length));
+        cam.viaggio = {
+          a, b, t0: performance.now(), dur: durata, fine: risolvi,
+          curva: punti.length > 2 ? creaCurva(punti) : null,
+          qa: cam.tq, qb: qNorm(qMul(qAsseX(pitch), qAsseY(yaw)))
+        };
         kick();
       });
     },
@@ -913,7 +950,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       for (const f of enfasi.values()) f.kT = 0;
       cam.spin = 0; nodeKT = 1;
       cam.viaggio = null;
-      cam.tq = Q_ID;
+      cam.tq = cam.q;   // si resta com'è, senza scatti
       cam.tx = cam.x; cam.ty = cam.y; cam.tcz = cam.cz; cam.tz = cam.z;
       if (torna && net) {
         const w = worldPos(focusId);
@@ -923,7 +960,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
           cam.tz = 0; clampCam(); inquadra(focusId);
           const b = { x: cam.tx, y: cam.ty, cz: cam.tcz, z: cam.tz };
           cam.tx = a.x; cam.ty = a.y; cam.tcz = a.cz; cam.tz = a.z;
-          cam.viaggio = { a, b, t0: performance.now(), dur: 1700, fine: null };
+          cam.viaggio = { a, b, t0: performance.now(), dur: 1700, fine: null, qa: cam.tq, qb: Q_ID };
         }
       }
       kick();

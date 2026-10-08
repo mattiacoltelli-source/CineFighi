@@ -1793,10 +1793,25 @@ async function avviaTour() {
   tourAggiornaPulsante();
   const attesa = ms => new Promise(r => { clearTimeout(tourTimer); tourTimer = setTimeout(r, ms); });
 
-  for (const t of tappe) {
+  let prec = null;
+  for (let i = 0; i < tappe.length; i++) {
+    const t = tappe[i];
     if (mio !== tourToken) return;
     tourMostraDidascalia(null);
-    await spatial.tourVai(t.id, TOUR_VIAGGIO_MS);   // viaggio continuo fino al nodo
+    // La camera sorvola i nodi che stanno lungo i collegamenti fra la tappa
+    // precedente e questa (al massimo 3, presi a distanze uguali).
+    let via = [];
+    if (prec) {
+      const percorso = tourPercorso(prec, t.id) || [];
+      via = percorso.slice(1, -1);
+      if (via.length > 3) via = [via[0], via[Math.floor(via.length / 2)], via[via.length - 1]];
+    }
+    // Si arriva ogni volta un po' di lato, alternando: la locandina si rivela.
+    const segno = i % 2 ? 1 : -1;
+    await spatial.tourVai(t.id, TOUR_VIAGGIO_MS, i === 0
+      ? { via, yaw: 0, pitch: 0, lato: 1 }
+      : { via, yaw: segno * 0.42, pitch: -segno * 0.1, lato: segno });   // viaggio continuo fino al nodo
+    prec = t.id;
     if (mio !== tourToken) return;
     tourMostraDidascalia(tourDidascalia(t));
     await attesa(TOUR_SOSTA_MS);
@@ -1808,6 +1823,33 @@ async function avviaTour() {
   await attesa(TOUR_ROTAZIONE_MS + 400);
   if (mio !== tourToken) return;
   fermaTour(true);
+}
+
+// Il percorso più corto fra due nodi lungo i collegamenti (ricerca in ampiezza).
+function tourPercorso(da, a) {
+  if (da === a) return [da];
+  const vic = new Map();
+  for (const e of net.edges) {
+    if (!vic.has(e.a)) vic.set(e.a, []);
+    if (!vic.has(e.b)) vic.set(e.b, []);
+    vic.get(e.a).push(e.b); vic.get(e.b).push(e.a);
+  }
+  const prec = new Map([[da, null]]);
+  const coda = [da];
+  while (coda.length) {
+    const x = coda.shift();
+    for (const y of vic.get(x) || []) {
+      if (prec.has(y)) continue;
+      prec.set(y, x);
+      if (y === a) {
+        const p = [a];
+        for (let c = prec.get(a); c !== null; c = prec.get(c)) p.unshift(c);
+        return p;
+      }
+      coda.push(y);
+    }
+  }
+  return null;
 }
 
 function bindTour() {
