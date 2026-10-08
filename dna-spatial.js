@@ -107,8 +107,6 @@ const eulerMat = (yaw, pitch) => {
   const c = Math.cos(yaw), s = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
   return [c, 0, s, -sp * s, cp, sp * c, -cp * s, -sp, cp * c];
 };
-// Angolo (rad) fra la rotazione q e la vista frontale.
-const qAngolo = (q) => 2 * Math.acos(Math.min(1, Math.abs(q[0])));
 
 const lerpTable = (tab, h) => {
   const i = Math.max(0, Math.min(tab.length - 1, h));
@@ -571,18 +569,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       setIf(c, "y2", b.y.toFixed(1), x => line.setAttribute("y2", x));
       setIf(c, "w", ((lv === 2 ? 5.2 : focus ? 4 : 2.6) * Math.min(a.s, b.s)).toFixed(1), x => { line.style.strokeWidth = x; });
     }
-    aggiornaFrontale();
   }
-
-  // "Frontale": compare solo in orbita, quando la scena è girata.
-  const frontBtn = container.querySelector(".dna-spatial__front");
-  let frontMostrato = null;
-  function aggiornaFrontale() {
-    if (!frontBtn) return;
-    const girata = orbit && qAngolo(cam.tq) > 0.06;
-    if (girata !== frontMostrato) { frontMostrato = girata; frontBtn.classList.toggle("hidden", !girata); }
-  }
-  frontBtn?.addEventListener("click", () => { cam.tq = Q_ID; cam.wyaw = cam.wpitch = 0; kick(); });
 
   // ─── gesti ─────────────────────────────────────────────────────────────────
   nodesEl.addEventListener("click", e => {
@@ -630,7 +617,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     : { mode: "pan", x0: x, y0: y, cx: cam.tx, cy: cam.ty, lx: x, ly: y, lt: performance.now() };
 
   container.addEventListener("pointerdown", e => {
-    if (e.button > 0 || !net || !active || e.target.closest(".dna-spatial__front")) return;
+    if (e.button > 0 || !net || !active || e.target.closest(".dna-spatial__tour")) return;
     pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
     pointersDown = pts.size;
     if (pts.size === 1) {
@@ -784,7 +771,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       gesture = null;
       // Il click arriva dopo il pointerup: il flag deve sopravvivere fino a lì.
       if (dragged) setTimeout(() => { dragged = false; }, 0);
-      else if (!e.target.closest(".dna-node, .dna-spatial__front") && net.nodes.size > 1) doppioTocco();
+      else if (!e.target.closest(".dna-node, .dna-spatial__tour") && net.nodes.size > 1) doppioTocco();
     }
     kick();
   }

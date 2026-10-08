@@ -793,8 +793,7 @@ test("più persone: riga verde sempre, pannello senza doppioni, schermo intero i
 });
 
 // Laboratorio 3D, voce "Sfera": i collegamenti di un nodo stanno a profondità
-// diverse (scale diverse già a vista frontale), ruotando cambiano posizione,
-// e "Frontale" riporta dritto.
+// diverse, e ruotando cambiano posizione.
 test("Sfera: i nodi stanno a profondità diverse e la scena ruota", async ({ page }) => {
   const scritture = soloLettura(page);
   const guasti = osserva(page);
@@ -826,10 +825,6 @@ test("Sfera: i nodi stanno a profondità diverse e la scena ruota", async ({ pag
   const dopo = await stato();
   const spostati = Object.keys(prima.pos).filter(id => dopo.pos[id] && Math.hypot(dopo.pos[id][0] - prima.pos[id][0], dopo.pos[id][1] - prima.pos[id][1]) > 25).length;
   expect(spostati, "ruotando la sfera i nodi non si sono mossi").toBeGreaterThan(2);
-  await expect(page.locator(".dna-spatial__front")).toBeVisible();
-  await page.locator(".dna-spatial__front").click();
-  await page.waitForTimeout(900);
-  await expect(page.locator(".dna-spatial__front")).toBeHidden();
 
   expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
   expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
