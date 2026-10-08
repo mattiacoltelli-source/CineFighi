@@ -1358,7 +1358,16 @@ test("3D: il tour del gruppo (pannello che segue la tappa, didascalia senza dati
       const el = document.getElementById("dnaTourCap")!;
       return el.classList.contains("is-on") ? el.querySelector("span")!.textContent! : "";
     });
-    if (c && !viste.includes(c)) viste.push(c);
+    if (c && !viste.includes(c)) {
+      viste.push(c);
+      // Nel pannello compatto del tour ogni tappa mostra l'essenziale (chi lo ama / chi è), senza aprirlo.
+      if (/genere|regista|attore|Si parte/.test(c)) {
+        await page.waitForTimeout(700);
+        const essenziale = await page.locator("#dnaPanel .dna-panel__peek-fans").count();
+        expect(essenziale, `il pannello del tour non mostra l'essenziale per "${c}"`).toBeGreaterThan(0);
+        expect(await page.locator("#dnaPanel .dna-panel__full:not([hidden])").count(), "il pannello del tour si è aperto e ingombra").toBe(0);
+      }
+    }
     await page.waitForTimeout(300);
   }
   expect(viste.some(v => /attore/.test(v)), `nel tour "mio" manca un attore:\n${viste.join("\n")}`).toBe(true);

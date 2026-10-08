@@ -1313,9 +1313,12 @@ function renderPanel(node) {
     // l'informazione che conta di più su un nodo film, e prima toccava
     // aprire il pannello anche solo per vedere quello. Da aperto i fan sono
     // già dentro panelBody, qui sotto — non si ripetono due volte.
+    // In tour (pannello chiuso) anche gli altri nodi mostrano l'essenziale — chi li
+    // ama di più, o chi è la persona — così il pannello racconta ciò che la
+    // didascalia in alto non dice, senza doverlo aprire.
     const fansCompatti = !panelExpanded && node.type === "film" && (node.meta.fans || []).length
       ? `<div class="dna-panel__peek-fans">${fansHtml(node.meta.fans)}</div>`
-      : "";
+      : !panelExpanded && inTour ? tourEssenziale(node) : "";
     // "Richiudi" nella barra, non solo nel corpo del pannello (chiuso a schermo
     // intero): un nodo aperto si richiude con un tocco solo.
     const richiudi = node.expanded && !inTour
@@ -1832,6 +1835,23 @@ function tourAggiornaPulsante() {
 // Il pannello in basso segue la tappa, in sola lettura: mostra il nodo della
 // tappa senza toccare né il nodo attivo né il percorso (vedi percorsoHtml).
 let tourPannelloId = null;
+// L'essenziale di un nodo non-film per il pannello compatto del tour: per un genere,
+// regista o attore chi lo ama di più (con quanti film); per una persona quanti titoli
+// ha amato e di che genere. Nessun dato che stia già nella didascalia (ruolo e nome).
+function tourEssenziale(node) {
+  if (node.type === "persona") {
+    const m = node.meta, gen = (m.topGenres || []).slice(0, 2).map(g => escapeHtml(g.genere));
+    const io = node.label === riferimento() && node.label === ctx?.currentUser;
+    return `<div class="dna-panel__peek-fans"><p class="dna-panel__line">${io ? "Hai" : "Ha"} amato ${titoliIn(m.liked || 0)}${gen.length ? `, soprattutto ${gen.join(" e ")}` : ""}.</p></div>`;
+  }
+  const chi = [...tourChiLoAma(node).entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 3);
+  if (!chi.length) return "";
+  if (index.byPerson.size === 1) {
+    return `<div class="dna-panel__peek-fans"><p class="dna-panel__line">${riferimento() === ctx?.currentUser ? "Hai" : "Ha"} amato ${titoliIn(chi[0][1])} qui.</p></div>`;
+  }
+  return `<div class="dna-panel__peek-fans"><div class="dna-fans">${chi.map(([n, t]) => countChip(n, t)).join("")}</div></div>`;
+}
+
 function tourMostraPannello(id) {
   const n = net?.nodes.get(id);
   if (!n) return;
