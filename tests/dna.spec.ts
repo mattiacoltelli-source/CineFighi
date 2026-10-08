@@ -1234,6 +1234,15 @@ test("3D: il Tour parte dalla rete aperta, viaggia senza salti e si ferma con un
   await expect(page.locator("#dnaTourCap")).toHaveClass(/is-on/, { timeout: 6000 });
   const testo = await page.locator("#dnaTourCap strong").textContent();
   expect(testo, "la didascalia della tappa è vuota").toBeTruthy();
+  // Il nodo della tappa è in evidenza: davanti a tutti e a piena opacità.
+  await expect(page.locator("#dnaSpatial .dna-node.is-tour-focus")).toHaveCount(1, { timeout: 3000 });
+  const ev = await page.evaluate(() => {
+    const n = document.querySelector<HTMLElement>("#dnaSpatial .dna-node.is-tour-focus")!;
+    const altri = [...document.querySelectorAll<HTMLElement>("#dnaSpatial .dna-node")].filter(x => x !== n && x.style.display !== "none");
+    return { z: +n.style.zIndex, zMax: Math.max(0, ...altri.map(x => +x.style.zIndex)), o: +n.style.opacity };
+  });
+  expect(ev.z, "il nodo della tappa non è davanti agli altri").toBeGreaterThan(ev.zMax);
+  expect(ev.o, "il nodo della tappa non è a piena opacità").toBeGreaterThan(0.95);
 
   // Un tocco sulla rete ferma il tour; la rete non è cambiata.
   const st = (await page.locator("#dnaStage").boundingBox())!;

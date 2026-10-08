@@ -464,6 +464,14 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       moving = true;
       if (u >= 1) { const fine = v.fine; cam.viaggio = null; fine?.(); }
     }
+    for (const [id, f] of enfasi) {
+      if (f.k !== f.kT) {
+        const k = approach(f.k, f.kT, dt, 520);
+        f.k = Math.abs(k - f.kT) > 0.004 ? k : f.kT;
+        moving = true;
+      }
+      if (f.k === 0 && f.kT === 0) enfasi.delete(id);
+    }
     if (nodeK !== nodeKT) {
       const k = approach(nodeK, nodeKT, dt, 350);
       nodeK = Math.abs(k - nodeKT) > 0.003 ? k : nodeKT;
@@ -551,6 +559,13 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       const p = project(n, v);
       const fuori = p.dietro || p.x < -CULL_MARGIN || p.x > W + CULL_MARGIN || p.y < -CULL_MARGIN || p.y > H + CULL_MARGIN;
       let o = fuori ? 0 : opacityAt(v.h) * Math.min(1, v.grow * 1.6);
+      const ef = enfasi.get(id);
+      if (ef && ef.k > 0) {
+        if (o === 0 && !fuori) o = 0.05;
+        o = o + (1 - o) * ef.k;                 // esce dalla nebbia
+        if (!fuori) p.s *= 1 + 0.32 * ef.k;      // e cresce
+        p.z -= 2000 * ef.k;                     // e passa davanti a tutti
+      }
       if (o < 0.04) o = 0;   // nella nebbia: né disegnato né toccabile
       p.o = o;
       proj.set(id, p);
@@ -564,7 +579,8 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       // Ordine di sovrapposizione per profondità vera (anche ruotando), non per
       // salto: più lontano = sotto.
       setIf(c, "z", String(Math.max(1, 5000 - Math.round(p.z))), x => { st.zIndex = x; });
-      setIf(c, "nl", p.s < LABEL_MIN_SCALE, x => { v.dom.classList.toggle("no-label", x); });
+      setIf(c, "tf", !!ef && ef.k > 0.5, x => { v.dom.classList.toggle("is-tour-focus", x); });
+      setIf(c, "nl", p.s < LABEL_MIN_SCALE && !(ef && ef.k > 0.3), x => { v.dom.classList.toggle("no-label", x); });
     }
     for (const e of net.edges) {
       const a = proj.get(e.a), b = proj.get(e.b), line = edgeDom.get(edgeKey(e));
@@ -594,6 +610,9 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
 
   // Tour (vedi dna-view.js): viaggio continuo della camera fra i nodi e rotazione
   // finale. Il copione è di dna-view; qui solo come si muove la camera.
+  // Il nodo su cui sta andando il tour emerge mentre la camera si avvicina: in
+  // primo piano, pieno, un po' più grande, con un alone. id -> { k (attuale), kT (destinazione) }.
+  const enfasi = new Map();
   let nodeK = 1, nodeKT = 1; // grandezza dei nodi nel giro finale del tour (più piccoli: la rete intera è fitta), corrente e di destinazione
   let viaggio = 0;
   function volo(px, py, pz) {
@@ -846,6 +865,9 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     tourVai(id, ms) {
       const w = worldPos(id);
       if (!w) return Promise.resolve();
+      // Quello di prima si spegne, quello di arrivo emerge man mano che ci si avvicina.
+      for (const f of enfasi.values()) f.kT = 0;
+      enfasi.set(id, { k: enfasi.get(id)?.k ?? 0, kT: 1 });
       return new Promise(risolvi => {
         const da = { x: cam.x, y: cam.y, cz: cam.cz, z: cam.z };
         // Dove arriva la camera e con che zoom (calcolato sulla destinazione).
@@ -863,6 +885,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     },
     // Panoramica sulla rete intera e un giro completo attorno, in `ms`.
     tourRuota(ms) {
+      for (const f of enfasi.values()) f.kT = 0;
       cam.vx = cam.vy = 0; cam.wyaw = cam.wpitch = 0;
       // Durante il giro la rete deve stare dentro lo schermo da ogni lato: si
       // inquadra la SFERA che la contiene (raggio massimo dal centro), non la
@@ -884,6 +907,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     // Fine del tour. `torna`: la camera rientra piano sul nodo attivo; altrimenti
     // resta dov'è (si è presa la mano), senza scatti.
     tourFine(torna = true) {
+      for (const f of enfasi.values()) f.kT = 0;
       cam.spin = 0; nodeKT = 1;
       cam.viaggio = null;
       cam.tq = Q_ID;
