@@ -809,9 +809,10 @@ test("Sfera: i nodi stanno a profondità diverse e la scena ruota", async ({ pag
 
   const stato = () => page.evaluate(() => {
     const nodi = [...document.querySelectorAll<HTMLElement>("#dnaSpatial .dna-node")].filter(n => n.style.display !== "none");
-    const scale = nodi.map(n => { const m = /scale\(([\d.]+)\)/.exec(n.style.transform); return m ? +m[1] : 1; });
+    // La profondità si legge nello z-index (la grandezza dei nodi resta quasi uniforme, come in Piatto).
+    const scale = nodi.map(n => +n.style.zIndex);
     const pos = Object.fromEntries(nodi.map(n => { const r = n.getBoundingClientRect(); return [n.dataset.node!, [Math.round(r.left), Math.round(r.top)]]; }));
-    return { distinte: new Set(scale.map(s => s.toFixed(2))).size, pos };
+    return { distinte: new Set(scale.map(s => Math.round(s / 20))).size, pos };
   });
   const prima = await stato();
   expect(prima.distinte, "i nodi stanno tutti alla stessa profondità: la sfera non è una sfera").toBeGreaterThanOrEqual(5);

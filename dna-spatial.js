@@ -38,7 +38,12 @@ const DEPTH = [0, 0, 200, 380, 540];
 // la scena i livelli si vedono davvero. Il piano 0 (nodo attivo e vicini) resta
 // a scala 1 come nella vista Spaziale.
 const DEPTH_ORBIT = [0, 0, 260, 480, 680];
-const NODE_K = 1.4;                          // in orbita i nodi sono un po' più grandi (solo la grandezza, non le posizioni)
+const NODE_K = 1.4;                          // in orbita la grandezza dei nodi parte da qui (solo la grandezza, non le posizioni)
+// La grandezza dei nodi in 3D resta vicina a quella della vista Piatta (1 = com'è
+// lì), qualunque sia la profondità o lo zoom per far stare i collegamenti: la
+// prospettiva sposta le posizioni, non rimpicciolisce i nodi lontani. Solo
+// avvicinandosi con lo zoom i nodi crescono.
+const NODE_MIN = 1, NODE_MAX = 1.15, NODE_ZOOM_MAX = 1.8;
 const SPIN_TAU = 380;                        // ms: quanto dura la rotazione che continua dopo aver staccato il dito
 const ORBIT_K = 0.008;                       // radianti per pixel di trascinamento (~0,46°)
 const NEAR = 140;                            // sotto questa distanza un nodo è "dietro la camera"
@@ -512,11 +517,12 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     [dx, dy, dz] = [M[0] * dx + M[1] * dy + M[2] * dz, M[3] * dx + M[4] * dy + M[5] * dz, M[6] * dx + M[7] * dy + M[8] * dz];
     const z = (sfera ? 0 : focusPlane()) + dz;
     const denom = F + z - cam.z;
+    const nodeZoom = Math.min(NODE_ZOOM_MAX, Math.max(1, F / Math.max(1, F + focusPlane() - cam.z)));
     if (denom < NEAR) return { x: 0, y: 0, s: 0, z, dietro: true };   // dietro la camera
     const s = F / denom;
     // La posizione segue la prospettiva piena; la GRANDEZZA del nodo ha un tetto
     // in orbita: un nodo molto vicino non deve coprire quelli attorno.
-    return { x: W / 2 + dx * s, y: H / 2 + dy * s, s: orbit ? Math.min(s, S_MAX_ORBIT) * NODE_K : s, z };
+    return { x: W / 2 + dx * s, y: H / 2 + dy * s, s: orbit ? Math.max(NODE_MIN, Math.min(NODE_MAX, Math.min(s, S_MAX_ORBIT) * NODE_K)) * nodeZoom : s, z };
   }
 
   function draw() {
