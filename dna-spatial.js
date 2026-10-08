@@ -23,7 +23,7 @@
 // Tutta la logica di "chi si collega a chi" resta in dna.js; aprire e
 // richiudere resta in dna-view.js (onTap).
 
-import { hopsFrom } from "./dna.js?v=1d874a5";
+import { hopsFrom } from "./dna.js?v=4dcf283";
 
 const F_BASE = 560;                          // focale: più bassa = prospettiva più forte
 const F_ORBIT = 1400;                        // in orbita la prospettiva è più dolce: a 60° i nodi vicini non esplodono
