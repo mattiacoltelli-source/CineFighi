@@ -1692,50 +1692,65 @@ let tourAttivo = false;
 let tourToken = 0;
 let tourTimer = 0;
 
-function tourVicini() {
-  const m = new Map();
-  for (const n of net.nodes.keys()) m.set(n, []);
-  for (const e of net.edges) { m.get(e.a)?.push(e.b); m.get(e.b)?.push(e.a); }
-  return m;
-}
-
-// Le tappe: i film più amati, i generi più "ricchi", il regista e l'attore
-// con più film nella rete aperta. Ordine alternato (film, genere, regista, ...)
-// perché il tour non sia una lista di soli film.
+// Le tappe: si parte SEMPRE dal nodo di chi è la radice (tu, se sei dentro la
+// rete) e da lì ci si allarga: prima le cose più importanti per quella persona
+// vicine a lei, poi quelle più lontane. "Importante per lei" vuol dire:
+//   film     → il voto che ha dato (a parità, quante persone lo amano)
+//   genere / regista / attore → quanti dei SUOI film appartengono a quel nodo
+// Si visitano solo nodi già aperti nella rete. Alternando i tipi (film, genere,
+// regista, ...) perché il tour non sia una lista di soli film.
 function tourTappe() {
   if (!net || net.nodes.size < 6) return [];
-  const vicini = tourVicini();
-  const conta = (id, tipo) => (vicini.get(id) || []).filter(v => net.nodes.get(v)?.type === tipo).length;
-  // Film: quante persone del gruppo lo amano (sharedCountOf). Genere, regista,
-  // attore: quanti film amati dal gruppo hanno (dall'indice intero, anche quelli
-  // non ancora aperti nella rete) e, a parità, quanti voti in tutto. Poi per id.
-  const mappa = { genere: index.byGenre, regista: index.byDirector, attore: index.byActor };
-  const misura = (n) => {
-    if (n.type === "film") return { principale: sharedCountOf(index, n.id), totale: 0 };
-    const lista = mappa[n.type]?.get(n.id.slice(n.type.length + 1)) || [];
-    return { principale: lista.length, totale: lista.reduce((t, x) => t + (x.w || 0), 0) };
-  };
+  const radice = net.nodes.get(net.rootId);
+  if (!radice || radice.type !== "persona") return [];
+  const nome = net.rootId.slice("persona:".length);
+  const miei = index.byPerson.get(nome) || [];            // [{ id: filmKey, w: voto }]
+  const mioVoto = new Map(miei.map(e => [e.id, e.w]));
+  // Per ogni genere / regista / attore: quanti dei miei film ci stanno dentro.
+  const tally = { genere: new Map(), regista: new Map(), attore: new Map() };
+  const somma = (m, k, v) => m.set(k, (m.get(k) || 0) + v);
+  for (const e of miei) {
+    const f = index.films.get(e.id);
+    if (!f) continue;
+    for (const g of f.genres || []) somma(tally.genere, g, 1);
+    if (f.director) somma(tally.regista, f.director, 1);
+    for (const a of f.cast || []) somma(tally.attore, a, 1);
+  }
+  const distanza = hopsFrom(net, net.rootId);
+  const chiave = (n) => n.id.slice(n.type.length + 1);
   const classifica = (tipo) => [...net.nodes.values()]
-    .filter(n => n.type === tipo)
-    .map(n => ({ n, m: misura(n), inRete: conta(n.id, "film") }))
-    .sort((a, b) => (b.m.principale - a.m.principale) || (b.m.totale - a.m.totale) || (b.inRete - a.inRete) || a.n.id.localeCompare(b.n.id))
-    .map(x => ({ id: x.n.id, titolo: x.n.label, tipo, k: x.m.principale, inRete: x.inRete }));
+    .filter(n => n.type === tipo && (distanza.get(n.id) ?? 99) <= 2)
+    .map(n => ({
+      n,
+      k: tipo === "film" ? (mioVoto.get(n.id) ?? -1) : (tally[tipo].get(chiave(n)) || 0),
+      fan: tipo === "film" ? sharedCountOf(index, n.id) : 0,
+      hops: distanza.get(n.id) ?? 99
+    }))
+    .filter(x => x.k > 0)
+    .sort((a, b) => (b.k - a.k) || (b.fan - a.fan) || (a.hops - b.hops) || a.n.id.localeCompare(b.n.id))
+    .map(x => ({ id: x.n.id, titolo: x.n.label, tipo, k: x.k, hops: x.hops }));
   const film = classifica("film");
   const generi = classifica("genere");
   const registi = classifica("regista");
   const attori = classifica("attore");
-  const ordine = [film[0], generi[0], registi[0], film[1], attori[0], generi[1], registi[1], film[2]];
-  const visti = new Set();
-  return ordine.filter(t => t && !visti.has(t.id) && visti.add(t.id)).slice(0, TOUR_MAX_TAPPE);
+  const ordine = [film[0], generi[0], registi[0], film[1], attori[0], generi[1], registi[1]];
+  const visti = new Set([net.rootId]);
+  const scelte = ordine.filter(t => t && !visti.has(t.id) && visti.add(t.id)).slice(0, TOUR_MAX_TAPPE - 1);
+  // Ci si allarga dalla radice: prima le tappe più vicine a lei (a parità resta l'ordine di importanza).
+  scelte.sort((a, b) => a.hops - b.hops);
+  const io = nome === ctx?.currentUser;
+  return [{ id: net.rootId, titolo: radice.label, tipo: "radice", k: miei.length, io }, ...scelte.map(t => ({ ...t, io }))];
 }
 
 function tourDidascalia(t) {
-  const filmGruppo = `${t.k} ${t.k === 1 ? "film amato" : "film amati"} dal gruppo`;
+  const voti = (v) => Number.isInteger(v) ? String(v) : String(v).replace(".", ",");
+  const dei = (k) => `${k} dei ${t.io ? "tuoi" : "suoi"} film`;
   switch (t.tipo) {
-    case "film": return { titolo: `Fra i più amati · ${t.titolo}`, sotto: t.k === 1 ? "1 persona lo ama" : `${t.k} persone lo amano` };
-    case "genere": return { titolo: `Genere in comune · ${t.titolo}`, sotto: filmGruppo };
-    case "regista": return { titolo: `Regista ricorrente · ${t.titolo}`, sotto: filmGruppo };
-    default: return { titolo: `Attore ricorrente · ${t.titolo}`, sotto: filmGruppo };
+    case "radice": return { titolo: t.io ? `Si parte da te · ${t.titolo}` : `Si parte da ${t.titolo}`, sotto: `${t.k} titoli amati` };
+    case "film": return { titolo: `${t.io ? "Un tuo film del cuore" : "Un film del cuore"} · ${t.titolo}`, sotto: `${t.io ? "Il tuo voto" : "Voto"}: ${voti(t.k)}` };
+    case "genere": return { titolo: `${t.io ? "Il tuo genere" : "Un suo genere"} · ${t.titolo}`, sotto: dei(t.k) };
+    case "regista": return { titolo: `${t.io ? "Un tuo regista" : "Un suo regista"} · ${t.titolo}`, sotto: dei(t.k) };
+    default: return { titolo: `${t.io ? "Un tuo attore" : "Un suo attore"} · ${t.titolo}`, sotto: dei(t.k) };
   }
 }
 

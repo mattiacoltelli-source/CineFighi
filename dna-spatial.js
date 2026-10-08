@@ -879,7 +879,10 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
         const a = { x: da.x, y: da.y, cz: da.cz, z: da.z };
         const b = { x: cam.tx, y: cam.ty, cz: cam.tcz, z: cam.tz };
         cam.tx = a.x; cam.ty = a.y; cam.tcz = a.cz; cam.tz = a.z;   // si parte da dove si è
-        cam.viaggio = { a, b, t0: performance.now(), dur: ms, fine: risolvi };
+        // Se si è già lì (la prima tappa è il tuo nodo, dove la camera sta già) non
+        // serve aspettare un intero viaggio.
+        const lontano = Math.hypot(b.x - a.x, b.y - a.y, b.cz - a.cz) + Math.abs(b.z - a.z) * 0.5;
+        cam.viaggio = { a, b, t0: performance.now(), dur: lontano < 40 ? Math.min(ms, 600) : ms, fine: risolvi };
         kick();
       });
     },
