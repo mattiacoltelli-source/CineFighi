@@ -66,8 +66,19 @@ const MARGINE_X = 94, MARGINE_Y = 175;        // spazio da lasciare ai bordi (e 
 const LONG_MS = 420;                          // tocco lungo su un nodo = ci si vola sopra
 const DIP_MAX = 340;                         // quanto si allarga la camera a metà di un volo tra nodi
 const RAGGI = [0.9, 1.2, 1.55];             // lunghezze dell'arco provate: il nodo va dove c'è più spazio, anche più lontano
+const RAGGIO_EXTRA = 2.0, RETE_FITTA = 28;   // con la rete già fitta (tanti nodi aperti) si prova anche un anello più largo
 const PESO_LUNGHEZZA = 0.12;                 // piccolo costo per gli archi più lunghi: a parità di spazio vince il più corto
 const PESO_BARICENTRO = 0.25;                // quanto i nuovi nodi preferiscono i vuoti vicino al centro della rete
+// Rilassamento: dopo che nodi nuovi sono stati piazzati, i nodi troppo vicini sullo schermo si
+// respingono (la locandina è larga 62px più l'etichetta sotto) e si assestano con una piccola scivolata.
+const SPAZIO_NODO = 100;                     // distanza minima voluta fra due nodi in orizzontale: la locandina è larga 62px (+ margine) e la camera di solito sta a scala ~0,7
+const SPAZIO_ASPETTO = 0.8;                  // in verticale serve di più (c'è l'etichetta): 76 / 0.8
+const SPAZIO_PESO_Z = 0.3;                   // la profondità conta meno dello schermo: più è piccolo, più si preferisce spostare in z
+const RILASSA_PASSI = 40;
+const RILASSA_FORZA = 0.55;                  // quanto del sovrapposto si corregge a ogni passo
+const RILASSA_CASA = 0.05;                   // richiamo verso la posizione di partenza: la rete non si deforma troppo
+const RILASSA_MAX = 1.0;                     // spostamento massimo di un nodo, in raggi
+const SCIVOLA_TAU = 260;                     // ms: i nodi già visibili scivolano nella nuova posizione
 const S_TARGET = 0.8;                        // scala a cui devono stare i collegamenti di un nodo (grandezza quasi normale)
 const S_FIT_MIN_PIATTA = 0.4;                 // "3D" usa il layout piatto di dna.js, che non si può comprimere: lì ci si allarga di più
 const S_FIT_TUTTI = 0.62;                    // limite dell'allargamento per vedere TUTTI i collegamenti di un nodo
@@ -151,6 +162,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
   let orbit = false;            // laboratorio 3D: un dito ruota la scena
   let sfera = false;            // laboratorio 3D: posizioni sulla sfera invece che sul piano
   const pos3 = new Map();       // id -> { x, y, z }: posizioni della vista Sfera
+  const spost = new Map();      // id -> { x, y, z }: scarto che si assorbe a vista dopo un rilassamento (mostrato = pos3 + spost)
   const vis = new Map();        // id -> { h, th, grow, dom, cache }
   const edgeDom = new Map();    // "a|b" -> <line>
   const cam = { x: 0, y: 0, z: 0, tx: 0, ty: 0, tz: 0, cz: 0, tcz: 0, yaw: 0, pitch: 0, tyaw: 0, tpitch: 0, wyaw: 0, wpitch: 0, vx: 0, vy: 0, q: Q_ID, tq: Q_ID, M: eulerMat(0, 0), spin: 0, viaggio: null, crescita: null, orienta: null };
@@ -172,7 +184,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
 
   // ─── allineamento alla rete ────────────────────────────────────────────────
   function clear() {
-    vis.clear(); edgeDom.clear(); pos3.clear();
+    vis.clear(); edgeDom.clear(); pos3.clear(); spost.clear();
     nodesEl.innerHTML = ""; edgesEl.innerHTML = "";
     net = null;
   }
@@ -197,10 +209,15 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     const kx = Math.max(0.8, Math.min(1, (W / 2 - MARGINE_X) / S_TARGET / R));
     // In verticale c'è molto più posto che in larghezza: la sfera si allunga (fino a 1,5x).
     const ky = Math.max(0.8, Math.min(1.5, (H / 2 - MARGINE_Y) / S_TARGET / R));
+    // Contano solo i nodi presenti: le posizioni di quelli chiusi restano memorizzate (riaprendoli
+    // tornano dove stavano) ma non devono togliere posto agli altri.
+    const vivi = [];
+    for (const [id, q] of pos3) if (net.nodes.has(id)) vivi.push(q);
     const cen = { x: 0, y: 0, z: 0 };
-    for (const q of pos3.values()) { cen.x += q.x; cen.y += q.y; cen.z += q.z; }
-    const nn = Math.max(1, pos3.size);
+    for (const q of vivi) { cen.x += q.x; cen.y += q.y; cen.z += q.z; }
+    const nn = Math.max(1, vivi.length);
     cen.x /= nn; cen.y /= nn; cen.z /= nn;
+    const nuovi = [];
     for (const n of net.nodes.values()) {
       if (pos3.has(n.id)) continue;
       const pp = pos3.get(n.parent) || pos3.get(net.rootId);
@@ -211,14 +228,14 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
         fuori = [ox / l, oy / l, oz / l];
       }
       let best = null, bestD = -Infinity;
-      for (const rm of RAGGI) for (const d of DIREZIONI) {
+      for (const rm of vivi.length >= RETE_FITTA ? [...RAGGI, RAGGIO_EXTRA] : RAGGI) for (const d of DIREZIONI) {
         if (fuori && d[0] * fuori[0] + d[1] * fuori[1] + d[2] * fuori[2] < -0.75) continue;   // solo non tornare indietro verso il nonno
         const x = pp.x + d[0] * R * rm * kx, y = pp.y + d[1] * R * rm * ky, z = pp.z + d[2] * R * rm * Z_SCHIACCIATA;
         let m = Infinity;
         // Conta soprattutto la distanza SULLO SCHERMO (x,y): due nodi a profondità
         // diverse ma sulla stessa linea di vista si sovrapporrebbero comunque.
         const sx = F_ORBIT / Math.max(300, F_ORBIT + z - cen.z);
-        for (const q of pos3.values()) {
+        for (const q of vivi) {
           // Distanza come la vedrebbe l'occhio (proiettata, con la prospettiva) e
           // distanza vera nello spazio: la prima evita le sovrapposizioni che si
           // vedono, la seconda tiene i nodi larghi anche quando si ruota.
@@ -233,8 +250,62 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
         m -= PESO_BARICENTRO * Math.hypot(x - cen.x, y - cen.y, z - cen.z) + PESO_LUNGHEZZA * (rm - 1) * R;
         if (m > bestD) { bestD = m; best = { x, y, z }; }
       }
-      pos3.set(n.id, best || { x: pp.x + R, y: pp.y, z: pp.z });
+      const q = best || { x: pp.x + R, y: pp.y, z: pp.z };
+      pos3.set(n.id, q);
+      vivi.push(q);
+      nuovi.push(n.id);
     }
+    if (nuovi.length) rilassa(R, cen.z);
+  }
+
+  // Dopo aver piazzato nodi nuovi: quelli che sullo schermo (a vista frontale) restano troppo
+  // vicini si respingono, come molle, finché c'è posto per tutti. Calcolo deterministico (stesso
+  // ordine, nessun caso). La radice sta ferma; gli altri non si allontanano troppo da dove erano.
+  // I nodi già visibili non scattano: lo scarto si assorbe a vista (spost).
+  function rilassa(R, cz) {
+    const ids = [...net.nodes.keys()].filter(id => pos3.has(id));
+    const n = ids.length;
+    if (n < 2) return;
+    const P = ids.map(id => pos3.get(id));
+    const casa = P.map(q => ({ x: q.x, y: q.y, z: q.z }));
+    const prima = ids.map((id, i) => {
+      const o = vis.has(id) ? spost.get(id) : null;
+      return vis.has(id) ? { x: P[i].x + (o ? o.x : 0), y: P[i].y + (o ? o.y : 0), z: P[i].z + (o ? o.z : 0) } : null;
+    });
+    const fisso = ids.map(id => id === net.rootId);
+    const sc = P.map(() => 1);
+    const maxXY = R * RILASSA_MAX, maxZ = R * RILASSA_MAX * Z_SCHIACCIATA;
+    for (let it = 0; it < RILASSA_PASSI; it++) {
+      for (let i = 0; i < n; i++) sc[i] = F_ORBIT / Math.max(300, F_ORBIT + P[i].z - cz);
+      for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+        let ux = P[i].x * sc[i] - P[j].x * sc[j];
+        let uy = (P[i].y * sc[i] - P[j].y * sc[j]) * SPAZIO_ASPETTO;
+        let uz = (P[i].z - P[j].z) * SPAZIO_PESO_Z;
+        let d = Math.hypot(ux, uy, uz);
+        if (d >= SPAZIO_NODO) continue;
+        if (d < 1e-3) { const a = (i * 7 + j * 13) * 2.399963; ux = Math.cos(a); uy = Math.sin(a); uz = 0; d = 1; }
+        const f = (SPAZIO_NODO - d) * RILASSA_FORZA;
+        const nx = ux / d, ny = uy / d, nz = uz / d;
+        const pi = fisso[i] ? 0 : fisso[j] ? 1 : 0.5, pj = fisso[j] ? 0 : fisso[i] ? 1 : 0.5;
+        P[i].x += nx * f * pi / sc[i]; P[i].y += ny * f * pi / sc[i] / SPAZIO_ASPETTO; P[i].z += nz * f * pi / SPAZIO_PESO_Z;
+        P[j].x -= nx * f * pj / sc[j]; P[j].y -= ny * f * pj / sc[j] / SPAZIO_ASPETTO; P[j].z -= nz * f * pj / SPAZIO_PESO_Z;
+      }
+      for (let i = 0; i < n; i++) {
+        if (fisso[i]) continue;
+        const q = P[i], c = casa[i];
+        q.x += (c.x - q.x) * RILASSA_CASA; q.y += (c.y - q.y) * RILASSA_CASA; q.z += (c.z - q.z) * RILASSA_CASA;
+        const dx = q.x - c.x, dy = q.y - c.y, l = Math.hypot(dx, dy);
+        if (l > maxXY) { q.x = c.x + dx * maxXY / l; q.y = c.y + dy * maxXY / l; }
+        q.z = c.z + Math.max(-maxZ, Math.min(maxZ, q.z - c.z));
+      }
+    }
+    for (let i = 0; i < n; i++) {
+      const a = prima[i];
+      if (!a) continue;
+      const o = { x: a.x - P[i].x, y: a.y - P[i].y, z: a.z - P[i].z };
+      if (Math.hypot(o.x, o.y, o.z) > 1) spost.set(ids[i], o); else spost.delete(ids[i]);
+    }
+    if (spost.size) kick();
   }
 
   // Dopo un cambio di modalità le coordinate della camera cambiano significato
@@ -564,6 +635,11 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       cam.M = eulerMat(cam.yaw, cam.pitch);
     }
 
+    for (const [id, o] of spost) {
+      o.x = approach(o.x, 0, dt, SCIVOLA_TAU); o.y = approach(o.y, 0, dt, SCIVOLA_TAU); o.z = approach(o.z, 0, dt, SCIVOLA_TAU);
+      if (Math.hypot(o.x, o.y, o.z) < 0.4) spost.delete(id);
+      moving = true;
+    }
     for (const v of vis.values()) {
       const h = approach(v.h, v.th, dt, 140);
       v.h = Math.abs(h - v.th) > 0.002 ? h : v.th;
@@ -579,8 +655,12 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
   // Posizione di un nodo mentre la rete "cresce" dal Piatto alla sfera: parte da dove
   // stava nel Piatto (x, y della rete piatta, a profondità zero) e arriva alla sua
   // posizione sulla sfera.
+  function mostrata(id) {
+    const q = pos3.get(id), o = spost.get(id);
+    return q && o ? { x: q.x + o.x, y: q.y + o.y, z: q.z + o.z } : q;
+  }
   function mixPos(id) {
-    const n = net.nodes.get(id), q0 = pos3.get(id) || { x: 0, y: 0, z: 0 };
+    const n = net.nodes.get(id), q0 = mostrata(id) || { x: 0, y: 0, z: 0 };
     return n ? mixQ(n, q0) : q0;
   }
   function mixQ(nodo, q0) {
@@ -594,9 +674,9 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     const e = 1 - Math.pow(1 - v.grow, 3);            // i nuovi escono dal genitore
     let wx, wy, dz;
     if (sfera) {
-      const q0 = pos3.get(n.id);
+      const q0 = mostrata(n.id);
       if (!q0) return { x: 0, y: 0, s: 0, z: 0, dietro: true };
-      const q = mixQ(n, q0), pq0 = p && pos3.get(p.id), pq = pq0 ? mixQ(p, pq0) : null;
+      const q = mixQ(n, q0), pq0 = p && mostrata(p.id), pq = pq0 ? mixQ(p, pq0) : null;
       wx = pq ? pq.x + (q.x - pq.x) * e : q.x;
       wy = pq ? pq.y + (q.y - pq.y) * e : q.y;
       dz = (pq ? pq.z + (q.z - pq.z) * e : q.z) - cam.cz;      // la profondità è la posizione vera

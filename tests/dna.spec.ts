@@ -1493,3 +1493,46 @@ test("3D: nel tour la camera va diritta al nodo di destinazione", async ({ page 
   expect(verificati, "nessun viaggio verificato").toBeGreaterThanOrEqual(2);
   expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
 });
+
+// 3D: aprendo molti nodi (come fa chi tocca a ripetizione) le locandine restano vicine ma
+// non accavallate: i nodi si respingono finché c'è posto. Prima del rilassamento in questo
+// scenario si contavano ~110 coppie sovrapposte (80% della larghezza), ora ~30.
+test("3D: aprendo molti nodi le locandine non si accavallano", async ({ page }) => {
+  const guasti = osserva(page);
+  const scritture = soloLettura(page);
+  await entra(page);
+  await vaiA(page, "tonight");
+  await page.locator("#dnaNodes .dna-node.is-root").waitFor({ state: "visible", timeout: 30_000 });
+  await page.locator('#dnaViewToggle [data-dna-view="sphere"]').click();
+  await page.locator("#dnaSpatial .dna-node.is-root").waitFor({ state: "visible" });
+  const clic = (sel: string) => page.evaluate(s => (document.querySelector(s) as HTMLElement | null)?.click(), sel);
+  await clic("#dnaSpatial .dna-node.is-root");
+  await page.waitForTimeout(800);
+  for (let i = 0; i < 6; i++) { await clic("#dnaSpatial .dna-node.is-root .dna-node__more"); await page.waitForTimeout(500); }
+  for (let i = 0; i < 10; i++) {
+    await page.evaluate(k => {
+      const l = [...document.querySelectorAll<HTMLElement>("#dnaSpatial .dna-node")]
+        .filter(n => n.style.display !== "none" && !n.classList.contains("is-root") && !n.classList.contains("is-open"));
+      l[(k * 7) % Math.max(1, l.length)]?.click();
+    }, i);
+    await page.waitForTimeout(700);
+    await clic("#dnaSpatial .dna-node.is-focus .dna-node__more");
+    await page.waitForTimeout(500);
+  }
+  await page.waitForTimeout(1500);
+  const m = await page.evaluate(() => {
+    const ns = [...document.querySelectorAll<HTMLElement>("#dnaSpatial .dna-node")]
+      .filter(n => n.style.display !== "none" && +n.style.opacity > 0.3)
+      .map(n => { const r = n.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width }; });
+    let coppie = 0;
+    for (let i = 0; i < ns.length; i++) for (let j = i + 1; j < ns.length; j++) {
+      const s = (ns[i].w + ns[j].w) / 2 * 0.8;
+      if (Math.abs(ns[i].x - ns[j].x) < s && Math.abs(ns[i].y - ns[j].y) < s) coppie++;
+    }
+    return { visibili: ns.length, coppie };
+  });
+  expect(m.visibili, "scenario troppo piccolo per misurare").toBeGreaterThan(25);
+  expect(m.coppie, `${m.coppie} coppie di locandine sovrapposte su ${m.visibili} visibili`).toBeLessThan(65);
+  expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
+  expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
+});
