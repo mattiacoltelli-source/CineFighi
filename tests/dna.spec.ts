@@ -1078,7 +1078,14 @@ test("Sfera: la rotazione a un dito è libera a 360° e non si blocca", async ({
   const giro = async (asse: "x" | "y") => {
     const tot = (2 * Math.PI) / K, tratti = Math.ceil(tot / 170), passo = tot / tratti;
     for (let t = 0; t < tratti; t++) {
-      const x = st.x + st.width / 2, y = st.y + st.height * 0.8;
+      // Si parte da un punto vuoto: un dito su un nodo lo prenderebbe come fulcro.
+      const [x, y] = await page.evaluate(([bx, by, bw, bh]) => {
+        for (let r = 0.9; r > 0.55; r -= 0.03) for (let c = 0.1; c < 0.95; c += 0.08) {
+          const px = bx + bw * c, py = by + bh * r;
+          if (!document.elementsFromPoint(px, py).some(e => (e as HTMLElement).classList?.contains("dna-node"))) return [px, py];
+        }
+        return [bx + bw * 0.5, by + bh * 0.9];
+      }, [st.x, st.y, st.width, st.height]);
       await page.mouse.move(x, y); await page.mouse.down();
       for (let i = 1; i <= 17; i++) { await page.mouse.move(x + (asse === "x" ? (passo * i) / 17 : 0), y - (asse === "y" ? (passo * i) / 17 : 0)); await page.waitForTimeout(12); }
       await page.waitForTimeout(160);   // dito fermo: nessuna scia
