@@ -1352,12 +1352,15 @@ test("3D: il tour del gruppo (pannello che segue la tappa, didascalia senza dati
   await page.locator("#dnaTourBtn").click();
   await page.locator("#dnaTourMenu button", { hasText: "Il mio" }).click();
   const viste: string[] = [];
+  const tappe: string[] = [];   // "ruolo | nome", nell'ordine, senza doppioni
   const t0 = Date.now();
   while ((await page.locator("#dnaTourBtn").textContent()) === "Stop" && Date.now() - t0 < 110_000) {
     const c = await page.evaluate(() => {
       const el = document.getElementById("dnaTourCap")!;
       return el.classList.contains("is-on") ? el.querySelector("span")!.textContent! : "";
     });
+    const nomeTappa = await page.evaluate(() => document.getElementById("dnaTourCap")!.querySelector("strong")!.textContent!);
+    if (c && !tappe.includes(`${c} | ${nomeTappa}`)) tappe.push(`${c} | ${nomeTappa}`);
     if (c && !viste.includes(c)) {
       viste.push(c);
       // Nel pannello compatto del tour ogni tappa mostra l'essenziale (chi lo ama / chi è), senza aprirlo.
@@ -1373,6 +1376,15 @@ test("3D: il tour del gruppo (pannello che segue la tappa, didascalia senza dati
   expect(viste.some(v => /attore/.test(v)), `nel tour "mio" manca un attore:\n${viste.join("\n")}`).toBe(true);
   expect(viste.some(v => /regista/.test(v)), "nel tour \"mio\" manca un regista").toBe(true);
   expect(viste.some(v => /genere/.test(v)), "nel tour \"mio\" manca un genere").toBe(true);
+  // Un solo genere, un solo regista, un solo attore: il resto sono film, e dopo l'attore ne va uno suo ("Con ...").
+  const conta = (re: RegExp) => tappe.filter(t => re.test(t.split(" | ")[0])).length;
+  expect(conta(/genere/), `più di un genere:\n${tappe.join("\n")}`).toBe(1);
+  expect(conta(/regista/), `più di un regista:\n${tappe.join("\n")}`).toBe(1);
+  expect(conta(/attore/), `più di un attore:\n${tappe.join("\n")}`).toBe(1);
+  const filmTappe = tappe.filter(t => !/genere|regista|attore|Si parte|rete intera/.test(t.split(" | ")[0]));
+  expect(filmTappe.length, `pochi film nel tour:\n${tappe.join("\n")}`).toBeGreaterThanOrEqual(3);
+  const iAttore = tappe.findIndex(t => /attore/.test(t.split(" | ")[0]));
+  if (tappe.some(t => t.startsWith("Con "))) expect(tappe[iAttore + 1], "il film dell'attore non viene subito dopo di lui").toMatch(/^Con /);
 
   expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
   expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);

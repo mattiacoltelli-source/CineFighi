@@ -1711,6 +1711,35 @@ let tourPassaggio = false;   // sta passando dal Piatto alla 3D per iniziare il 
 // Ogni tappa ha il nodo e la didascalia (`cap`: una riga piccola con il ruolo della
 // tappa e il nome in grande); il pannello in basso segue la tappa e dà i dettagli
 // (voti, chi lo ama, quanti film): la didascalia NON li ripete.
+// Fra gli attori candidati (in ordine di importanza) sceglie quello che ha un film nella rete
+// più "in tema": stesso genere e stesso regista già scelti per il tour. A parità vince l'attore
+// (e il film) più importante. `film`: id dei film preferiti, poi `tutti` se fra quelli non c'è niente.
+// Ritorna { attore, filmDi } (filmDi: id del film, o null).
+function tourAttoreConFilm(candidati, film, tutti, genereId, registaId) {
+  const g = genereId ? genereId.slice("genere:".length) : null;
+  const d = registaId ? registaId.slice("regista:".length) : null;
+  const filmDell = (attoreId, ids) => {
+    const nome = attoreId.slice("attore:".length);
+    let best = null, bestS = -1;
+    for (const id of ids) {
+      const f = index.films.get(id);
+      if (!f || !(f.cast || []).includes(nome)) continue;
+      const sc = (g && (f.genres || []).includes(g) ? 2 : 0) + (d && f.director === d ? 2 : 0);
+      if (sc > bestS) { best = id; bestS = sc; }
+    }
+    return best ? { id: best, s: bestS } : null;
+  };
+  for (const ids of [film, tutti]) {
+    let scelto = null, bestS = -1;
+    for (const a of candidati) {
+      const l = filmDell(a.id, ids);
+      if (l && l.s > bestS) { scelto = { attore: a, filmDi: l.id }; bestS = l.s; }
+    }
+    if (scelto) return scelto;
+  }
+  return { attore: candidati[0] || null, filmDi: null };
+}
+
 function tourTappeMie() {
   if (!net || net.nodes.size < 6) return [];
   const radice = net.nodes.get(net.rootId);
@@ -1747,15 +1776,18 @@ function tourTappeMie() {
   // Gli attori ci sono sempre: se vicino alla radice non ce n'è, si guarda più lontano.
   let attori = classifica("attore");
   if (!attori.length) attori = classifica("attore", 99);
-  const ordine = [film[0], generi[0], registi[0], attori[0], film[1], generi[1], attori[1], registi[1], film[2]];
+  // Un solo genere, un solo regista, un solo attore; il resto sono film, sparsi fra loro. Dopo
+  // l'attore va un film che ha fatto lui (meglio se dello stesso genere e regista già visti).
+  const tuttiIFilm = [...net.nodes.values()].filter(n => n.type === "film").map(n => n.id);
+  const { attore, filmDi } = tourAttoreConFilm(attori.slice(0, 5), film.map(x => x.id), tuttiIFilm, generi[0]?.id, registi[0]?.id);
   const visti = new Set([net.rootId]);
+  const f = film.filter(x => x.id !== filmDi);
+  const ordine = [f[0], generi[0], f[1], registi[0], f[2], attore, filmDi && { id: filmDi, titolo: net.nodes.get(filmDi)?.label, tipo: "film", con: attore?.titolo }, f[3]];
   const scelte = ordine.filter(t => t && !visti.has(t.id) && visti.add(t.id)).slice(0, TOUR_MAX_TAPPE - 1);
-  // Ci si allarga dalla radice: prima le tappe più vicine a lei (a parità resta l'ordine di importanza).
-  scelte.sort((a, b) => a.hops - b.hops);
   const io = nome === ctx?.currentUser;
   const cap = (t) => {
     switch (t.tipo) {
-      case "film": return { tipo: io ? "Un tuo film del cuore" : "Un film del cuore", titolo: t.titolo };
+      case "film": return { tipo: t.con ? `Con ${t.con}` : io ? "Un tuo film del cuore" : "Un film del cuore", titolo: t.titolo };
       case "genere": return { tipo: io ? "Il tuo genere" : "Un suo genere", titolo: t.titolo };
       case "regista": return { tipo: io ? "Un tuo regista" : "Un suo regista", titolo: t.titolo };
       default: return { tipo: io ? "Un tuo attore" : "Un suo attore", titolo: t.titolo };
@@ -1793,11 +1825,16 @@ function tourTappeGruppo() {
   const generi = classifica("genere");
   const registi = classifica("regista");
   const attori = classifica("attore");
-  const ordine = [film[0], generi[0], registi[0], film[1], attori[0], generi[1], attori[1], film[2], registi[1]];
+  // Come nel tour mio: un genere, un regista, un attore, il resto film sparsi; dopo l'attore un film suo.
+  const tuttiIFilm = [...net.nodes.values()].filter(n => n.type === "film").map(n => n.id);
+  const { attore, filmDi } = tourAttoreConFilm(attori.slice(0, 5).map(x => ({ id: x.n.id, titolo: x.n.label, x })), film.map(x => x.n.id), tuttiIFilm, generi[0]?.n.id, registi[0]?.n.id);
+  const f = film.filter(x => x.n.id !== filmDi);
+  const filmAttore = filmDi ? { n: net.nodes.get(filmDi), con: attore?.titolo } : null;
+  const ordine = [f[0], generi[0], f[1], registi[0], f[2], attore?.x, filmAttore, f[3], f[4]];
   const visti = new Set();
   const ruolo = { film: "Tra i più amati dal gruppo", genere: "Un genere in comune", regista: "Un regista in comune", attore: "Un attore in comune" };
-  const cap = (x) => ({ tipo: ruolo[x.n.type], titolo: x.n.label });
-  return ordine.filter(x => x && !visti.has(x.n.id) && visti.add(x.n.id)).slice(0, TOUR_MAX_TAPPE).map(x => ({ id: x.n.id, cap: cap(x) }));
+  const cap = (x) => ({ tipo: x.con ? `Con ${x.con}` : ruolo[x.n.type], titolo: x.n.label });
+  return ordine.filter(x => x && x.n && !visti.has(x.n.id) && visti.add(x.n.id)).slice(0, TOUR_MAX_TAPPE).map(x => ({ id: x.n.id, cap: cap(x) }));
 }
 
 // I tour disponibili adesso (con almeno due tappe), per il menu del pulsante.
