@@ -1306,6 +1306,10 @@ body:has(.app.dna-schermo-intero #screen-tonight:not(.hidden)) .bottom-nav {
 /* Mentre il dito è giù la camera deve seguirlo 1:1: con la transizione
    attiva resterebbe indietro di 200ms e sembrerebbe scollata dal gesto. */
 .dna-canvas.is-dragging { transition:none; }
+/* Dal Piatto alla 3D (tour): il Piatto svanisce sotto la vista 3D che compare. */
+.dna-canvas.is-uscita { opacity:0; transition: opacity .32s ease-out; pointer-events:none; }
+.dna-spatial.is-entrata { animation: dnaEntrata .32s ease-out both; }
+@keyframes dnaEntrata { from { opacity:0; } to { opacity:1; } }
 /* Rete vista da lontano: i nomi sarebbero illeggibili e si accavallerebbero. */
 .dna-canvas.is-zoom-far .dna-node__label { display:none; }
 .dna-edges {
@@ -1487,34 +1491,42 @@ body:has(.app.dna-schermo-intero #screen-tonight:not(.hidden)) .bottom-nav {
   color: var(--text); font-weight:700; text-shadow: 0 0 6px var(--bg), 0 0 6px var(--bg);
 }
 /* Tour: pulsante e didascalia della tappa. */
-.dna-spatial__tour {
-  position:absolute; top:8px; right:8px; z-index:4; padding:5px 13px; border:1px solid var(--cyan-a2);
+.dna-tour {
+  position:absolute; top:8px; right:8px; z-index:1; padding:5px 13px; border:1px solid var(--cyan-a2);
   border-radius: var(--radius-pill); background: rgba(13,19,28,.85); backdrop-filter: blur(6px);
   color: var(--cyan); font-family: var(--font-display); font-weight:700; font-size:var(--fs-xs);
   cursor:pointer; -webkit-tap-highlight-color: transparent;
 }
-.dna-spatial__tour.is-on { background: var(--cyan); color: #06222e; }
+.dna-tour.is-on { background: var(--cyan); color: #06222e; }
 /* Menu del Tour: poche voci, sotto il pulsante. */
-.dna-spatial__tourmenu {
-  position:absolute; top:44px; right:8px; z-index:5; display:flex; flex-direction:column; gap:2px; min-width:170px;
+.dna-tourmenu {
+  position:absolute; top:44px; right:8px; z-index:1; display:flex; flex-direction:column; gap:2px; min-width:170px;
   padding:5px; border:1px solid var(--cyan-a2); border-radius: var(--radius-md);
   background: rgba(13,19,28,.94); backdrop-filter: blur(8px);
 }
-.dna-spatial__tourmenu button {
+.dna-tourmenu button {
   padding:11px 12px; text-align:left; background:none; border:0; border-radius: 8px;
   color: var(--text); font-family: var(--font-display); font-weight:600; font-size: var(--fs-sm);
   cursor:pointer; -webkit-tap-highlight-color: transparent;
 }
-.dna-spatial__tourmenu button:active { background: var(--surface2); }
-.dna-spatial__tourcap {
-  position:absolute; top:52px; left:50%; z-index:4; max-width:84%; padding:7px 14px; text-align:center;
+.dna-tourmenu button:active { background: var(--surface2); }
+.dna-tourcap {
+  position:absolute; top:56px; left:50%; z-index:1; width:max-content; max-width:88%; padding:10px 18px 11px; text-align:center;
   transform: translateX(-50%); border-radius: var(--radius-md);
-  background: rgba(13,19,28,.82); backdrop-filter: blur(6px); border:1px solid var(--cyan-a2);
+  background: rgba(10,15,23,.9); backdrop-filter: blur(8px); border:1px solid var(--cyan-a2);
+  box-shadow: 0 6px 24px rgba(0,0,0,.45);
   pointer-events:none; opacity:0; transition: opacity .3s ease-out;
 }
-.dna-spatial__tourcap.is-on { opacity:1; }
-.dna-spatial__tourcap strong { display:block; color: var(--text); font-family: var(--font-display); font-size: var(--fs-sm); }
-.dna-spatial__tourcap span { display:block; color: var(--text2); font-size: var(--fs-xs); margin-top:1px; }
+.dna-tourcap.is-on { opacity:1; }
+/* Il ruolo della tappa, piccolo e in ciano, e sotto il nome, grande e bianco. */
+.dna-tourcap span {
+  display:block; color: var(--cyan); font-family: var(--font-display); font-weight:700;
+  font-size: var(--fs-xs); letter-spacing:.07em; text-transform:uppercase;
+}
+.dna-tourcap strong {
+  display:block; margin-top:3px; color: var(--text); font-family: var(--font-display); font-weight:800;
+  font-size: 20px; line-height:1.2;
+}
 
 /* "+N" (vedi nodeShell in dna-view.js): i collegamenti di un nodo aperto che
    non sono ancora in rete. Solo il segno, in ciano come l'anello del nodo

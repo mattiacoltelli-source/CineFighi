@@ -278,12 +278,13 @@
           <div id="dnaSpatial" class="dna-spatial hidden">
             <svg class="dna-spatial__edges" aria-hidden="true"></svg>
             <div class="dna-spatial__nodes"></div>
-                        <!-- Tour: dopo aver aperto dei nodi, una visita guidata automatica. -->
-            <button type="button" class="dna-spatial__tour hidden" id="dnaTourBtn">Tour</button>
-            <div class="dna-spatial__tourcap hidden" id="dnaTourCap" aria-live="polite"><strong></strong><span></span></div>
-            <div class="dna-spatial__tourmenu hidden" id="dnaTourMenu" role="menu" aria-label="Scegli il tour"></div>
-          </div>
+                      </div>
         </div>
+        <!-- Tour: dopo aver aperto dei nodi, una visita guidata automatica. Sta nel
+             riquadro (non dentro la vista 3D) perché c'è anche dal Piatto. -->
+        <button type="button" class="dna-tour hidden" id="dnaTourBtn">Tour</button>
+        <div class="dna-tourcap hidden" id="dnaTourCap" aria-live="polite"><span></span><strong></strong></div>
+        <div class="dna-tourmenu hidden" id="dnaTourMenu" role="menu" aria-label="Scegli il tour"></div>
         <!-- Piatto/3D: piccolo, nell'angolo del riquadro che comanda —
              stessa pillola di Barre/Bolle nelle Statistiche. -->
         <div class="genre-view-toggle dna-view-toggle" id="dnaViewToggle" role="group" aria-label="Vista della rete">

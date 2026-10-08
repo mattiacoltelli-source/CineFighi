@@ -1092,7 +1092,7 @@ function edgeClass(e) {
 
 function render() {
   // Qualunque cambiamento della rete interrompe il tour.
-  if (tourAttivo) fermaTour(false);
+  if (tourAttivo && !tourPassaggio) fermaTour(false);
   const nodesEl = el("dnaNodes");
   const edgesEl = el("dnaEdges");
   const canvas = el("dnaCanvas");
@@ -1101,7 +1101,8 @@ function render() {
   if (inSpaziale() && spatial) {
     // La vista spaziale disegna da sé tutta la rete (niente budget DOM: i
     // lontani svaniscono nella sua "nebbia"); qui resta tutto il resto.
-    if (nodesEl.firstChild) { nodesEl.innerHTML = ""; edgesEl.innerHTML = ""; }
+    // (durante il passaggio dal Piatto il disegno piatto resta ancora un attimo, per sfumare)
+    if (nodesEl.firstChild && !tourPassaggio) { nodesEl.innerHTML = ""; edgesEl.innerHTML = ""; }
     shownIds = [];
     const nuovi = pendingNewIds;
     pendingNewIds = null;
@@ -1689,6 +1690,7 @@ function tapMore(id) {
 // chiude niente). In chiusura una panoramica con un giro completo attorno.
 // Le tappe sono scelte con regole fisse (nessuna AI): a parità di rete il tour
 // è sempre lo stesso.
+const TOUR_CRESCITA_MS = 1900;  // dal Piatto alla 3D, quando il tour parte dal Piatto
 const TOUR_VIAGGIO_MS = 2200;   // il viaggio fra due tappe
 const TOUR_SOSTA_MS = 1400;     // la sosta a ogni tappa, con la didascalia
 const TOUR_ROTAZIONE_MS = 8000;
@@ -1696,16 +1698,16 @@ const TOUR_MAX_TAPPE = 9;
 let tourAttivo = false;
 let tourToken = 0;
 let tourTimer = 0;
+let tourPassaggio = false;   // sta passando dal Piatto alla 3D per iniziare il tour
 
-// Tre tour, ognuno con le sue tappe (sempre sui nodi GIÀ aperti, a regole fisse):
+// Due tour, ognuno con le sue tappe (sempre sui nodi GIÀ aperti, a regole fisse):
 //   "mio"     si parte dal nodo di chi è la radice e ci si allarga con le SUE cose
 //             più importanti: film (dal suo voto), generi, registi, attori.
 //   "gruppo"  "Cosa ci unisce": i film amati da più persone e i generi, registi e
 //             attori più condivisi; il pannello racconta chi li ama e con che voto.
-//   "persone" "Il gusto di ciascuno": una tappa per ogni persona del gruppo.
-// Ogni tappa ha il nodo e la didascalia (`cap`); il pannello in basso segue la tappa.
-const nomeTipo = { genere: "Genere", regista: "Regista", attore: "Attore" };
-
+// Ogni tappa ha il nodo e la didascalia (`cap`: una riga piccola con il ruolo della
+// tappa e il nome in grande); il pannello in basso segue la tappa e dà i dettagli
+// (voti, chi lo ama, quanti film): la didascalia NON li ripete.
 function tourTappeMie() {
   if (!net || net.nodes.size < 6) return [];
   const radice = net.nodes.get(net.rootId);
@@ -1748,18 +1750,16 @@ function tourTappeMie() {
   // Ci si allarga dalla radice: prima le tappe più vicine a lei (a parità resta l'ordine di importanza).
   scelte.sort((a, b) => a.hops - b.hops);
   const io = nome === ctx?.currentUser;
-  const voti = (v) => Number.isInteger(v) ? String(v) : String(v).replace(".", ",");
-  const dei = (k) => `${k} dei ${io ? "tuoi" : "suoi"} film`;
   const cap = (t) => {
     switch (t.tipo) {
-      case "film": return { titolo: `${io ? "Un tuo film del cuore" : "Un film del cuore"} · ${t.titolo}`, sotto: `${io ? "Il tuo voto" : "Voto"}: ${voti(t.k)}` };
-      case "genere": return { titolo: `${io ? "Il tuo genere" : "Un suo genere"} · ${t.titolo}`, sotto: dei(t.k) };
-      case "regista": return { titolo: `${io ? "Un tuo regista" : "Un suo regista"} · ${t.titolo}`, sotto: dei(t.k) };
-      default: return { titolo: `${io ? "Un tuo attore" : "Un suo attore"} · ${t.titolo}`, sotto: dei(t.k) };
+      case "film": return { tipo: io ? "Un tuo film del cuore" : "Un film del cuore", titolo: t.titolo };
+      case "genere": return { tipo: io ? "Il tuo genere" : "Un suo genere", titolo: t.titolo };
+      case "regista": return { tipo: io ? "Un tuo regista" : "Un suo regista", titolo: t.titolo };
+      default: return { tipo: io ? "Un tuo attore" : "Un suo attore", titolo: t.titolo };
     }
   };
   return [
-    { id: net.rootId, cap: { titolo: io ? `Si parte da te · ${radice.label}` : `Si parte da ${radice.label}`, sotto: `${miei.length} titoli amati` } },
+    { id: net.rootId, cap: { tipo: io ? "Si parte da te" : `Si parte da ${nomeVisto(nome)}`, titolo: radice.label } },
     ...scelte.map(t => ({ id: t.id, cap: cap(t) }))
   ];
 }
@@ -1792,37 +1792,9 @@ function tourTappeGruppo() {
   const attori = classifica("attore");
   const ordine = [film[0], generi[0], registi[0], film[1], attori[0], generi[1], attori[1], film[2], registi[1]];
   const visti = new Set();
-  const cap = (x) => {
-    const elenco = [...x.chi.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-    if (x.n.type === "film") {
-      const primi = elenco.slice(0, 3).map(([nome, v]) => `${nomeVisto(nome)} ${v.toFixed(1)}`);
-      const resto = elenco.length - primi.length;
-      return { titolo: `Amato da ${x.persone} · ${x.n.label}`, sotto: primi.join(" · ") + (resto > 0 ? ` · +${resto}` : "") };
-    }
-    const [primo, k] = elenco[0];
-    return { titolo: `${nomeTipo[x.n.type]} che piace a ${x.persone} · ${x.n.label}`, sotto: `Il più fedele: ${nomeVisto(primo)} (${k} film)` };
-  };
+  const ruolo = { film: "Tra i più amati dal gruppo", genere: "Un genere in comune", regista: "Un regista in comune", attore: "Un attore in comune" };
+  const cap = (x) => ({ tipo: ruolo[x.n.type], titolo: x.n.label });
   return ordine.filter(x => x && !visti.has(x.n.id) && visti.add(x.n.id)).slice(0, TOUR_MAX_TAPPE).map(x => ({ id: x.n.id, cap: cap(x) }));
-}
-
-function tourTappePersone() {
-  if (!net || index.byPerson.size < 2) return [];
-  const gente = [...index.byPerson.keys()]
-    .map(nome => ({ nome, n: net.nodes.get(`persona:${nome}`) }))
-    .filter(x => x.n)
-    .sort((a, b) => (b.n.meta.liked || 0) - (a.n.meta.liked || 0) || a.nome.localeCompare(b.nome))
-    .slice(0, TOUR_MAX_TAPPE);
-  const cap = (x) => {
-    const generi = (x.n.meta.topGenres || []).slice(0, 2).map(g => g.genere);
-    const top = [...(index.byPerson.get(x.nome) || [])]
-      .sort((a, b) => b.w - a.w || String(a.id).localeCompare(String(b.id)))[0];
-    const titoloTop = top ? index.films.get(top.id)?.title : "";
-    return {
-      titolo: nomeVisto(x.nome),
-      sotto: `${titoliIn(x.n.meta.liked || 0)}${generi.length ? ` · soprattutto ${generi.join(" e ")}` : ""}${titoloTop ? ` · voto più alto: ${titoloTop}` : ""}`
-    };
-  };
-  return gente.map(x => ({ id: x.n.id, cap: cap(x) }));
 }
 
 // I tour disponibili adesso (con almeno due tappe), per il menu del pulsante.
@@ -1832,8 +1804,7 @@ function tourModi() {
   const mioNome = radice?.type === "persona" ? net.rootId.slice("persona:".length) : "";
   const modi = [
     { id: "mio", etichetta: mioNome && mioNome === ctx?.currentUser ? "Il mio" : `Di ${nomeVisto(mioNome) || "chi guardi"}`, tappe: tourTappeMie() },
-    { id: "gruppo", etichetta: "Del gruppo", tappe: tourTappeGruppo() },
-    { id: "persone", etichetta: "Persona per persona", tappe: tourTappePersone() }
+    { id: "gruppo", etichetta: "Del gruppo", tappe: tourTappeGruppo() }
   ];
   return modi.filter(m => m.tappe.length >= 2);
 }
@@ -1844,7 +1815,7 @@ function tourMostraDidascalia(d) {
   if (!d) { cap.classList.remove("is-on"); return; }
   cap.classList.remove("hidden");
   cap.querySelector("strong").textContent = d.titolo;
-  cap.querySelector("span").textContent = d.sotto || "";
+  cap.querySelector("span").textContent = d.tipo || "";
   cap.classList.toggle("hidden", false);
   requestAnimationFrame(() => cap.classList.add("is-on"));
 }
@@ -1852,7 +1823,7 @@ function tourMostraDidascalia(d) {
 function tourAggiornaPulsante() {
   const btn = el("dnaTourBtn");
   if (!btn) return;
-  const visibile = inSpaziale() && !!net && tourModi().length > 0;
+  const visibile = !!net && tourModi().length > 0;
   btn.classList.toggle("hidden", !visibile && !tourAttivo);
   btn.classList.toggle("is-on", tourAttivo);
   btn.textContent = tourAttivo ? "Stop" : "Tour";
@@ -1881,13 +1852,40 @@ function fermaTour(torna = true) {
   tourAggiornaPulsante();
 }
 
+// Dal Piatto alla 3D con la rete che "cresce" (vedi spatial.cresci): la vista 3D si
+// accende sopra il Piatto, che svanisce un attimo dopo, e i nodi si aprono in profondità.
+// La scelta (Piatto/3D) non viene salvata: vale per questa sessione.
+async function passaA3DConCrescita() {
+  const zoomPiatto = zoom, px = panX, py = panY;
+  tourPassaggio = true;
+  dnaView = "sphere";
+  const canvas = el("dnaCanvas");
+  applyViewMode();
+  if (net) render();
+  const box = el("dnaSpatial");
+  box?.classList.add("is-entrata");
+  canvas?.classList.remove("hidden");
+  canvas?.classList.add("is-uscita");
+  setTimeout(() => {
+    canvas?.classList.add("hidden"); canvas?.classList.remove("is-uscita"); box?.classList.remove("is-entrata");
+    if (inSpaziale()) { const n = el("dnaNodes"), e = el("dnaEdges"); if (n) n.innerHTML = ""; if (e) e.innerHTML = ""; }
+  }, 350);
+  try { await spatial.cresci({ ms: TOUR_CRESCITA_MS, panX: px, panY: py, zoom: zoomPiatto }); }
+  finally { tourPassaggio = false; }
+}
+
 async function avviaTour(modo = 'mio') {
-  if (tourAttivo || !inSpaziale() || !spatial || !net) return;
+  if (tourAttivo || !spatial || !net) return;
   const tappe = (tourModi().find(m => m.id === modo) || tourModi()[0])?.tappe || [];
   if (tappe.length < 2) return;
   const mio = ++tourToken;
   tourAttivo = true;
   tourAggiornaPulsante();
+  // Dal Piatto: prima la rete diventa 3D con l'effetto a crescita, poi parte il tour.
+  if (!inSpaziale()) {
+    await passaA3DConCrescita();
+    if (mio !== tourToken) return;
+  }
   const attesa = ms => new Promise(r => { clearTimeout(tourTimer); tourTimer = setTimeout(r, ms); });
 
   let prec = null;
@@ -1916,7 +1914,7 @@ async function avviaTour(modo = 'mio') {
   }
   if (mio !== tourToken) return;
   // Finale: tutta la rete e un giro completo attorno.
-  tourMostraDidascalia({ titolo: "La rete intera", sotto: "Un giro completo" });
+  tourMostraDidascalia({ tipo: "La rete intera", titolo: "Un giro completo" });
   tourMostraPannello(focusId);   // il pannello torna al nodo attivo
   spatial.tourRuota(TOUR_ROTAZIONE_MS);
   await attesa(TOUR_ROTAZIONE_MS + 400);
@@ -1975,7 +1973,7 @@ function bindTour() {
   // Quel tocco serve solo a fermarlo: il click che ne segue non deve aprire
   // o chiudere il nodo sotto il dito.
   let ignoraClick = false;
-  const box = el("dnaSpatial");
+  const box = el("dnaStage");
   box?.addEventListener("pointerdown", e => {
     // Il menu del Tour si chiude toccando altrove (il tocco prosegue normalmente).
     if (!e.target.closest("#dnaTourMenu, #dnaTourBtn")) tourChiudiMenu();
@@ -2009,7 +2007,7 @@ function bindViewToggle() {
 }
 
 function applyViewMode() {
-  if (tourAttivo) fermaTour(false);
+  if (tourAttivo && !tourPassaggio) fermaTour(false);
   for (const btn of document.querySelectorAll("#dnaViewToggle [data-dna-view]")) {
     const on = btn.dataset.dnaView === dnaView;
     btn.classList.toggle("active", on);

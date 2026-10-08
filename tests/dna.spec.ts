@@ -1229,9 +1229,10 @@ test("3D: il Tour parte dalla rete aperta, viaggia senza salti e si ferma con un
   await avviaTourModo(page, "Il mio");
   await expect(page.locator("#dnaTourBtn")).toHaveText("Stop");
   await expect(page.locator("#dnaTourCap")).toHaveClass(/is-on/, { timeout: 6000 });
-  const testo = await page.locator("#dnaTourCap strong").textContent();
-  expect(testo, "la didascalia della tappa è vuota").toBeTruthy();
-  expect(testo, "il tour non parte dal nodo dell'utente").toMatch(/^Si parte da /);
+  const nome = await page.locator("#dnaTourCap strong").textContent();
+  const ruolo = await page.locator("#dnaTourCap span").textContent();
+  expect(nome, "la didascalia della tappa è vuota").toBeTruthy();
+  expect(ruolo, "il tour non parte dal nodo dell'utente").toMatch(/^Si parte da /);
   // ...e la camera è finita sul suo nodo: la radice è al centro del riquadro.
   const dRadice = await page.evaluate(() => {
     const c = document.getElementById("dnaSpatial")!.getBoundingClientRect();
@@ -1287,17 +1288,17 @@ test("3D: il Tour finisce da solo con la rete intera e torna al pulsante", async
   await page.evaluate(() => (document.querySelector("#dnaSpatial .dna-node.is-root .dna-node__more") as HTMLElement | null)?.click());
   await page.waitForTimeout(900);
   await avviaTourModo(page, "Il mio");
-  await expect(page.locator("#dnaTourCap strong")).toHaveText("La rete intera", { timeout: 40_000 });
+  await expect(page.locator("#dnaTourCap span")).toHaveText("La rete intera", { timeout: 40_000 });
   await expect(page.locator("#dnaTourBtn")).toHaveText("Tour", { timeout: 20_000 });
   await expect(page.locator("#dnaTourCap")).not.toHaveClass(/is-on/);
   expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
 });
 
 
-// Tour del gruppo e persona per persona: il pannello in basso segue la tappa e
+// Tour del gruppo: il pannello in basso segue la tappa e
 // racconta chi ama cosa, senza cambiare né il nodo attivo né il percorso; il tour
 // "mio" include almeno un attore.
-test("3D: i tour del gruppo e persona per persona, con il pannello che segue la tappa", async ({ page }) => {
+test("3D: il tour del gruppo (pannello che segue la tappa, didascalia senza dati ripetuti) e il tour mio con un attore", async ({ page }) => {
   test.setTimeout(240_000);
   const scritture = soloLettura(page);
   const guasti = osserva(page);
@@ -1328,16 +1329,17 @@ test("3D: i tour del gruppo e persona per persona, con il pannello che segue la 
   await page.locator("#dnaTourBtn").click();
   const voci = await page.locator("#dnaTourMenu button").allTextContents();
   expect(voci, "mancano le modalità del tour").toEqual(expect.arrayContaining(["Il mio", "Del gruppo"]));
+  expect(voci, "\"Persona per persona\" non c'è più").not.toContain("Persona per persona");
 
   // Del gruppo: parte da un film amato da più persone e il pannello è quello della tappa.
   await page.locator("#dnaTourMenu button", { hasText: "Del gruppo" }).click();
   await expect(page.locator("#dnaTourCap")).toHaveClass(/is-on/, { timeout: 10_000 });
-  const titolo = (await page.locator("#dnaTourCap strong").textContent())!;
-  expect(titolo, "il tour del gruppo non parla di quante persone amano il nodo").toMatch(/^Amato da \d+|che piace a \d+/);
-  const sotto = (await page.locator("#dnaTourCap span").textContent())!;
-  expect(sotto.length, "manca chi lo ama e con che voto").toBeGreaterThan(5);
+  const ruoloG = (await page.locator("#dnaTourCap span").textContent())!;
+  const nomeTappa = (await page.locator("#dnaTourCap strong").textContent())!;
+  expect(ruoloG, "il tour del gruppo non dice che tappa è").toMatch(/gruppo|in comune/);
+  // La didascalia non ripete ciò che dice il pannello (voti, quante persone): solo ruolo e nome.
+  expect(`${ruoloG} ${nomeTappa}`, "la didascalia ripete voti o conteggi del pannello").not.toMatch(/\d/);
   const pannello = (await page.locator("#dnaPanel strong").first().textContent())!;
-  const nomeTappa = titolo.split(" · ")[1];
   expect(pannello, "il pannello non segue la tappa").toContain(nomeTappa.slice(0, 12));
   expect(await page.locator("#dnaPanel .dna-fan, #dnaPanel .dna-fans").count(), "il pannello non mostra chi lo ama").toBeGreaterThan(0);
   expect(await page.locator("#dnaPanel .dna-path").count(), "il percorso compare nel pannello del tour").toBe(0);
@@ -1345,18 +1347,6 @@ test("3D: i tour del gruppo e persona per persona, con il pannello che segue la 
   await expect(page.locator("#dnaTourBtn")).toHaveText("Tour");
   expect(await page.locator("#dnaSpatial .dna-node.is-focus").getAttribute("data-node"), "il tour ha cambiato il nodo attivo").toBe(focusPrima);
   expect(await page.locator("#dnaPanel .dna-path").count(), "il tour ha cambiato il percorso").toBe(percorsoPrima);
-
-  // Persona per persona: una tappa per persona, con il suo nome.
-  await page.locator("#dnaTourBtn").click();
-  if (voci.includes("Persona per persona")) {
-    await page.locator("#dnaTourMenu button", { hasText: "Persona per persona" }).click();
-    await expect(page.locator("#dnaTourCap")).toHaveClass(/is-on/, { timeout: 10_000 });
-    expect(await page.locator("#dnaTourCap span").textContent(), "la tappa di una persona non dice i suoi titoli").toMatch(/titol/);
-    await page.locator("#dnaTourBtn").click();
-    await expect(page.locator("#dnaTourBtn")).toHaveText("Tour");
-  } else {
-    await page.locator("#dnaTourBtn").click();   // chiude il menu
-  }
 
   // Il tour "mio" include almeno un attore (l'ho letto dalle didascalie, tutte).
   await page.locator("#dnaTourBtn").click();
@@ -1366,7 +1356,7 @@ test("3D: i tour del gruppo e persona per persona, con il pannello che segue la 
   while ((await page.locator("#dnaTourBtn").textContent()) === "Stop" && Date.now() - t0 < 110_000) {
     const c = await page.evaluate(() => {
       const el = document.getElementById("dnaTourCap")!;
-      return el.classList.contains("is-on") ? el.querySelector("strong")!.textContent! : "";
+      return el.classList.contains("is-on") ? el.querySelector("span")!.textContent! : "";
     });
     if (c && !viste.includes(c)) viste.push(c);
     await page.waitForTimeout(300);
@@ -1375,6 +1365,56 @@ test("3D: i tour del gruppo e persona per persona, con il pannello che segue la 
   expect(viste.some(v => /regista/.test(v)), "nel tour \"mio\" manca un regista").toBe(true);
   expect(viste.some(v => /genere/.test(v)), "nel tour \"mio\" manca un genere").toBe(true);
 
+  expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
+  expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
+});
+
+
+// Il Tour parte anche dal Piatto: la rete diventa 3D con un effetto a crescita (parte
+// dalle posizioni del Piatto, non a scatto) e poi comincia il tour.
+test("Piatto: il Tour trasforma la rete in 3D con un effetto a crescita e poi parte", async ({ page }) => {
+  const scritture = soloLettura(page);
+  const guasti = osserva(page);
+  await entra(page);
+  await vaiA(page, "tonight");
+  await page.locator("#dnaNodes .dna-node.is-root").waitFor({ state: "visible", timeout: 30_000 });
+  await toccaNodo(page, ".dna-node.is-root");
+  for (let i = 0; i < 2; i++) {
+    await page.evaluate(() => (document.querySelector("#dnaNodes .dna-node.is-focus .dna-node__more, #dnaNodes .dna-node.is-root .dna-node__more") as HTMLElement | null)?.click());
+    await page.waitForTimeout(800);
+  }
+  await expect(page.locator('#dnaViewToggle [data-dna-view="flat"]')).toHaveClass(/active/);
+  await expect(page.locator("#dnaTourBtn"), "il Tour non c'è nel Piatto").toBeVisible();
+
+  // Le posizioni dei nodi nel Piatto (relative al nodo attivo, che sta al centro).
+  const centro = () => page.evaluate(() => { const c = document.getElementById("dnaStage")!.getBoundingClientRect(); return [c.left + c.width / 2, c.top + c.height / 2]; });
+  const piatto = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll<HTMLElement>("#dnaNodes .dna-node")]
+    .map(n => { const r = n.getBoundingClientRect(); return [n.dataset.node!, [r.left + r.width / 2, r.top + r.height / 2]]; })));
+  void centro;
+  await avviaTourModo(page, "Il mio");
+  await page.waitForTimeout(60);
+  // Appena parte, la 3D è ancora quasi identica al Piatto: i nodi sono dove stavano.
+  const subito = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll<HTMLElement>("#dnaSpatial .dna-node")]
+    .filter(n => n.style.display !== "none").map(n => { const r = n.getBoundingClientRect(); return [n.dataset.node!, [r.left + r.width / 2, r.top + r.height / 2]]; })));
+  const comuni = Object.keys(subito).filter(k => piatto[k]);
+  const vicini = comuni.filter(k => Math.hypot(subito[k][0] - piatto[k][0], subito[k][1] - piatto[k][1]) < 40).length;
+  expect(comuni.length, "la 3D non mostra i nodi del Piatto").toBeGreaterThan(4);
+  expect(vicini / comuni.length, "all'inizio la 3D non riparte dal Piatto (salto)").toBeGreaterThan(0.6);
+
+  // Dopo, la rete si apre in 3D e il tour parte dal tuo nodo.
+  await expect(page.locator('#dnaViewToggle [data-dna-view="sphere"]')).toHaveClass(/active/);
+  await expect(page.locator("#dnaCanvas")).toHaveClass(/hidden/, { timeout: 3000 });
+  await expect(page.locator("#dnaTourCap span")).toHaveText(/^Si parte da /, { timeout: 8000 });
+  await expect(page.locator("#dnaTourBtn")).toHaveText("Stop");
+  const dopo = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll<HTMLElement>("#dnaSpatial .dna-node")]
+    .filter(n => n.style.display !== "none").map(n => { const r = n.getBoundingClientRect(); return [n.dataset.node!, [r.left + r.width / 2, r.top + r.height / 2]]; })));
+  const spostati = Object.keys(dopo).filter(k => piatto[k] && Math.hypot(dopo[k][0] - piatto[k][0], dopo[k][1] - piatto[k][1]) > 25).length;
+  expect(spostati, "la rete non si è aperta in 3D (nodi ancora nelle posizioni del Piatto)").toBeGreaterThan(3);
+
+  // Stop: si resta in 3D, la scelta non viene salvata.
+  await page.locator("#dnaTourBtn").click();
+  await expect(page.locator("#dnaTourBtn")).toHaveText("Tour");
+  expect(await page.evaluate(() => localStorage.getItem("cinefighiDnaView")), "il Tour ha cambiato la vista salvata").not.toBe("sphere");
   expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
   expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
 });

@@ -153,7 +153,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
   const pos3 = new Map();       // id -> { x, y, z }: posizioni della vista Sfera
   const vis = new Map();        // id -> { h, th, grow, dom, cache }
   const edgeDom = new Map();    // "a|b" -> <line>
-  const cam = { x: 0, y: 0, z: 0, tx: 0, ty: 0, tz: 0, cz: 0, tcz: 0, yaw: 0, pitch: 0, tyaw: 0, tpitch: 0, wyaw: 0, wpitch: 0, vx: 0, vy: 0, q: Q_ID, tq: Q_ID, M: eulerMat(0, 0), spin: 0, viaggio: null };
+  const cam = { x: 0, y: 0, z: 0, tx: 0, ty: 0, tz: 0, cz: 0, tcz: 0, yaw: 0, pitch: 0, tyaw: 0, tpitch: 0, wyaw: 0, wpitch: 0, vx: 0, vy: 0, q: Q_ID, tq: Q_ID, M: eulerMat(0, 0), spin: 0, viaggio: null, crescita: null };
   let W = 0, H = 0;
   let dragged = false;
 
@@ -468,6 +468,22 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       clampCam();
       moving = true;
     }
+    // Crescita dal Piatto alla 3D: i nodi passano dalle posizioni piatte a quelle della
+    // sfera, la camera (partita dalla vista del Piatto) li segue e la scena si inclina un
+    // po' e si riassesta, così la profondità si vede nascere.
+    if (cam.crescita) {
+      const c = cam.crescita, u = Math.max(0, Math.min(1, (now - c.t0) / c.dur));
+      const e = u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
+      mixG = e;
+      const f = mixPos(focusId);
+      cam.tx = cam.x = f.x - (1 - e) * c.panX;
+      cam.ty = cam.y = f.y - (1 - e) * c.panY;
+      cam.tcz = cam.cz = f.z;
+      cam.tz = cam.z = c.zStart + (c.tzFinale - c.zStart) * e;
+      cam.q = cam.tq = qSlerp(Q_ID, c.swing, Math.sin(Math.PI * e));
+      moving = true;
+      if (u >= 1) { mixG = 1; cam.crescita = null; cam.q = cam.tq = Q_ID; c.fine?.(); }
+    }
     // Viaggio del tour: la camera si sposta in modo continuo (partenza e arrivo
     // dolci) dal punto in cui è fino al nodo di destinazione, quindi le locandine
     // che stanno in mezzo le scorrono davanti. Scrive sia la posizione sia il suo
@@ -545,13 +561,27 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     if (moving) raf = requestAnimationFrame(frame);
   }
 
+  // Posizione di un nodo mentre la rete "cresce" dal Piatto alla sfera: parte da dove
+  // stava nel Piatto (x, y della rete piatta, a profondità zero) e arriva alla sua
+  // posizione sulla sfera.
+  function mixPos(id) {
+    const n = net.nodes.get(id), q0 = pos3.get(id) || { x: 0, y: 0, z: 0 };
+    return n ? mixQ(n, q0) : q0;
+  }
+  function mixQ(nodo, q0) {
+    if (mixG >= 1) return q0;
+    const fx = nodo.x ?? q0.x, fy = nodo.y ?? q0.y;
+    return { x: fx + (q0.x - fx) * mixG, y: fy + (q0.y - fy) * mixG, z: q0.z * mixG };
+  }
+
   function project(n, v) {
     const p = n.parent && net.nodes.get(n.parent);
     const e = 1 - Math.pow(1 - v.grow, 3);            // i nuovi escono dal genitore
     let wx, wy, dz;
     if (sfera) {
-      const q = pos3.get(n.id), pq = p && pos3.get(p.id);
-      if (!q) return { x: 0, y: 0, s: 0, z: 0, dietro: true };
+      const q0 = pos3.get(n.id);
+      if (!q0) return { x: 0, y: 0, s: 0, z: 0, dietro: true };
+      const q = mixQ(n, q0), pq0 = p && pos3.get(p.id), pq = pq0 ? mixQ(p, pq0) : null;
       wx = pq ? pq.x + (q.x - pq.x) * e : q.x;
       wy = pq ? pq.y + (q.y - pq.y) * e : q.y;
       dz = (pq ? pq.z + (q.z - pq.z) * e : q.z) - cam.cz;      // la profondità è la posizione vera
@@ -570,7 +600,14 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     const s = F / denom;
     // La posizione segue la prospettiva piena; la GRANDEZZA del nodo ha un tetto
     // in orbita: un nodo molto vicino non deve coprire quelli attorno.
-    return { x: W / 2 + dx * s, y: H / 2 + dy * s, s: orbit ? Math.max(NODE_MIN, Math.min(NODE_MAX, Math.min(s, S_MAX_ORBIT) * NODE_K)) * nodeZoom * nodeK : s, z };
+    return { x: W / 2 + dx * s, y: H / 2 + dy * s, s: orbit ? dimensione(s, nodeZoom) : s, z };
+  }
+
+  // Grandezza del nodo in 3D; durante la crescita parte da quella del Piatto (la scala
+  // dello zoom di allora) e arriva a quella normale.
+  function dimensione(s, nodeZoom) {
+    const normale = Math.max(NODE_MIN, Math.min(NODE_MAX, Math.min(s, S_MAX_ORBIT) * NODE_K)) * nodeZoom * nodeK;
+    return mixG < 1 && cam.crescita ? cam.crescita.zoom + (normale - cam.crescita.zoom) * mixG : normale;
   }
 
   function draw() {
@@ -634,6 +671,9 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
   // Il nodo su cui sta andando il tour emerge mentre la camera si avvicina: in
   // primo piano, pieno, un po' più grande, con un alone. id -> { k (attuale), kT (destinazione) }.
   const enfasi = new Map();
+  // Dal Piatto alla 3D (vedi cresci): quanto la rete è già "3D" (0 = com'è nel Piatto,
+  // 1 = sfera), e la sua animazione.
+  let mixG = 1;
   let nodeK = 1, nodeKT = 1; // grandezza dei nodi nel giro finale del tour (più piccoli: la rete intera è fitta), corrente e di destinazione
   let viaggio = 0;
   function volo(px, py, pz) {
@@ -669,7 +709,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     : { mode: "pan", x0: x, y0: y, cx: cam.tx, cy: cam.ty, lx: x, ly: y, lt: performance.now() };
 
   container.addEventListener("pointerdown", e => {
-    if (e.button > 0 || !net || !active || e.target.closest(".dna-spatial__tour, .dna-spatial__tourmenu")) return;
+    if (e.button > 0 || !net || !active) return;
     pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
     pointersDown = pts.size;
     if (pts.size === 1) {
@@ -823,7 +863,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       gesture = null;
       // Il click arriva dopo il pointerup: il flag deve sopravvivere fino a lì.
       if (dragged) setTimeout(() => { dragged = false; }, 0);
-      else if (!e.target.closest(".dna-node, .dna-spatial__tour, .dna-spatial__tourmenu") && net.nodes.size > 1) doppioTocco();
+      else if (!e.target.closest(".dna-node") && net.nodes.size > 1) doppioTocco();
     }
     kick();
   }
@@ -879,6 +919,32 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       for (const v of vis.values()) v.cache = {};
       risistema();
       kick();
+    },
+    // Dal Piatto alla 3D con un effetto a crescita: la rete parte com'era nel Piatto
+    // (stesse posizioni, stessa grandezza, stessa vista) e si apre in profondità fino
+    // alla sfera. `pan`/`zoom`: la vista del Piatto da cui si parte. Risolve alla fine.
+    cresci({ ms = 1700, panX = 0, panY = 0, zoom = 1 } = {}) {
+      return new Promise(risolvi => {
+        if (!net || !sfera) { risolvi(); return; }
+        layout3d();
+        // Dove arriverà la camera (zoom compreso), calcolato sulla sfera finale.
+        const salva = { tx: cam.tx, ty: cam.ty, tcz: cam.tcz, tz: cam.tz, tq: cam.tq };
+        const f3 = pos3.get(focusId) || { x: 0, y: 0, z: 0 };
+        cam.tx = f3.x; cam.ty = f3.y; cam.tcz = f3.z; cam.tz = 0; cam.tq = Q_ID;
+        inquadra(focusId);
+        const tzFinale = cam.tz;
+        Object.assign(cam, salva);
+        cam.viaggio = null; cam.spin = 0; cam.vx = cam.vy = 0; cam.wyaw = cam.wpitch = 0;
+        const zStart = F - F / Math.max(0.1, zoom);
+        cam.crescita = { t0: performance.now(), dur: ms, panX, panY, zoom, zStart, tzFinale, swing: qNorm(qMul(qAsseX(-0.2), qAsseY(0.55))), fine: risolvi };
+        mixG = 0;
+        // Primo fotogramma: identico al Piatto.
+        const f = mixPos(focusId);
+        cam.tx = cam.x = f.x - panX; cam.ty = cam.y = f.y - panY; cam.tcz = cam.cz = f.z;
+        cam.tz = cam.z = zStart; cam.q = cam.tq = Q_ID; cam.M = qMat(Q_ID);
+        draw();
+        kick();
+      });
     },
     // ── Tour ──
     // Viaggia (piano, in `ms`) fino al nodo e inquadra i suoi collegamenti, senza
@@ -947,6 +1013,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     // Fine del tour. `torna`: la camera rientra piano sul nodo attivo; altrimenti
     // resta dov'è (si è presa la mano), senza scatti.
     tourFine(torna = true) {
+      if (cam.crescita) { cam.crescita = null; mixG = 1; cam.q = cam.tq = Q_ID; }
       for (const f of enfasi.values()) f.kT = 0;
       cam.spin = 0; nodeKT = 1;
       cam.viaggio = null;
