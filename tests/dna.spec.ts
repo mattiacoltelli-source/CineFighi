@@ -1008,3 +1008,47 @@ test("Sfera: il nodo toccato e i suoi collegamenti non vengono mai tagliati", as
   expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
   expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
 });
+
+// Lab 3D: tocco lungo su un nodo = la camera ci vola sopra (diventa il centro)
+// senza aprirlo né cambiare il nodo attivo.
+test("Sfera: il tocco lungo su un nodo ci porta la camera sopra senza aprirlo", async ({ page }) => {
+  const scritture = soloLettura(page);
+  const guasti = osserva(page);
+  await entra(page);
+  await vaiA(page, "tonight");
+  await page.locator("#dnaNodes .dna-node.is-root").waitFor({ state: "visible", timeout: 30_000 });
+  await page.locator('#dnaViewToggle [data-dna-view="sphere"]').click();
+  await page.locator("#dnaSpatial .dna-node.is-root").waitFor({ state: "visible" });
+  await toccaNodo(page, "#dnaSpatial .dna-node.is-root");
+  await page.evaluate(() => (document.querySelector("#dnaSpatial .dna-node.is-root .dna-node__more") as HTMLElement | null)?.click());
+  await page.waitForTimeout(1300);
+
+  const focusPrima = await page.locator("#dnaSpatial .dna-node.is-focus").getAttribute("data-node");
+  const nodiPrima = await page.locator("#dnaSpatial .dna-node").count();
+  const id = await page.evaluate(() => {
+    const c = document.getElementById("dnaSpatial")!.getBoundingClientRect();
+    const d = (x: Element) => { const r = x.getBoundingClientRect(); return Math.hypot(r.left + r.width / 2 - c.left - c.width / 2, r.top + r.height / 2 - c.top - c.height / 2); };
+    return [...document.querySelectorAll<HTMLElement>("#dnaSpatial .dna-node")]
+      .filter(n => n.style.display !== "none" && !n.classList.contains("is-focus") && +(n.style.opacity || 1) > 0.5)
+      .sort((a, b) => d(b) - d(a))[0]?.dataset.node;
+  });
+  expect(id).toBeTruthy();
+  const b = (await page.locator(`#dnaSpatial [data-node="${id}"]`).boundingBox())!;
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+  await page.mouse.down();
+  await page.waitForTimeout(700);
+  await page.mouse.up();
+  await page.waitForTimeout(1300);
+
+  const dist = await page.evaluate((i) => {
+    const c = document.getElementById("dnaSpatial")!.getBoundingClientRect();
+    const r = document.querySelector(`#dnaSpatial [data-node="${i}"]`)!.getBoundingClientRect();
+    return Math.hypot(r.left + r.width / 2 - c.left - c.width / 2, r.top + r.height / 2 - c.top - c.height / 2);
+  }, id);
+  expect(dist, "il tocco lungo non ha portato il nodo al centro").toBeLessThan(40);
+  expect(await page.locator("#dnaSpatial .dna-node.is-focus").getAttribute("data-node"), "il tocco lungo ha cambiato il nodo attivo").toBe(focusPrima);
+  expect(await page.locator("#dnaSpatial .dna-node").count(), "il tocco lungo ha aperto nodi").toBe(nodiPrima);
+
+  expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
+  expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
+});

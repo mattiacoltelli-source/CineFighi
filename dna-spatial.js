@@ -54,9 +54,12 @@ const FLATTEN = 0.75;                        // in panoramica la profondità si 
 const LABEL_MIN_SCALE = .62;                 // sotto, l'etichetta sarebbe illeggibile
 const Z_MIN = -1500, Z_MAX = 170;
 const Z_MIN_ORBIT = -3600;                   // in orbita si può allontanarsi molto di più: la veduta d insieme
-const MARGINE_X = 64, MARGINE_Y = 120;        // spazio da lasciare ai bordi (e al pannello in basso)
+const MARGINE_X = 64, MARGINE_Y = 150;        // spazio da lasciare ai bordi (e al pannello in basso)
+const LONG_MS = 420;                          // tocco lungo su un nodo = ci si vola sopra
 const DIP_MAX = 340;                         // quanto si allarga la camera a metà di un volo tra nodi
-const S_FIT_MIN = 0.4;                       // quanto si può rimpicciolire per far stare un nodo aperto per intero
+const S_TARGET = 0.9;                        // scala a cui devono stare i collegamenti di un nodo (grandezza quasi normale)
+const S_FIT_MIN_PIATTA = 0.4;                 // "3D" usa il layout piatto di dna.js, che non si può comprimere: lì ci si allarga di più
+const S_FIT_MIN = 0.8;                       // quanto si può rimpicciolire per far stare un nodo aperto per intero
 const RAGGIO_SFERA = 1.7;                    // la sfera si apre più larga del ventaglio piatto
 const MAX_TILT = 0.14;                       // ~8°
 const DRAG_THRESHOLD = 8;                    // come la vista piatta
@@ -123,8 +126,14 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
   });
 
   function layout3d() {
+    if (W < 100 || H < 100) return;   // non ancora misurato: l'ellissoide dipende dalla misura
     if (!pos3.has(net.rootId)) pos3.set(net.rootId, { x: 0, y: 0, z: 0 });
     const R = radius() * RAGGIO_SFERA;
+    // La sfera è un ellissoide adattato allo schermo: ai lati c'è poco posto
+    // (telefono in verticale), sopra e sotto molto di più. I collegamenti di un
+    // nodo stanno così dentro lo schermo a grandezza normale, senza rimpicciolirli.
+    const kx = Math.max(0.35, Math.min(1, (W / 2 - MARGINE_X) / S_TARGET / R));
+    const ky = Math.max(0.5, Math.min(1, (H / 2 - MARGINE_Y) / S_TARGET / R));
     for (const n of net.nodes.values()) {
       if (pos3.has(n.id)) continue;
       const pp = pos3.get(n.parent) || pos3.get(net.rootId);
@@ -137,7 +146,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       let best = null, bestD = -1;
       for (const d of DIREZIONI) {
         if (fuori && d[0] * fuori[0] + d[1] * fuori[1] + d[2] * fuori[2] < -0.1) continue;
-        const x = pp.x + d[0] * R, y = pp.y + d[1] * R, z = pp.z + d[2] * R * Z_SCHIACCIATA;
+        const x = pp.x + d[0] * R * kx, y = pp.y + d[1] * R * ky, z = pp.z + d[2] * R * Z_SCHIACCIATA;
         let m = Infinity;
         for (const q of pos3.values()) { const dd = Math.hypot(q.x - x, q.y - y, q.z - z); if (dd < m) m = dd; }
         if (m > bestD) { bestD = m; best = { x, y, z }; }
@@ -277,7 +286,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       }
       return true;
     };
-    const limite = F + fp - F / S_FIT_MIN;   // tz a cui la scala del fulcro scende a S_FIT_MIN
+    const limite = F + fp - F / (sfera ? S_FIT_MIN : S_FIT_MIN_PIATTA);   // tz a cui la scala del fulcro scende a S_FIT_MIN
     let tz = cam.tz;
     while (!entra(tz) && tz > Math.max(zMin(), limite)) tz -= 40;
     cam.tz = Math.max(tz, Math.max(zMin(), limite));
@@ -467,6 +476,29 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
   });
 
   let viaggio = 0;
+  function volo(px, py, pz) {
+    const dist = Math.hypot(cam.tx - px, cam.ty - py, sfera ? cam.tcz - pz : 0);
+    const dip = Math.min(DIP_MAX, dist * 0.45);
+    if (dip <= 30) return;
+    const tzFinale = cam.tz, gettone = ++viaggio;
+    cam.tz = Math.max(zMin(), tzFinale - dip);
+    setTimeout(() => { if (gettone === viaggio) { cam.tz = tzFinale; kick(); } }, 260);
+  }
+  // Tocco lungo su un nodo (orbita): ci voli sopra senza aprirlo, e da lì
+  // ruoti e navighi. Il tocco breve resta quello di sempre.
+  let longTimer = 0;
+  const finePressione = () => { clearTimeout(longTimer); longTimer = 0; };
+  function voloSu(id) {
+    const w = worldPos(id);
+    if (!w) return;
+    const px = cam.tx, py = cam.ty, pz = cam.tcz;
+    cam.tx = w.x; cam.ty = w.y; if (sfera) cam.tcz = w.z;
+    cam.vx = cam.vy = 0;
+    clampCam();
+    volo(px, py, pz);
+    try { navigator.vibrate?.(12); } catch {}
+    kick();
+  }
   const pts = new Map();
   let gesture = null, ultimoTocco = 0;
 
@@ -485,10 +517,21 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       gesture = nuovoGesto(e.clientX, e.clientY);
       gesture.nodo = orbit ? e.target.closest?.(".dna-node")?.dataset.node || null : null;
       cam.vx = cam.vy = 0;
+      finePressione();
+      if (gesture.nodo && gesture.nodo !== focusId) {
+        const g = gesture;
+        longTimer = setTimeout(() => {
+          longTimer = 0;
+          if (gesture !== g || g.nodo === null || dragged) return;
+          dragged = true; g.lungo = true;    // sopprime il click che segue
+          voloSu(g.nodo); g.nodo = null;
+        }, LONG_MS);
+      }
     } else if (pts.size === 2) {
       const [p, q] = [...pts.values()];
       dragged = true;
       const r0 = container.getBoundingClientRect();
+      finePressione();
       gesture = { mode: "pinch", d0: Math.hypot(p.x - q.x, p.y - q.y) || 1, s0: scaleAtCam(cam.tz),
         mx0: (p.x + q.x) / 2, my0: (p.y + q.y) / 2, tx0: cam.tx, ty0: cam.ty, rx: r0.left + W / 2, ry: r0.top + H / 2 };
       try { container.setPointerCapture(e.pointerId); } catch {}
@@ -523,10 +566,11 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       return;
     }
     if (gesture.mode === "orbit") {
-      if (net.nodes.size <= 1) return;   // un nodo solo: niente da girare
+      if (net.nodes.size <= 1 || gesture.lungo) return;   // un nodo solo: niente da girare
       const ox = e.clientX - gesture.x0, oy = e.clientY - gesture.y0;
       if (!dragged) {
         if (Math.hypot(ox, oy) < DRAG_THRESHOLD) return;
+        finePressione();
         dragged = true;
         try { container.setPointerCapture(e.pointerId); } catch {}
       }
@@ -581,6 +625,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
   function endPointer(e) {
     if (!pts.has(e.pointerId)) return;
     pts.delete(e.pointerId);
+    finePressione();
     try { container.releasePointerCapture(e.pointerId); } catch {}
     pointersDown = pts.size;
     if (pts.size === 1 && gesture?.mode === "pinch") {
@@ -631,15 +676,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       aimAt(focusId, newIds || []);
       // Volo da un nodo all'altro: a metà strada la camera si allarga un po'
       // (si vede dove si va) e poi si riavvicina, invece di scivolare in piano.
-      if (orbit && !snap && prevFocus !== focusId) {
-        const dist = Math.hypot(cam.tx - prevTx, cam.ty - prevTy, sfera ? cam.tcz - prevTcz : 0);
-        const dip = Math.min(DIP_MAX, dist * 0.45);
-        if (dip > 30) {
-          const tzFinale = cam.tz, gettone = ++viaggio;
-          cam.tz = Math.max(zMin(), tzFinale - dip);
-          setTimeout(() => { if (gettone === viaggio) { cam.tz = tzFinale; kick(); } }, 260);
-        }
-      }
+      if (orbit && !snap && prevFocus !== focusId) volo(prevTx, prevTy, prevTcz);
       if (snap) { cam.x = cam.tx; cam.y = cam.ty; cam.cz = cam.tcz; draw(); }
       kick();
     },
