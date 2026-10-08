@@ -1548,3 +1548,53 @@ test("3D: aprendo molti nodi le locandine non si accavallano", async ({ page }) 
   expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
   expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
 });
+
+
+// Tour "Da qui": parte dal nodo attivo (qui un regista) e si allarga con le sue cose: un solo
+// genere, un solo attore, il resto film, senza un secondo regista. Sulla radice non c'è
+// (sarebbe uguale a "Il mio").
+test("3D: il Tour \"Da qui\" parte dal nodo attivo e si allarga con le sue cose", async ({ page }) => {
+  test.setTimeout(180_000);
+  const guasti = osserva(page);
+  const scritture = soloLettura(page);
+  await entra(page);
+  await vaiA(page, "tonight");
+  await page.locator("#dnaNodes .dna-node.is-root").waitFor({ state: "visible", timeout: 30_000 });
+  await page.locator('#dnaViewToggle [data-dna-view="sphere"]').click();
+  await page.locator("#dnaSpatial .dna-node.is-root").waitFor({ state: "visible" });
+  await toccaNodo(page, "#dnaSpatial .dna-node.is-root");
+  for (let i = 0; i < 3; i++) {
+    await page.evaluate(() => (document.querySelector("#dnaSpatial .dna-node.is-root .dna-node__more") as HTMLElement | null)?.click());
+    await page.waitForTimeout(800);
+  }
+  // Sulla radice il menu non propone "Da qui".
+  await page.locator("#dnaTourBtn").click();
+  await page.locator("#dnaTourMenu button").first().waitFor({ state: "visible", timeout: 3000 });
+  expect(await page.locator("#dnaTourMenu button", { hasText: "Da qui" }).count(), "\"Da qui\" compare sulla radice").toBe(0);
+  await page.locator("#dnaTourBtn").click();   // chiude il menu
+  // Si attiva un regista e il menu propone "Da qui · <regista>".
+  const regista = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>("#dnaSpatial .dna-node")]
+    .find(n => n.style.display !== "none" && n.dataset.node!.startsWith("regista:"))?.dataset.node);
+  test.skip(!regista, "nessun regista nella rete aperta");
+  await toccaNodo(page, `#dnaSpatial [data-node="${regista}"]`);
+  await page.waitForTimeout(1200);
+  await avviaTourModo(page, "Da qui");
+  const tappe: string[] = [];
+  const t0 = Date.now();
+  while ((await page.locator("#dnaTourBtn").textContent()) === "Stop" && Date.now() - t0 < 150_000) {
+    const c = await page.evaluate(() => {
+      const el = document.getElementById("dnaTourCap")!;
+      return el.classList.contains("is-on") ? `${el.querySelector("span")!.textContent} | ${el.querySelector("strong")!.textContent}` : "";
+    });
+    if (c && !tappe.includes(c)) tappe.push(c);
+    await page.waitForTimeout(300);
+  }
+  const ruolo = (t: string) => t.split(" | ")[0];
+  expect(ruolo(tappe[0] ?? ""), `il tour non parte dal regista:\n${tappe.join("\n")}`).toBe("Si parte dal regista");
+  expect(tappe.filter(t => /regista ricorrente/.test(ruolo(t))).length, `un secondo regista:\n${tappe.join("\n")}`).toBe(0);
+  expect(tappe.filter(t => /genere ricorrente/.test(ruolo(t))).length, `più di un genere:\n${tappe.join("\n")}`).toBeLessThanOrEqual(1);
+  expect(tappe.filter(t => /attore ricorrente/.test(ruolo(t))).length, `più di un attore:\n${tappe.join("\n")}`).toBeLessThanOrEqual(1);
+  expect(tappe.filter(t => /Dello stesso regista|^Con /.test(ruolo(t))).length, `pochi film:\n${tappe.join("\n")}`).toBeGreaterThanOrEqual(3);
+  expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
+  expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
+});

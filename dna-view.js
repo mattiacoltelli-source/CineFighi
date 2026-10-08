@@ -1740,11 +1740,11 @@ function tourAttoreConFilm(candidati, film, tutti, genereId, registaId) {
   return { attore: candidati[0] || null, filmDi: null };
 }
 
-function tourTappeMie() {
+function tourTappeMie(radiceId = net?.rootId) {
   if (!net || net.nodes.size < 6) return [];
-  const radice = net.nodes.get(net.rootId);
+  const radice = net.nodes.get(radiceId);
   if (!radice || radice.type !== "persona") return [];
-  const nome = net.rootId.slice("persona:".length);
+  const nome = radiceId.slice("persona:".length);
   const miei = index.byPerson.get(nome) || [];            // [{ id: filmKey, w: voto }]
   const mioVoto = new Map(miei.map(e => [e.id, e.w]));
   // Per ogni genere / regista / attore: quanti dei miei film ci stanno dentro.
@@ -1757,7 +1757,7 @@ function tourTappeMie() {
     if (f.director) somma(tally.regista, f.director, 1);
     for (const a of f.cast || []) somma(tally.attore, a, 1);
   }
-  const distanza = hopsFrom(net, net.rootId);
+  const distanza = hopsFrom(net, radiceId);
   const chiave = (n) => n.id.slice(n.type.length + 1);
   const classifica = (tipo, maxHops = 2) => [...net.nodes.values()]
     .filter(n => n.type === tipo && (distanza.get(n.id) ?? 99) <= maxHops)
@@ -1794,7 +1794,7 @@ function tourTappeMie() {
     }
   };
   return [
-    { id: net.rootId, cap: { tipo: io ? "Si parte da te" : `Si parte da ${nomeVisto(nome)}`, titolo: radice.label } },
+    { id: radiceId, cap: { tipo: io ? "Si parte da te" : `Si parte da ${nomeVisto(nome)}`, titolo: radice.label } },
     ...scelte.map(t => ({ id: t.id, cap: cap(t) }))
   ];
 }
@@ -1837,6 +1837,72 @@ function tourTappeGruppo() {
   return ordine.filter(x => x && x.n && !visti.has(x.n.id) && visti.add(x.n.id)).slice(0, TOUR_MAX_TAPPE).map(x => ({ id: x.n.id, cap: cap(x) }));
 }
 
+// "Da qui": il tour parte dal nodo attivo (un film, un genere, un regista, un attore, o un'altra
+// persona) e si allarga con le cose della rete aperta più legate a lui. Come gli altri: un solo
+// genere, un solo regista, un solo attore (il nodo di partenza conta per il suo tipo), il resto
+// film sparsi, e dopo l'attore un film suo.
+function tourTappeDaQui(id) {
+  if (!net || !index || net.nodes.size < 6) return [];
+  const n = net.nodes.get(id);
+  if (!n) return [];
+  if (n.type === "persona") return id === net.rootId ? [] : tourTappeMie(id);
+  const chiave = (x) => x.id.slice(x.type.length + 1);
+  const k = chiave(n);
+  const film = index.films.get(n.id);   // se il nodo di partenza è un film
+  const nodiFilm = [...net.nodes.values()].filter(x => x.type === "film" && x.id !== n.id);
+  // Quanto un film è legato al nodo di partenza (0 = per niente).
+  const legame = (f) => {
+    if (n.type === "genere") return (f.genres || []).includes(k) ? 1 : 0;
+    if (n.type === "regista") return f.director === k ? 1 : 0;
+    if (n.type === "attore") return (f.cast || []).includes(k) ? 1 : 0;
+    if (!film) return 0;
+    return (f.director && f.director === film.director ? 2 : 0)
+      + (f.genres || []).filter(g => (film.genres || []).includes(g)).length
+      + (f.cast || []).filter(a => (film.cast || []).includes(a)).length;
+  };
+  const distanza = hopsFrom(net, id);
+  const correlati = nodiFilm
+    .map(x => ({ id: x.id, titolo: x.label, tipo: "film", w: legame(index.films.get(x.id) || {}), fan: sharedCountOf(index, x.id), hops: distanza.get(x.id) ?? 99 }))
+    .filter(x => x.w > 0)
+    .sort((a, b) => (b.w - a.w) || (b.fan - a.fan) || (a.hops - b.hops) || a.id.localeCompare(b.id));
+  if (correlati.length < 2) return [];
+  // Il genere / regista / attore più ricorrente fra i film correlati (e presente nella rete).
+  const piuRicorrente = (tipo, estrai) => {
+    const conta = new Map();
+    for (const c of correlati.slice(0, 12)) for (const v of estrai(index.films.get(c.id) || {})) {
+      const nodo = net.nodes.get(`${tipo}:${v}`);
+      if (nodo && nodo.id !== n.id) conta.set(nodo.id, (conta.get(nodo.id) || 0) + 1);
+    }
+    const lista = [...conta.entries()].sort((a, b) => (b[1] - a[1]) || a[0].localeCompare(b[0])).map(([i]) => net.nodes.get(i));
+    return lista.map(x => ({ id: x.id, titolo: x.label, tipo }));
+  };
+  const generi = n.type === "genere" ? [] : piuRicorrente("genere", f => f.genres || []);
+  const registi = n.type === "regista" ? [] : piuRicorrente("regista", f => (f.director ? [f.director] : []));
+  const attori = n.type === "attore" ? [] : piuRicorrente("attore", f => f.cast || []);
+  const G = n.type === "genere" ? n : net.nodes.get(generi[0]?.id);
+  const D = n.type === "regista" ? n : net.nodes.get(registi[0]?.id);
+  let attore = null, filmDi = null;
+  if (n.type !== "attore") ({ attore, filmDi } = tourAttoreConFilm(attori.slice(0, 5), correlati.map(x => x.id), nodiFilm.map(x => x.id), G?.id, D?.id));
+  const f = correlati.filter(x => x.id !== filmDi);
+  const ordine = [f[0], generi[0], f[1], registi[0], f[2], f[3], attore, filmDi && { id: filmDi, titolo: net.nodes.get(filmDi)?.label, tipo: "film", con: attore?.titolo }, f[4], f[5], f[6]];
+  const visti = new Set([id]);
+  const scelte = ordine.filter(t => t && !visti.has(t.id) && visti.add(t.id)).slice(0, TOUR_MAX_TAPPE - 1);
+  const partenza = { genere: "Si parte dal genere", regista: "Si parte dal regista", attore: "Si parte dall'attore", film: "Si parte dal film" };
+  const filmDel = n.type === "film" ? "Nello stesso mondo" : n.type === "regista" ? "Dello stesso regista" : n.type === "attore" ? "Con lo stesso attore" : "Dello stesso genere";
+  const cap = (t) => {
+    switch (t.tipo) {
+      case "film": return { tipo: t.con ? `Con ${t.con}` : filmDel, titolo: t.titolo };
+      case "genere": return { tipo: "Un genere ricorrente", titolo: t.titolo };
+      case "regista": return { tipo: "Un regista ricorrente", titolo: t.titolo };
+      default: return { tipo: "Un attore ricorrente", titolo: t.titolo };
+    }
+  };
+  return [
+    { id, cap: { tipo: partenza[n.type] || "Si parte da qui", titolo: n.label } },
+    ...scelte.map(t => ({ id: t.id, cap: cap(t) }))
+  ];
+}
+
 // I tour disponibili adesso (con almeno due tappe), per il menu del pulsante.
 function tourModi() {
   if (!net || !index) return [];
@@ -1846,6 +1912,9 @@ function tourModi() {
     { id: "mio", etichetta: mioNome && mioNome === ctx?.currentUser ? "Il mio" : `Di ${nomeVisto(mioNome) || "chi guardi"}`, tappe: tourTappeMie() },
     { id: "gruppo", etichetta: "Del gruppo", tappe: tourTappeGruppo() }
   ];
+  // "Da qui": dal nodo attivo, se non è già la radice (sarebbe uguale a "Il mio").
+  const attivo = net.nodes.get(focusId);
+  if (attivo && focusId !== net.rootId) modi.push({ id: "qui", etichetta: `Da qui · ${attivo.label.length > 22 ? attivo.label.slice(0, 21) + "…" : attivo.label}`, tappe: tourTappeDaQui(focusId) });
   return modi.filter(m => m.tappe.length >= 2);
 }
 
