@@ -1697,7 +1697,7 @@ const TOUR_CRESCITA_MS = 1900;  // dal Piatto alla 3D, quando il tour parte dal 
 const TOUR_VIAGGIO_MS = 2200;   // il viaggio fra due tappe
 const TOUR_SOSTA_MS = 1400;     // la sosta a ogni tappa, con la didascalia
 const TOUR_ROTAZIONE_MS = 8000;
-const TOUR_MAX_TAPPE = 9;
+const TOUR_MAX_TAPPE = 12;
 let tourAttivo = false;
 let tourToken = 0;
 let tourTimer = 0;
@@ -1782,7 +1782,7 @@ function tourTappeMie() {
   const { attore, filmDi } = tourAttoreConFilm(attori.slice(0, 5), film.map(x => x.id), tuttiIFilm, generi[0]?.id, registi[0]?.id);
   const visti = new Set([net.rootId]);
   const f = film.filter(x => x.id !== filmDi);
-  const ordine = [f[0], generi[0], f[1], registi[0], f[2], attore, filmDi && { id: filmDi, titolo: net.nodes.get(filmDi)?.label, tipo: "film", con: attore?.titolo }, f[3]];
+  const ordine = [f[0], generi[0], f[1], registi[0], f[2], f[3], attore, filmDi && { id: filmDi, titolo: net.nodes.get(filmDi)?.label, tipo: "film", con: attore?.titolo }, f[4], f[5], f[6]];
   const scelte = ordine.filter(t => t && !visti.has(t.id) && visti.add(t.id)).slice(0, TOUR_MAX_TAPPE - 1);
   const io = nome === ctx?.currentUser;
   const cap = (t) => {
@@ -1830,7 +1830,7 @@ function tourTappeGruppo() {
   const { attore, filmDi } = tourAttoreConFilm(attori.slice(0, 5).map(x => ({ id: x.n.id, titolo: x.n.label, x })), film.map(x => x.n.id), tuttiIFilm, generi[0]?.n.id, registi[0]?.n.id);
   const f = film.filter(x => x.n.id !== filmDi);
   const filmAttore = filmDi ? { n: net.nodes.get(filmDi), con: attore?.titolo } : null;
-  const ordine = [f[0], generi[0], f[1], registi[0], f[2], attore?.x, filmAttore, f[3], f[4]];
+  const ordine = [f[0], generi[0], f[1], registi[0], f[2], f[3], attore?.x, filmAttore, f[4], f[5], f[6], f[7]];
   const visti = new Set();
   const ruolo = { film: "Tra i più amati dal gruppo", genere: "Un genere in comune", regista: "Un regista in comune", attore: "Un attore in comune" };
   const cap = (x) => ({ tipo: x.con ? `Con ${x.con}` : ruolo[x.n.type], titolo: x.n.label });
