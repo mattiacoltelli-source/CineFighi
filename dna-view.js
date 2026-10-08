@@ -1091,6 +1091,8 @@ function edgeClass(e) {
 }
 
 function render() {
+  // Qualunque cambiamento della rete interrompe il tour.
+  if (tourAttivo) fermaTour(false);
   const nodesEl = el("dnaNodes");
   const edgesEl = el("dnaEdges");
   const canvas = el("dnaCanvas");
@@ -1181,6 +1183,7 @@ function afterRender() {
 
   updateViewAllButton();
   renderPanel(net.nodes.get(focusId));
+  tourAggiornaPulsante();
 }
 
 // ─── CRESCITA DEI RAMI ───────────────────────────────────────────────────────
@@ -1616,6 +1619,7 @@ export function initDnaView() {
     spatial = createSpatial({ container: spatialEl, nodeShell, edgeClass, onTap: tapNode, onMore: tapMore, radius: raggio });
   }
   bindViewToggle();
+  bindTour();
 }
 
 // Un tocco su un nodo, da qualunque delle due viste.
@@ -1672,6 +1676,178 @@ function tapMore(id) {
   render();
 }
 
+// ─── TOUR (solo vista 3D) ───────────────────────────────────────────────────
+// Dopo aver aperto dei nodi, "Tour" fa una visita guidata automatica: la
+// camera vola fra i nodi più importanti della rete GIÀ APERTA (non apre né
+// chiude niente), con una didascalia per tappa; il tratto che collega una tappa
+// alla successiva si illumina e il resto sfuma. In chiusura una panoramica con un
+// giro completo attorno alla rete. Le tappe sono scelte con regole fisse sui
+// collegamenti presenti (nessuna AI): a parità di rete è sempre lo stesso tour.
+const TOUR_TAPPA_MS = 2400;
+const TOUR_ROTAZIONE_MS = 8000;
+const TOUR_MAX_TAPPE = 7;
+let tourAttivo = false;
+let tourToken = 0;
+let tourTimer = 0;
+
+const chiaveArco = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`);
+
+function tourVicini() {
+  const m = new Map();
+  for (const n of net.nodes.keys()) m.set(n, []);
+  for (const e of net.edges) { m.get(e.a)?.push(e.b); m.get(e.b)?.push(e.a); }
+  return m;
+}
+
+// Il percorso più corto fra due nodi (ricerca in ampiezza), o null.
+function tourPercorso(da, a, vicini) {
+  if (da === a) return [da];
+  const prec = new Map([[da, null]]);
+  const coda = [da];
+  while (coda.length) {
+    const x = coda.shift();
+    for (const y of vicini.get(x) || []) {
+      if (prec.has(y)) continue;
+      prec.set(y, x);
+      if (y === a) {
+        const p = [a];
+        for (let c = prec.get(a); c !== null; c = prec.get(c)) p.unshift(c);
+        return p;
+      }
+      coda.push(y);
+    }
+  }
+  return null;
+}
+
+// Le tappe: i film più amati, i generi più "ricchi", il regista e l'attore
+// con più film nella rete aperta. Ordine alternato (film, genere, regista, ...)
+// perché il tour non sia una lista di soli film.
+function tourTappe() {
+  if (!net || net.nodes.size < 6) return [];
+  const vicini = tourVicini();
+  const conta = (id, tipo) => (vicini.get(id) || []).filter(v => net.nodes.get(v)?.type === tipo).length;
+  // Film: quante persone del gruppo lo amano (sharedCountOf). Genere, regista,
+  // attore: quanti film amati dal gruppo hanno (dall'indice intero, anche quelli
+  // non ancora aperti nella rete) e, a parità, quanti voti in tutto. Poi per id.
+  const mappa = { genere: index.byGenre, regista: index.byDirector, attore: index.byActor };
+  const misura = (n) => {
+    if (n.type === "film") return { principale: sharedCountOf(index, n.id), totale: 0 };
+    const lista = mappa[n.type]?.get(n.id.slice(n.type.length + 1)) || [];
+    return { principale: lista.length, totale: lista.reduce((t, x) => t + (x.w || 0), 0) };
+  };
+  const classifica = (tipo) => [...net.nodes.values()]
+    .filter(n => n.type === tipo)
+    .map(n => ({ n, m: misura(n), inRete: conta(n.id, "film") }))
+    .sort((a, b) => (b.m.principale - a.m.principale) || (b.m.totale - a.m.totale) || (b.inRete - a.inRete) || a.n.id.localeCompare(b.n.id))
+    .map(x => ({ id: x.n.id, titolo: x.n.label, tipo, k: x.m.principale, inRete: x.inRete }));
+  const film = classifica("film");
+  const generi = classifica("genere");
+  const registi = classifica("regista");
+  const attori = classifica("attore");
+  const ordine = [film[0], generi[0], registi[0], film[1], attori[0], generi[1], registi[1], film[2]];
+  const visti = new Set();
+  return ordine.filter(t => t && !visti.has(t.id) && visti.add(t.id)).slice(0, TOUR_MAX_TAPPE);
+}
+
+function tourDidascalia(t) {
+  const filmGruppo = `${t.k} ${t.k === 1 ? "film amato" : "film amati"} dal gruppo`;
+  switch (t.tipo) {
+    case "film": return { titolo: `Fra i più amati · ${t.titolo}`, sotto: t.k === 1 ? "1 persona lo ama" : `${t.k} persone lo amano` };
+    case "genere": return { titolo: `Genere in comune · ${t.titolo}`, sotto: filmGruppo };
+    case "regista": return { titolo: `Regista ricorrente · ${t.titolo}`, sotto: filmGruppo };
+    default: return { titolo: `Attore ricorrente · ${t.titolo}`, sotto: filmGruppo };
+  }
+}
+
+function tourMostraDidascalia(d) {
+  const cap = el("dnaTourCap");
+  if (!cap) return;
+  if (!d) { cap.classList.remove("is-on"); return; }
+  cap.classList.remove("hidden");
+  cap.querySelector("strong").textContent = d.titolo;
+  cap.querySelector("span").textContent = d.sotto || "";
+  cap.classList.toggle("hidden", false);
+  requestAnimationFrame(() => cap.classList.add("is-on"));
+}
+
+function tourAggiornaPulsante() {
+  const btn = el("dnaTourBtn");
+  if (!btn) return;
+  const visibile = inSpaziale() && !!net && tourTappe().length >= 2;
+  btn.classList.toggle("hidden", !visibile && !tourAttivo);
+  btn.classList.toggle("is-on", tourAttivo);
+  btn.textContent = tourAttivo ? "Stop" : "Tour";
+}
+
+function fermaTour(torna = true) {
+  if (!tourAttivo) return;
+  tourAttivo = false;
+  tourToken++;
+  clearTimeout(tourTimer);
+  spatial?.tourFine(torna);
+  tourMostraDidascalia(null);
+  tourAggiornaPulsante();
+}
+
+async function avviaTour() {
+  if (tourAttivo || !inSpaziale() || !spatial || !net) return;
+  const tappe = tourTappe();
+  if (tappe.length < 2) return;
+  const mio = ++tourToken;
+  tourAttivo = true;
+  tourAggiornaPulsante();
+  const attesa = ms => new Promise(r => { clearTimeout(tourTimer); tourTimer = setTimeout(r, ms); });
+  const vicini = tourVicini();
+
+  let da = focusId;
+  const scia = new Set();
+  for (const t of tappe) {
+    if (mio !== tourToken) return;
+    const percorso = tourPercorso(da, t.id, vicini) || [t.id];
+    const archi = new Set();
+    for (let i = 1; i < percorso.length; i++) archi.add(chiaveArco(percorso[i - 1], percorso[i]));
+    // Della tappa si vedono bene anche i collegamenti diretti: è ciò che si guarda.
+    const nodi = new Set(percorso);
+    for (const v of vicini.get(t.id) || []) { nodi.add(v); archi.add(chiaveArco(t.id, v)); }
+    spatial.tourImposta({ nodi, archi, scia: new Set(scia) });
+    spatial.tourVola(t.id);
+    tourMostraDidascalia(tourDidascalia(t));
+    for (const k of archi) scia.add(k);
+    da = t.id;
+    await attesa(TOUR_TAPPA_MS);
+  }
+  if (mio !== tourToken) return;
+  // Finale: tutta la rete e un giro completo attorno.
+  spatial.tourImposta(null);
+  tourMostraDidascalia({ titolo: "La rete intera", sotto: "Un giro completo" });
+  spatial.tourRuota(TOUR_ROTAZIONE_MS);
+  await attesa(TOUR_ROTAZIONE_MS + 400);
+  if (mio !== tourToken) return;
+  fermaTour(true);
+}
+
+function bindTour() {
+  el("dnaTourBtn")?.addEventListener("click", () => { if (tourAttivo) fermaTour(true); else avviaTour(); });
+  // Un tocco sulla rete durante il tour lo ferma e ti restituisce i comandi.
+  // Quel tocco serve solo a fermarlo: il click che ne segue non deve aprire
+  // o chiudere il nodo sotto il dito.
+  let ignoraClick = false;
+  const box = el("dnaSpatial");
+  box?.addEventListener("pointerdown", e => {
+    if (tourAttivo && !e.target.closest("#dnaTourBtn")) {
+      fermaTour(false);
+      ignoraClick = true;
+      setTimeout(() => { ignoraClick = false; }, 500);
+    }
+  }, true);
+  box?.addEventListener("click", e => {
+    if (!ignoraClick) return;
+    ignoraClick = false;
+    e.stopPropagation(); e.preventDefault();
+  }, true);
+}
+
 function bindViewToggle() {
   const box = el("dnaViewToggle");
   if (!box) return;
@@ -1689,6 +1865,7 @@ function bindViewToggle() {
 }
 
 function applyViewMode() {
+  if (tourAttivo) fermaTour(false);
   for (const btn of document.querySelectorAll("#dnaViewToggle [data-dna-view]")) {
     const on = btn.dataset.dnaView === dnaView;
     btn.classList.toggle("active", on);
@@ -1697,6 +1874,7 @@ function applyViewMode() {
   el("dnaCanvas")?.classList.toggle("hidden", inSpaziale());
   spatial?.setModo({ orbita: dnaView === "sphere", sfera: dnaView === "sphere" });
   if (inSpaziale()) spatial?.show(); else spatial?.hide();
+  tourAggiornaPulsante();
 }
 
 // Trascinamento a un dito per guardarsi intorno. 1:1 mentre il dito è giù; al

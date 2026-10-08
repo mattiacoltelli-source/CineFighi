@@ -137,7 +137,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
   const pos3 = new Map();       // id -> { x, y, z }: posizioni della vista Sfera
   const vis = new Map();        // id -> { h, th, grow, dom, cache }
   const edgeDom = new Map();    // "a|b" -> <line>
-  const cam = { x: 0, y: 0, z: 0, tx: 0, ty: 0, tz: 0, cz: 0, tcz: 0, yaw: 0, pitch: 0, tyaw: 0, tpitch: 0, wyaw: 0, wpitch: 0, vx: 0, vy: 0, q: Q_ID, tq: Q_ID, M: eulerMat(0, 0) };
+  const cam = { x: 0, y: 0, z: 0, tx: 0, ty: 0, tz: 0, cz: 0, tcz: 0, yaw: 0, pitch: 0, tyaw: 0, tpitch: 0, wyaw: 0, wpitch: 0, vx: 0, vy: 0, q: Q_ID, tq: Q_ID, M: eulerMat(0, 0), spin: 0 };
   let W = 0, H = 0;
   let dragged = false;
 
@@ -472,6 +472,8 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
         cam.wyaw *= k; cam.wpitch *= k;
         moving = true;
       }
+      // Rotazione del tour: velocità fissa (rad/ms), senza smorzamento.
+      if (cam.spin) { cam.tq = qNorm(qMul(qAsseY(cam.spin * dt), cam.tq)); moving = true; }
       // La rotazione mostrata insegue quella di destinazione lungo la via più breve.
       const d = Math.abs(cam.q[0] * cam.tq[0] + cam.q[1] * cam.tq[1] + cam.q[2] * cam.tq[2] + cam.q[3] * cam.tq[3]);
       if (d < 0.9999999) {
@@ -522,7 +524,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     const s = F / denom;
     // La posizione segue la prospettiva piena; la GRANDEZZA del nodo ha un tetto
     // in orbita: un nodo molto vicino non deve coprire quelli attorno.
-    return { x: W / 2 + dx * s, y: H / 2 + dy * s, s: orbit ? Math.max(NODE_MIN, Math.min(NODE_MAX, Math.min(s, S_MAX_ORBIT) * NODE_K)) * nodeZoom : s, z };
+    return { x: W / 2 + dx * s, y: H / 2 + dy * s, s: orbit ? Math.max(NODE_MIN, Math.min(NODE_MAX, Math.min(s, S_MAX_ORBIT) * NODE_K)) * nodeZoom * nodeK : s, z };
   }
 
   function draw() {
@@ -532,6 +534,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       const p = project(n, v);
       const fuori = p.dietro || p.x < -CULL_MARGIN || p.x > W + CULL_MARGIN || p.y < -CULL_MARGIN || p.y > H + CULL_MARGIN;
       let o = fuori ? 0 : opacityAt(v.h) * Math.min(1, v.grow * 1.6);
+      if (tour && o && !tour.nodi.has(id)) o *= 0.3;   // tour: il resto sfuma
       if (o < 0.04) o = 0;   // nella nebbia: né disegnato né toccabile
       p.o = o;
       proj.set(id, p);
@@ -556,12 +559,17 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       setIf(c, "d", o ? "" : "none", x => { line.style.display = x; });
       if (!o) continue;
       const focus = e.a === focusId || e.b === focusId;
-      setIf(c, "o", o.toFixed(2), x => { line.style.opacity = x; });
+      // Tour: il tratto percorso si illumina, quelli già fatti restano a metà, il resto sfuma.
+      const k = tour ? edgeKey(e) : "";
+      const lv = tour ? (tour.archi.has(k) ? 2 : tour.scia.has(k) ? 1 : 0) : -1;
+      const oe = lv === 2 ? Math.max(o, 0.95) : lv === 1 ? o * 0.7 : lv === 0 ? o * 0.18 : o;
+      setIf(c, "tr", lv === 2, x => { line.classList.toggle("is-tour", x); });
+      setIf(c, "o", oe.toFixed(2), x => { line.style.opacity = x; });
       setIf(c, "x1", a.x.toFixed(1), x => line.setAttribute("x1", x));
       setIf(c, "y1", a.y.toFixed(1), x => line.setAttribute("y1", x));
       setIf(c, "x2", b.x.toFixed(1), x => line.setAttribute("x2", x));
       setIf(c, "y2", b.y.toFixed(1), x => line.setAttribute("y2", x));
-      setIf(c, "w", ((focus ? 4 : 2.6) * Math.min(a.s, b.s)).toFixed(1), x => { line.style.strokeWidth = x; });
+      setIf(c, "w", ((lv === 2 ? 5.2 : focus ? 4 : 2.6) * Math.min(a.s, b.s)).toFixed(1), x => { line.style.strokeWidth = x; });
     }
     aggiornaFrontale();
   }
@@ -584,6 +592,10 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     else onTap(b.dataset.node);
   });
 
+  // Tour (vedi dna-view.js): evidenziazione di un percorso e rotazione finale.
+  // Il copione è di dna-view; qui solo cosa disegnare e dove puntare la camera.
+  let tour = null;           // { nodi:Set, archi:Set, scia:Set } o null
+  let nodeK = 1;             // grandezza dei nodi nel giro finale del tour (più piccoli: la rete intera è fitta)
   let viaggio = 0;
   function volo(px, py, pz) {
     const dist = Math.hypot(cam.tx - px, cam.ty - py, sfera ? cam.tcz - pz : 0);
@@ -827,6 +839,48 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       cam.q = cam.tq = Q_ID; cam.wyaw = cam.wpitch = 0;
       for (const v of vis.values()) v.cache = {};
       risistema();
+      kick();
+    },
+    // ── Tour ──
+    tourImposta(t) { tour = t; kick(); },
+    // Vola su un nodo (senza aprirlo né farlo diventare attivo) e inquadra i suoi collegamenti.
+    tourVola(id) {
+      const w = worldPos(id);
+      if (!w) return;
+      const px = cam.tx, py = cam.ty, pz = cam.tcz;
+      cam.tx = w.x; cam.ty = w.y; if (sfera) cam.tcz = w.z;
+      cam.vx = cam.vy = 0; cam.spin = 0; cam.wyaw = cam.wpitch = 0;
+      cam.tz = 0;
+      clampCam();
+      inquadra(id);
+      volo(px, py, pz);
+      kick();
+    },
+    // Panoramica sulla rete intera e un giro completo attorno, in `ms`.
+    tourRuota(ms) {
+      cam.tq = Q_ID; cam.wyaw = cam.wpitch = 0; cam.vx = cam.vy = 0;
+      // Durante il giro la rete deve stare dentro lo schermo da ogni lato: si
+      // inquadra la SFERA che la contiene (raggio massimo dal centro), non la
+      // sua forma di fronte, che cambia girando.
+      const b = bounds();
+      const c = { x: (b.minX + b.maxX) / 2, y: (b.minY + b.maxY) / 2, z: (b.minZ + b.maxZ) / 2 };
+      let r = 1;
+      for (const id of net.nodes.keys()) {
+        const w = worldPos(id);
+        if (w) r = Math.max(r, Math.hypot(w.x - c.x, w.y - c.y, w.z - c.z));
+      }
+      cam.tx = c.x; cam.ty = c.y; cam.tcz = c.z;
+      nodeK = 0.6;
+      const sNec = Math.max(0.12, Math.min(1, (Math.min(W, H * 0.8) / 2 - 34) / (r * 1.1)));
+      cam.tz = Math.max(zMin(), F - F / sNec);
+      cam.spin = (2 * Math.PI) / ms;
+      kick();
+    },
+    // Fine: niente evidenziazione, niente rotazione; se `torna`, la camera rientra sul nodo attivo.
+    tourFine(torna = true) {
+      cam.spin = 0; tour = null; nodeK = 1;
+      cam.tq = Q_ID;
+      if (torna && net) aimAt(focusId);
       kick();
     },
     show() { active = true; container.classList.remove("hidden"); measure(); },

@@ -1486,6 +1486,28 @@ body:has(.app.dna-schermo-intero #screen-tonight:not(.hidden)) .bottom-nav {
   color: var(--cyan); font-family: var(--font-display); font-weight:700; font-size:var(--fs-xs);
   cursor:pointer; -webkit-tap-highlight-color: transparent;
 }
+/* Frontale sta sotto "Tour" (stesso angolo). */
+.dna-spatial__front { top:46px; }
+/* Tour: pulsante e didascalia della tappa. Il tratto che si percorre si
+   illumina in ciano; quelli già fatti restano a metà (vedi draw() in
+   dna-spatial.js). */
+.dna-spatial__tour {
+  position:absolute; top:8px; right:8px; z-index:4; padding:5px 13px; border:1px solid var(--cyan-a2);
+  border-radius: var(--radius-pill); background: rgba(13,19,28,.85); backdrop-filter: blur(6px);
+  color: var(--cyan); font-family: var(--font-display); font-weight:700; font-size:var(--fs-xs);
+  cursor:pointer; -webkit-tap-highlight-color: transparent;
+}
+.dna-spatial__tour.is-on { background: var(--cyan); color: #06222e; }
+.dna-spatial__tourcap {
+  position:absolute; top:52px; left:50%; z-index:4; max-width:84%; padding:7px 14px; text-align:center;
+  transform: translateX(-50%); border-radius: var(--radius-md);
+  background: rgba(13,19,28,.82); backdrop-filter: blur(6px); border:1px solid var(--cyan-a2);
+  pointer-events:none; opacity:0; transition: opacity .3s ease-out;
+}
+.dna-spatial__tourcap.is-on { opacity:1; }
+.dna-spatial__tourcap strong { display:block; color: var(--text); font-family: var(--font-display); font-size: var(--fs-sm); }
+.dna-spatial__tourcap span { display:block; color: var(--text2); font-size: var(--fs-xs); margin-top:1px; }
+.dna-spatial .dna-edge.is-tour { stroke: var(--cyan); stroke-dasharray:none; }
 
 /* "+N" (vedi nodeShell in dna-view.js): i collegamenti di un nodo aperto che
    non sono ancora in rete. Solo il segno, in ciano come l'anello del nodo

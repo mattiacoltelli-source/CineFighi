@@ -1202,3 +1202,63 @@ test("piatto: lo zoom indietro mostra la rete intera e il doppio tocco la inquad
   expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
   expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
 });
+
+// Vista 3D, Tour: compare solo con la rete aperta; durante il tour la
+// didascalia racconta la tappa e il tratto percorso si illumina; un tocco sulla
+// rete lo ferma e restituisce i comandi.
+test("3D: il Tour parte dalla rete aperta, evidenzia il percorso e si ferma con un tocco", async ({ page }) => {
+  const scritture = soloLettura(page);
+  const guasti = osserva(page);
+  await entra(page);
+  await vaiA(page, "tonight");
+  await page.locator("#dnaNodes .dna-node.is-root").waitFor({ state: "visible", timeout: 30_000 });
+  await page.locator('#dnaViewToggle [data-dna-view="sphere"]').click();
+  await page.locator("#dnaSpatial .dna-node.is-root").waitFor({ state: "visible" });
+  await expect(page.locator("#dnaTourBtn"), "il Tour non deve comparire con un solo nodo").toBeHidden();
+
+  await toccaNodo(page, "#dnaSpatial .dna-node.is-root");
+  await page.evaluate(() => (document.querySelector("#dnaSpatial .dna-node.is-root .dna-node__more") as HTMLElement | null)?.click());
+  await page.waitForTimeout(900);
+  await expect(page.locator("#dnaTourBtn")).toBeVisible();
+  await expect(page.locator("#dnaTourBtn")).toHaveText("Tour");
+  const nodiPrima = await page.locator("#dnaSpatial .dna-node").count();
+
+  await page.locator("#dnaTourBtn").click();
+  await expect(page.locator("#dnaTourBtn")).toHaveText("Stop");
+  await expect(page.locator("#dnaTourCap")).toHaveClass(/is-on/, { timeout: 4000 });
+  const testo = await page.locator("#dnaTourCap strong").textContent();
+  expect(testo, "la didascalia della tappa è vuota").toBeTruthy();
+  await page.waitForTimeout(900);
+  expect(await page.locator("#dnaSpatial line.is-tour").count(), "nessun tratto è illuminato durante il tour").toBeGreaterThan(0);
+
+  // Un tocco sulla rete ferma il tour; la rete non è cambiata.
+  const st = (await page.locator("#dnaStage").boundingBox())!;
+  await page.mouse.click(st.x + st.width / 2, st.y + st.height * 0.55);
+  await expect(page.locator("#dnaTourBtn")).toHaveText("Tour");
+  await expect(page.locator("#dnaTourCap")).not.toHaveClass(/is-on/);
+  await page.waitForTimeout(500);
+  expect(await page.locator("#dnaSpatial line.is-tour").count(), "dopo lo stop il percorso resta illuminato").toBe(0);
+  expect(await page.locator("#dnaSpatial .dna-node").count(), "il tour ha cambiato la rete").toBe(nodiPrima);
+
+  expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
+  expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
+});
+
+// Il Tour arriva da solo in fondo: panoramica con il giro finale e poi si richiude.
+test("3D: il Tour finisce da solo con la rete intera e torna al pulsante", async ({ page }) => {
+  test.setTimeout(120_000);
+  const guasti = osserva(page);
+  await entra(page);
+  await vaiA(page, "tonight");
+  await page.locator("#dnaNodes .dna-node.is-root").waitFor({ state: "visible", timeout: 30_000 });
+  await page.locator('#dnaViewToggle [data-dna-view="sphere"]').click();
+  await page.locator("#dnaSpatial .dna-node.is-root").waitFor({ state: "visible" });
+  await toccaNodo(page, "#dnaSpatial .dna-node.is-root");
+  await page.evaluate(() => (document.querySelector("#dnaSpatial .dna-node.is-root .dna-node__more") as HTMLElement | null)?.click());
+  await page.waitForTimeout(900);
+  await page.locator("#dnaTourBtn").click();
+  await expect(page.locator("#dnaTourCap strong")).toHaveText("La rete intera", { timeout: 40_000 });
+  await expect(page.locator("#dnaTourBtn")).toHaveText("Tour", { timeout: 20_000 });
+  await expect(page.locator("#dnaTourCap")).not.toHaveClass(/is-on/);
+  expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
+});
