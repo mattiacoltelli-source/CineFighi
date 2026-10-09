@@ -1628,3 +1628,34 @@ test("Piatto: un tocco durante la crescita ferma il Tour senza bloccare i comand
   expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
   expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
 });
+
+// 3D: aprendo un nodo i suoi collegamenti si dispongono attorno a lui in modo regolare, come nel
+// Piatto (prima, ognuno sceglieva la sua direzione da solo: si vedevano buchi da 120° e nodi
+// addensati). Qui: gli angoli fra vicini, visti sullo schermo, non si discostano molto dalla media.
+test("3D: l'espansione di un nodo è simmetrica attorno a lui", async ({ page }) => {
+  const guasti = osserva(page);
+  const scritture = soloLettura(page);
+  await entra(page);
+  await vaiA(page, "tonight");
+  await page.locator("#dnaNodes .dna-node.is-root").waitFor({ state: "visible", timeout: 30_000 });
+  await page.locator('#dnaViewToggle [data-dna-view="sphere"]').click();
+  await page.locator("#dnaSpatial .dna-node.is-root").waitFor({ state: "visible" });
+  await toccaNodo(page, "#dnaSpatial .dna-node.is-root");
+  await page.waitForTimeout(1500);
+  const r = await page.evaluate(() => {
+    const c = document.getElementById("dnaSpatial")!.getBoundingClientRect();
+    const rt = document.querySelector("#dnaSpatial .dna-node.is-root")!.getBoundingClientRect();
+    const cx = rt.left + rt.width / 2, cy = rt.top + rt.height / 2;
+    const ang = [...document.querySelectorAll<HTMLElement>("#dnaSpatial .dna-node")]
+      .filter(n => n.style.display !== "none" && !n.classList.contains("is-root") && +n.style.opacity > 0.3)
+      .map(n => { const q = n.getBoundingClientRect(); return { a: Math.atan2(q.top + q.height / 2 - cy, q.left + q.width / 2 - cx) * 180 / Math.PI, x: q.left + q.width / 2 - c.left, w: c.width }; })
+      .sort((p, q) => p.a - q.a);
+    const gaps = ang.map((v, i) => ((ang[(i + 1) % ang.length].a - v.a) + 360) % 360);
+    return { n: ang.length, maxGap: Math.max(...gaps), margine: Math.min(...ang.map(v => Math.min(v.x, v.w - v.x))) };
+  });
+  expect(r.n, "pochi collegamenti per misurare la simmetria").toBeGreaterThanOrEqual(3);
+  expect(r.maxGap, `angolo massimo fra vicini ${r.maxGap.toFixed(0)}° su ${r.n} nodi (regolare: ${(360 / r.n).toFixed(0)}°)`).toBeLessThan((360 / r.n) * 1.3);
+  expect(r.margine, "un nodo troppo vicino al bordo").toBeGreaterThan(30);
+  expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
+  expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
+});

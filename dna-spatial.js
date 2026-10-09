@@ -66,7 +66,10 @@ const MARGINE_X = 94, MARGINE_Y = 175;        // spazio da lasciare ai bordi (e 
 const LONG_MS = 420;                          // tocco lungo su un nodo = ci si vola sopra
 const DIP_MAX = 340;                         // quanto si allarga la camera a metà di un volo tra nodi
 const RAGGI = [0.9, 1.2, 1.55];             // lunghezze dell'arco provate: il nodo va dove c'è più spazio, anche più lontano
-const RAGGIO_EXTRA = 2.0, RETE_FITTA = 28;   // con la rete già fitta (tanti nodi aperti) si prova anche un anello più largo
+const RAGGIO_EXTRA = 2.0, RETE_FITTA = 28;   // con la rete già fitta (28+ nodi) si prova anche un anello più largo
+const ROTAZIONI_ANELLO = [0, 0.5, 0.25, 0.75, 0.125, 0.375, 0.625, 0.875];   // rotazioni provate per l'anello dei figli, in frazioni del passo (la prima vince a parità)
+const SPAZIO_OK_GRUPPO = 0.9;                // spazio (in raggi) oltre il quale un anello non migliora
+const SPAZIO_MIN_GRUPPO = 0.65;              // se l'anello regolare non ha almeno questo spazio (in raggi) fra i nodi, si torna alla scelta nodo per nodo
 const PESO_LUNGHEZZA = 0.12;                 // piccolo costo per gli archi più lunghi: a parità di spazio vince il più corto
 const PESO_BARICENTRO = 0.25;                // quanto i nuovi nodi preferiscono i vuoti vicino al centro della rete
 // Rilassamento: dopo che nodi nuovi sono stati piazzati, i nodi troppo vicini sullo schermo si
@@ -222,9 +225,23 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     // Un ramo richiuso e riaperto ritrova le posizioni di prima, che nel frattempo possono essere state occupate: va ricontrollato.
     let tornati = false;
     for (const id of net.nodes.keys()) if (pos3.has(id) && !viviPrima.has(id)) { tornati = true; break; }
-    for (const n of net.nodes.values()) {
-      if (pos3.has(n.id)) continue;
-      const pp = pos3.get(n.parent) || pos3.get(net.rootId);
+    const raggiProva = vivi.length >= RETE_FITTA ? [...RAGGI, RAGGIO_EXTRA] : RAGGI;
+    // Distanza fra un punto e un altro come la vedrebbe l'occhio (proiettata, con la prospettiva) e
+    // distanza vera nello spazio: la prima evita le sovrapposizioni che si vedono, la seconda tiene i
+    // nodi larghi anche quando si ruota. Conta soprattutto lo schermo (x,y): due nodi a profondità
+    // diverse ma sulla stessa linea di vista si sovrapporrebbero comunque.
+    const distanza = (x, y, z, q) => {
+      const sx = F_ORBIT / Math.max(300, F_ORBIT + z - cen.z), sq = F_ORBIT / Math.max(300, F_ORBIT + q.z - cen.z);
+      const vis_ = Math.hypot(q.x * sq - x * sx, q.y * sq - y * sx);
+      const vero = Math.hypot(q.x - x, q.y - y, (q.z - z) * PESO_Z * 2);
+      return 0.65 * vis_ + 0.35 * vero;
+    };
+    const libero = (x, y, z) => { let m = Infinity; for (const q of vivi) m = Math.min(m, distanza(x, y, z, q)); return m; };
+    const registra = (n, q) => { pos3.set(n.id, q); vivi.push(q); nuovi.push(n.id); };
+    const padreDi = (n) => (n.parent && pos3.has(n.parent) ? n.parent : net.rootId);
+    // Un nodo da solo: va nella direzione (fra N_DIREZIONI, lontano dal nonno) che lo tiene più lontano da tutti.
+    const piazzaSingolo = (n) => {
+      const pp = pos3.get(padreDi(n));
       const gp = n.parent ? pos3.get(net.nodes.get(n.parent)?.parent) : null;
       let fuori = null;
       if (gp) {
@@ -232,32 +249,80 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
         fuori = [ox / l, oy / l, oz / l];
       }
       let best = null, bestD = -Infinity;
-      for (const rm of vivi.length >= RETE_FITTA ? [...RAGGI, RAGGIO_EXTRA] : RAGGI) for (const d of DIREZIONI) {
+      for (const rm of raggiProva) for (const d of DIREZIONI) {
         if (fuori && d[0] * fuori[0] + d[1] * fuori[1] + d[2] * fuori[2] < -0.75) continue;   // solo non tornare indietro verso il nonno
         const x = pp.x + d[0] * R * rm * kx, y = pp.y + d[1] * R * rm * ky, z = pp.z + d[2] * R * rm * Z_SCHIACCIATA;
-        let m = Infinity;
-        // Conta soprattutto la distanza SULLO SCHERMO (x,y): due nodi a profondità
-        // diverse ma sulla stessa linea di vista si sovrapporrebbero comunque.
-        const sx = F_ORBIT / Math.max(300, F_ORBIT + z - cen.z);
-        for (const q of vivi) {
-          // Distanza come la vedrebbe l'occhio (proiettata, con la prospettiva) e
-          // distanza vera nello spazio: la prima evita le sovrapposizioni che si
-          // vedono, la seconda tiene i nodi larghi anche quando si ruota.
-          const sq = F_ORBIT / Math.max(300, F_ORBIT + q.z - cen.z);
-          const vis_ = Math.hypot(q.x * sq - x * sx, q.y * sq - y * sx);
-          const vero = Math.hypot(q.x - x, q.y - y, (q.z - z) * PESO_Z * 2);
-          const dd = 0.65 * vis_ + 0.35 * vero;
-          if (dd < m) m = dd;
-        }
-        // Leggera attrazione verso il baricentro della rete: i nuovi nodi
-        // riempiono i vuoti attorno invece di allungarla a striscia.
-        m -= PESO_BARICENTRO * Math.hypot(x - cen.x, y - cen.y, z - cen.z) + PESO_LUNGHEZZA * (rm - 1) * R;
+        // Leggera attrazione verso il baricentro della rete: i nuovi nodi riempiono i vuoti attorno invece di allungarla a striscia.
+        const m = libero(x, y, z) - (PESO_BARICENTRO * Math.hypot(x - cen.x, y - cen.y, z - cen.z) + PESO_LUNGHEZZA * (rm - 1) * R);
         if (m > bestD) { bestD = m; best = { x, y, z }; }
       }
-      const q = best || { x: pp.x + R, y: pp.y, z: pp.z };
-      pos3.set(n.id, q);
-      vivi.push(q);
-      nuovi.push(n.id);
+      registra(n, best || { x: pp.x + R, y: pp.y, z: pp.z });
+    };
+    // I figli aperti insieme di uno stesso nodo si dispongono in modo REGOLARE attorno a lui (come nel
+    // Piatto): un anello attorno alla radice, un ventaglio verso l'esterno per gli altri, con un po'
+    // di profondità alternata. Si prova qualche raggio e qualche rotazione e si sceglie quello che sta
+    // più lontano dagli altri nodi; se non c'è posto (rete fitta) si torna alla scelta nodo per nodo.
+    const piazzaGruppo = (padreId, figli) => {
+      const k = figli.length;
+      if (k < 2) return false;
+      // Solo alla PRIMA apertura: i figli aggiunti dopo (il "+N") riempiono i vuoti fra quelli che ci sono già.
+      for (const x of net.nodes.values()) if (x.parent === padreId && pos3.has(x.id)) return false;
+      const pp = pos3.get(padreId);
+      const nonnoId = net.nodes.get(padreId)?.parent;
+      const gp = nonnoId ? pos3.get(nonnoId) : null;
+      const passo = (2 * Math.PI) / k;
+      let direzioni;
+      if (!gp) {
+        // Anello sul piano dello schermo, dall'alto in senso orario, con la profondità che alterna.
+        // Gli angoli sono quelli dello SCHERMO: il punto sta sull'ellisse (kx, ky) esattamente a quell'angolo.
+        // La prospettiva rimpicciolisce i nodi più lontani: il loro raggio si allarga di quel tanto, così
+        // sullo schermo l'anello sembra regolare anche con la profondità alternata.
+        direzioni = (rot, rm) => figli.map((_, i) => {
+          const t = -Math.PI / 2 + rot + i * passo, c = Math.cos(t), sn = Math.sin(t);
+          const rho = 1 / Math.hypot(c / (kx * 0.6), sn / ky);
+          const dz = i % 2 ? 0.22 : -0.22;
+          const f = (F_ORBIT + dz * R * rm * Z_SCHIACCIATA) / F_ORBIT;
+          return [rho * c / kx * f, rho * sn / ky * f, dz];
+        });
+      } else {
+        // Ventaglio a cono attorno alla direzione "verso l'esterno" (dal nonno al padre).
+        let ox = pp.x - gp.x, oy = pp.y - gp.y, oz = pp.z - gp.z;
+        const lo = Math.hypot(ox, oy, oz) || 1; ox /= lo; oy /= lo; oz /= lo;
+        let ux = 0, uy = 1, uz = 0;                       // "su" dello schermo, reso perpendicolare a o
+        const dot = uy * oy; ux -= dot * ox; uy -= dot * oy; uz -= dot * oz;
+        let lu = Math.hypot(ux, uy, uz);
+        if (lu < 1e-3) { ux = 1; uy = 0; uz = 0; const d2 = ux * ox; ux -= d2 * ox; uy -= d2 * oy; uz -= d2 * oz; lu = Math.hypot(ux, uy, uz) || 1; }
+        ux /= lu; uy /= lu; uz /= lu;
+        const vx = oy * uz - oz * uy, vy = oz * ux - ox * uz, vz = ox * uy - oy * ux;
+        const alfa = k <= 2 ? 0.87 : k <= 4 ? 1.05 : 1.26;               // mezzo angolo del cono (50°, 60°, 72°)
+        direzioni = (rot, rm) => figli.map((_, i) => {
+          const b = rot + i * passo, ca = Math.cos(alfa), sa = Math.sin(alfa), cb = Math.cos(b), sb = Math.sin(b);
+          return [ox * ca + (ux * cb + vx * sb) * sa, oy * ca + (uy * cb + vy * sb) * sa, oz * ca + (uz * cb + vz * sb) * sa];
+        });
+      }
+      let migliore = null, bestScore = -Infinity, bestLibero = 0;
+      for (const rm of raggiProva) for (const frazione of ROTAZIONI_ANELLO) {
+        const pts = direzioni(frazione * passo, rm).map(d => ({ x: pp.x + d[0] * R * rm * kx, y: pp.y + d[1] * R * rm * ky, z: pp.z + d[2] * R * rm * Z_SCHIACCIATA }));
+        let m = Infinity;
+        for (const q of pts) m = Math.min(m, libero(q.x, q.y, q.z));
+        for (let i = 0; i < pts.length; i++) for (let j = i + 1; j < pts.length; j++) m = Math.min(m, distanza(pts[i].x, pts[i].y, pts[i].z, pts[j]));
+        let dc = 0; for (const q of pts) dc += Math.hypot(q.x - cen.x, q.y - cen.y, q.z - cen.z);
+        // Oltre un certo spazio non serve altro: a parità si preferisce l'anello più stretto (sta meglio nello schermo).
+        const score = Math.min(m, SPAZIO_OK_GRUPPO * R) - (PESO_BARICENTRO * dc / k + PESO_LUNGHEZZA * (rm - 1) * R);
+        if (score > bestScore) { bestScore = score; migliore = pts; bestLibero = m; }
+      }
+      if (!migliore || bestLibero < SPAZIO_MIN_GRUPPO * R) return false;
+      figli.forEach((n, i) => registra(n, migliore[i]));
+      return true;
+    };
+    const daPiazzare = [...net.nodes.values()].filter(n => !pos3.has(n.id));
+    const fatti = new Set();
+    for (const n of daPiazzare) {
+      if (fatti.has(n.id) || pos3.has(n.id)) continue;
+      const padreId = padreDi(n);
+      const figli = daPiazzare.filter(x => !fatti.has(x.id) && !pos3.has(x.id) && padreDi(x) === padreId);
+      for (const f of figli) fatti.add(f.id);
+      if (!piazzaGruppo(padreId, figli)) for (const f of figli) piazzaSingolo(f);
     }
     if (nuovi.length || (tornati && viviPrima.size)) rilassa(R, cen.z);
     viviPrima = new Set(net.nodes.keys());
