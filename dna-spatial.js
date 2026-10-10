@@ -1340,10 +1340,12 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
         }
         sulla.sort((m, n) => m.t - n.t);
         const punti = [a, ...sulla.map(x => x.p), { x: b.x, y: b.y, cz: b.cz }];
-        const durata = lontano < 40 ? Math.min(ms, 600) : ms * (1 + Math.min(0.9, 0.45 * sulla.length));
-        // Se la tappa è lontana (rispetto a quanto si vede) il viaggio passa da uno zoom out leggero: più è lontana, più si apre.
+        // Tappa lontana (rispetto a quanto si vede): zoom out leggero a metà viaggio, poi rientro nel nodo, e un po' più
+        // lenta per dare il tempo di vedere la rete intorno. Tappa vicina: solo lo spostamento, come prima.
         const visto = Math.min(W, H) / (F / Math.max(1, F - b.z)), rapporto = lontano / Math.max(1, visto);
-        const dip = rapporto < 0.7 ? 1 : Math.max(0.4, Math.min(0.78, 0.84 - 0.12 * rapporto));
+        const lontana = lontano >= 40 && rapporto >= 0.45;
+        const dip = lontana ? Math.max(0.4, Math.min(0.78, 0.84 - 0.12 * rapporto)) : 1;
+        const durata = lontano < 40 ? Math.min(ms, 600) : ms * (1 + Math.min(0.9, 0.45 * sulla.length)) * (lontana ? 1.45 : 1);
         cam.viaggio = {
           a, b, t0: performance.now(), dur: durata, fine: risolvi, dip,
           curva: punti.length > 2 ? creaCurva(punti) : null

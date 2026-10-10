@@ -1289,7 +1289,7 @@ test("3D: il Tour finisce da solo con la rete intera e torna al pulsante", async
   await page.evaluate(() => (document.querySelector("#dnaSpatial .dna-node.is-root .dna-node__more") as HTMLElement | null)?.click());
   await page.waitForTimeout(900);
   await avviaTourModo(page, "Il mio");
-  await expect(page.locator("#dnaTourCap span")).toHaveText("La rete intera", { timeout: 40_000 });
+  await expect(page.locator("#dnaTourCap span")).toHaveText("La rete intera", { timeout: 70_000 });
   await expect(page.locator("#dnaTourBtn")).toHaveText("Tour", { timeout: 20_000 });
   await expect(page.locator("#dnaTourCap")).not.toHaveClass(/is-on/);
   expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
