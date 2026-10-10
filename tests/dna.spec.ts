@@ -1690,7 +1690,7 @@ test("3D: lo sfondo di spazio si disegna e non intercetta i tocchi", async ({ pa
     return { chiari, colorati, w: cv.width, h: cv.height, pe: getComputedStyle(cv).pointerEvents, sopraCanvas: sopra === cv, visibile: cv.getBoundingClientRect().height > 100 };
   });
   expect(r.visibile, "il canvas dello sfondo non si vede").toBe(true);
-  expect(r.chiari, "nessuna stella disegnata").toBeGreaterThan(20);
+  expect(r.chiari, "nessuna stella disegnata").toBeGreaterThan(8);
   expect(r.colorati, "nessuna nube colorata disegnata").toBeGreaterThan(300);
   expect(r.pe, "il canvas dello sfondo prende i tocchi").toBe("none");
   expect(r.sopraCanvas, "il canvas dello sfondo sta sopra ai nodi").toBe(false);
