@@ -1694,6 +1694,8 @@ function tapMore(id) {
 // Le tappe sono scelte con regole fisse (nessuna AI): a parità di rete il tour
 // è sempre lo stesso.
 const TOUR_CRESCITA_MS = 1900;  // dal Piatto alla 3D, quando il tour parte dal Piatto
+// Il tour guarda la rete un po' di lato e dall'alto (fisso, dall'inizio alla fine: nessuna rotazione a ogni tappa): così si vede la profondità.
+const TOUR_YAW = 0.3, TOUR_PITCH = -0.12;
 const TOUR_VIAGGIO_MS = 2200;   // il viaggio fra due tappe
 const TOUR_SOSTA_MS = 1400;     // la sosta a ogni tappa, con la didascalia
 const TOUR_ROTAZIONE_MS = 8000;
@@ -2028,10 +2030,10 @@ async function avviaTour(modo = 'mio') {
       via = percorso.slice(1, -1);
       if (via.length > 3) via = [via[0], via[Math.floor(via.length / 2)], via[via.length - 1]];
     }
-    // La camera va DIRITTO al nodo e la scena non ruota: a mettere in risalto la locandina
-    // ci pensa l'enfasi (più grande, davanti, con l'alone). Solo la prima tappa raddrizza la
-    // vista se chi guarda l'aveva inclinata.
-    const yaw = 0, pitch = 0;
+    // La camera va DIRITTO al nodo e la scena non ruota da una tappa all'altra: l'inclinazione è la stessa per
+    // tutto il tour (la prima tappa ci arriva con un assestamento), la profondità la dà la prospettiva.
+    const yaw = TOUR_YAW, pitch = TOUR_PITCH;
+    if (i === 0) spatial.tourOrienta(yaw, pitch, 900);
     await spatial.tourVai(t.id, TOUR_VIAGGIO_MS, { via, yaw, pitch });   // viaggio continuo fino al nodo
     prec = t.id;
     if (mio !== tourToken) return;

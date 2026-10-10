@@ -64,6 +64,7 @@ const Z_MAX_ORBIT = 700;                     // in orbita ci si può avvicinare 
 const Z_MIN_ORBIT = -3600;                   // in orbita si può allontanarsi molto di più: la veduta d insieme
 const MARGINE_X = 94, MARGINE_Y = 175;        // spazio da lasciare ai bordi (e al pannello in basso)
 const LONG_MS = 420;                          // tocco lungo su un nodo = ci si vola sopra
+const TOUR_SFUMA = 0.55, TOUR_PROF = 420;     // tour: quanto sbiadiscono i nodi dietro la tappa e su che profondità
 const DIP_MAX = 340;                         // quanto si allarga la camera a metà di un volo tra nodi
 const RAGGI = [0.9, 1.2, 1.55];             // lunghezze dell'arco provate: il nodo va dove c'è più spazio, anche più lontano
 const RAGGIO_EXTRA = 2.0, RETE_FITTA = 28;   // con la rete già fitta (28+ nodi) si prova anche un anello più largo
@@ -972,6 +973,9 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
 
   function draw() {
     const proj = new Map();
+    // Tour: i nodi più lontani del nodo di tappa sbiadiscono (prospettiva atmosferica): è ciò che dà profondità alla scena.
+    let zFuoco = 0, profondita = 0;
+    for (const [id, f] of enfasi) if (f.k > profondita) { const vv = vis.get(id), nn = net.nodes.get(id); if (vv && nn) { profondita = f.k; zFuoco = project(nn, vv).z; } }
     for (const [id, v] of vis) {
       const n = net.nodes.get(id);
       const p = project(n, v);
@@ -984,6 +988,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
         p.s *= 1 + 0.45 * ef.k;                  // e cresce
         p.z -= 2000 * ef.k;                     // e passa davanti a tutti
       }
+      if (profondita > 0 && !(ef && ef.k > 0) && !p.dietro) o *= 1 - TOUR_SFUMA * profondita * Math.max(0, Math.min(1, (p.z - zFuoco) / TOUR_PROF));
       if (o < 0.04) o = 0;   // nella nebbia: né disegnato né toccabile
       p.o = o;
       proj.set(id, p);
