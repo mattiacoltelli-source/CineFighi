@@ -150,6 +150,76 @@ const edgeKey = (e) => (e.a < e.b ? `${e.a}|${e.b}` : `${e.b}|${e.a}`);
 // Scrive solo se il valore è cambiato dall'ultimo frame.
 const setIf = (cache, key, value, write) => { if (cache[key] !== value) { cache[key] = value; write(value); } };
 
+// ─── sfondo: spazio profondo ───────────────────────────────────────────────
+// Stelle a tre profondità e nubi lontane, FISSE nel cielo: ruotano con la camera (girando la rete scorrono come
+// da una finestra) e si spostano un po' quando la camera vola (parallasse: le stelle vicine di più). Le nubi si
+// disegnano una volta sola (rumore frattale) e poi si spostano soltanto. Si ridisegna solo quando la camera si
+// muove: a vista ferma non costa niente.
+const lerpS = (a, b, t) => a + (b - a) * t;
+function rngSeme(a) { return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+const dirNorm = (x, y, z) => { const l = Math.hypot(x, y, z); return [x / l, y / l, z / l]; };
+const hash2 = (x, y, sd) => { let h = Math.imul(x, 374761393) ^ Math.imul(y, 668265263) ^ Math.imul(sd, 2147483647); h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+const vnoise = (x, y, sd) => { const xi = Math.floor(x), yi = Math.floor(y), fx = x - xi, fy = y - yi, u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy); return lerpS(lerpS(hash2(xi, yi, sd), hash2(xi + 1, yi, sd), u), lerpS(hash2(xi, yi + 1, sd), hash2(xi + 1, yi + 1, sd), u), v); };
+const fbm = (x, y, sd, oct) => { let a = 0.5, f = 1, t = 0, n = 0; for (let i = 0; i < oct; i++) { t += a * vnoise(x * f, y * f, sd + i * 7); n += a; a *= 0.5; f *= 2.03; } return t / n; };
+function disegnaNube(seed, c1, c2, size) {
+  const cn = document.createElement("canvas"); cn.width = cn.height = size;
+  const g = cn.getContext("2d"), img = g.createImageData(size, size), px = img.data, h = size / 2;
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const nx = x / size * 3.4, ny = y / size * 3.4;
+    const wx = fbm(nx + 5.2, ny + 1.3, seed, 3), wy = fbm(nx + 8.7, ny + 2.8, seed + 3, 3);   // le nubi si piegano su se stesse
+    const v = fbm(nx + wx * 1.6, ny + wy * 1.6, seed + 11, 5);
+    const d = Math.hypot(x - h, y - h) / h, fall = Math.max(0, 1 - d), fo = fall * fall * (3 - 2 * fall);
+    const a = Math.min(1, Math.max(0, (v - 0.36) * 2.4)) * fo;
+    const m = fbm(nx * 0.8 + 3, ny * 0.8, seed + 23, 3), o = (y * size + x) * 4;
+    px[o] = lerpS(c1[0], c2[0], m); px[o + 1] = lerpS(c1[1], c2[1], m); px[o + 2] = lerpS(c1[2], c2[2], m); px[o + 3] = a * 235;
+  }
+  g.putImageData(img, 0, 0);
+  return cn;
+}
+const SPAZIO_FONDO = "#060910";
+const SPAZIO_ACC = { cyan: [56, 189, 248], orange: [255, 157, 77], violet: [167, 139, 250], gold: [255, 209, 102] };
+const SPAZIO_STELLE_COL = ["#ffffff", "#d6e8ff", "#ffeed8", "#c4dcff"];
+const SPAZIO_PAR = [0.012, 0.03, 0.065];   // quanto scorrono le stelle dei tre livelli quando la camera si sposta
+const SPAZIO_BASE = [   // i cinque disegni di base: colori e seme
+  { pal: [[120, 60, 200], [30, 140, 220]], seed: 3 },
+  { pal: [[255, 140, 80], [150, 60, 170]], seed: 17 },
+  { pal: [[40, 110, 200], [90, 190, 220]], seed: 31 },
+  { pal: [[170, 90, 220], [255, 170, 120]], seed: 47 },
+  { pal: [[30, 150, 190], [110, 80, 210]], seed: 59 }
+];
+// Dove stanno nel cielo, ampiezza (rispetto allo schermo), rotazione, trasparenza: le prime davanti, le altre dietro.
+const SPAZIO_NUBI = [
+  { d: dirNorm(-0.35, -1.0, 1), si: 0, k: 1.7, rot: 0.4, a: 0.34 },
+  { d: dirNorm(0.45, -0.25, 1), si: 1, k: 1.5, rot: 2.1, a: 0.28 },
+  { d: dirNorm(-0.1, 0.65, 1), si: 2, k: 1.9, rot: 3.6, a: 0.28 },
+  { d: dirNorm(0.35, 1.15, 1), si: 3, k: 1.4, rot: 5.0, a: 0.24 },
+  { d: dirNorm(-0.5, 0.1, 1), si: 4, k: 1.6, rot: 1.2, a: 0.26 },
+  { d: dirNorm(0.8, 0.2, -1), si: 0, k: 1.7, rot: 2.8, a: 0.3 },
+  { d: dirNorm(-0.7, -0.4, -1), si: 3, k: 1.6, rot: 4.2, a: 0.28 },
+  { d: dirNorm(0.2, 1.0, -0.8), si: 2, k: 1.8, rot: 0.9, a: 0.28 },
+  { d: dirNorm(-0.3, -1.1, -1), si: 1, k: 1.6, rot: 5.6, a: 0.28 }
+];
+const SPAZIO_ACCENTO = { d: dirNorm(0.1, -0.05, 1), k: 1.9, rot: 0.9, a: 0.36 };   // la nube che prende il colore del nodo attivo
+let spazioStelle = null;
+function stelleSpazio() {
+  if (spazioStelle) return spazioStelle;
+  const rng = rngSeme(20261010);
+  const dir = () => { let x, y, z, l; do { x = rng() * 2 - 1; y = rng() * 2 - 1; z = rng() * 2 - 1; l = x * x + y * y + z * z; } while (l > 1 || l < 0.05); l = Math.sqrt(l); return [x / l, y / l, z / l]; };
+  spazioStelle = Array.from({ length: 1100 }, (_, i) => { const big = rng(); return { d: dir(), l: i % 3, a: 0.22 + rng() * 0.62, r: big < 0.03 ? 2.1 : big < 0.22 ? 1.6 : 1.1, c: SPAZIO_STELLE_COL[(rng() * 4) | 0] }; });
+  return spazioStelle;
+}
+// I disegni delle nubi sono condivisi e si preparano una volta (uno alla volta, per non bloccare l'avvio).
+const spazioNubi = { base: [], accento: {}, pronte: false, avviata: false };
+function preparaSpazio(quandoPronto) {
+  if (spazioNubi.avviata) return;
+  spazioNubi.avviata = true;
+  const lavori = [];
+  SPAZIO_BASE.forEach((c, i) => lavori.push(() => { spazioNubi.base[i] = disegnaNube(c.seed, c.pal[0], c.pal[1], 176); }));
+  Object.keys(SPAZIO_ACC).forEach((k, i) => lavori.push(() => { const c = SPAZIO_ACC[k]; spazioNubi.accento[k] = disegnaNube(71 + i * 5, c, [Math.min(255, c[0] + 60), Math.min(255, c[1] + 60), Math.min(255, c[2] + 60)], 192); }));
+  const avanti = () => { const j = lavori.shift(); if (j) { j(); quandoPronto(); setTimeout(avanti, 16); } else spazioNubi.pronte = true; };
+  setTimeout(avanti, 60);
+}
+
 // container: il livello dentro al riquadro (#dnaSpatial).
 // nodeShell(n) -> { cls, html }: classi fisse e contenuto del nodo, dalla
 //   stessa funzione della vista piatta (stesso aspetto).
@@ -160,6 +230,71 @@ const setIf = (cache, key, value, write) => { if (cache[key] !== value) { cache[
 export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, radius }) {
   const edgesEl = container.querySelector(".dna-spatial__edges");
   const nodesEl = container.querySelector(".dna-spatial__nodes");
+
+  // ─── sfondo: spazio (vedi in cima: stelle e nubi lontane) ───
+  const spaceCv = container.querySelector(".dna-spatial__space");
+  const spaceCtx = spaceCv ? spaceCv.getContext("2d", { alpha: false }) : null;
+  const spLayer = document.createElement("canvas"), spLx = spLayer.getContext("2d");   // fondo e nubi, a un quarto di risoluzione (sono morbide)
+  const spAcc = { cyan: 1, orange: 0, violet: 0, gold: 0 };                            // quanto pesa il colore di ogni accento
+  let spSig = null, spDpr = 1;
+  function dimensionaSpazio() {
+    if (!spaceCv) return;
+    spDpr = Math.min(1.5, window.devicePixelRatio || 1);
+    spaceCv.width = Math.max(2, Math.round(W * spDpr)); spaceCv.height = Math.max(2, Math.round(H * spDpr));
+    spLayer.width = Math.max(2, Math.ceil(W / 4)); spLayer.height = Math.max(2, Math.ceil(H / 4));
+    spSig = null;
+  }
+  // Ridisegna lo sfondo solo se la camera si è mossa. Ritorna true finché il colore dell'accento sta ancora cambiando.
+  function drawSpace() {
+    if (!spaceCtx || !sfera || W < 20 || H < 20) return false;
+    const M = cam.M, nodoAttivo = net && net.nodes.get(focusId), tipo = nodoAttivo ? nodoAttivo.type : null;
+    const key = tipo === "genere" ? "orange" : tipo === "attore" ? "violet" : tipo === "film" ? "gold" : "cyan";   // persona e regista: ciano
+    let anim = false;
+    for (const k in spAcc) { const t = k === key ? 1 : 0, v = spAcc[k] + (t - spAcc[k]) * 0.08; spAcc[k] = Math.abs(v - t) < 0.01 ? t : v; if (spAcc[k] !== t) anim = true; }
+    const sig = [M[0], M[1], M[2], M[3], M[4], M[5], M[6], M[7], M[8], cam.x, cam.y, cam.cz, cam.z, W, H, spazioNubi.base.length + Object.keys(spazioNubi.accento).length, spAcc.cyan, spAcc.orange, spAcc.violet, spAcc.gold];
+    if (spSig && sig.every((v, i) => v === spSig[i])) return anim;
+    spSig = sig;
+    const f = Math.max(W, H) * 0.36;
+    // posizione della camera nel suo sistema: sposta lo sfondo in senso opposto, le stelle vicine di più
+    const cpx = M[0] * cam.x + M[1] * cam.y + M[2] * cam.cz, cpy = M[3] * cam.x + M[4] * cam.y + M[5] * cam.cz;
+    const roll = Math.atan2(M[3], M[0]), zf = 1 + (F / Math.max(1, F - cam.z) - 0.7) * 0.05;
+    spLx.setTransform(0.25, 0, 0, 0.25, 0, 0); spLx.globalCompositeOperation = "source-over"; spLx.globalAlpha = 1;
+    spLx.fillStyle = SPAZIO_FONDO; spLx.fillRect(0, 0, W, H);                              // fondo opaco: poi basta una sola copia a schermo intero
+    spLx.globalCompositeOperation = "lighter";
+    const nube = (c, sprite, alpha, par) => {
+      if (!sprite) return;
+      const rz = M[6] * c.d[0] + M[7] * c.d[1] + M[8] * c.d[2];
+      if (rz < 0.2) return;
+      const rx = M[0] * c.d[0] + M[1] * c.d[1] + M[2] * c.d[2], ry = M[3] * c.d[0] + M[4] * c.d[1] + M[5] * c.d[2];
+      const size = c.k * f * 1.5 / Math.max(0.5, rz), sx = W / 2 + (rx / rz * f - cpx * par) * zf, sy = H / 2 + (ry / rz * f - cpy * par) * zf;
+      if (sx < -size || sx > W + size || sy < -size || sy > H + size) return;
+      spLx.globalAlpha = alpha * Math.min(1, (rz - 0.2) * 3);
+      spLx.save(); spLx.translate(sx, sy); spLx.rotate(roll + c.rot); spLx.drawImage(sprite, -size / 2, -size / 2, size, size); spLx.restore();
+    };
+    for (const c of SPAZIO_NUBI) nube(c, spazioNubi.base[c.si], c.a, 0.02);
+    for (const k in spAcc) if (spAcc[k] > 0.02) nube(SPAZIO_ACCENTO, spazioNubi.accento[k], SPAZIO_ACCENTO.a * spAcc[k], 0.03);
+    // vignettatura leggera ai bordi (sul livello a bassa risoluzione: un elemento in più nella pagina disturba i gesti)
+    spLx.globalCompositeOperation = "source-over"; spLx.globalAlpha = 1;
+    const vg = spLx.createRadialGradient(W / 2, H * 0.46, Math.min(W, H) * 0.3, W / 2, H * 0.46, Math.max(W, H) * 0.78);
+    vg.addColorStop(0, "rgba(2,4,8,0)"); vg.addColorStop(1, "rgba(2,4,8,0.6)");
+    spLx.fillStyle = vg; spLx.fillRect(0, 0, W, H);
+    const g = spaceCtx;
+    g.setTransform(spDpr, 0, 0, spDpr, 0, 0); g.globalCompositeOperation = "copy"; g.globalAlpha = 1;
+    g.imageSmoothingEnabled = true; g.drawImage(spLayer, 0, 0, W, H);
+    g.globalCompositeOperation = "lighter";
+    for (const st of stelleSpazio()) {
+      const rz = M[6] * st.d[0] + M[7] * st.d[1] + M[8] * st.d[2];
+      if (rz < 0.12) continue;
+      const rx = M[0] * st.d[0] + M[1] * st.d[1] + M[2] * st.d[2], ry = M[3] * st.d[0] + M[4] * st.d[1] + M[5] * st.d[2];
+      const x = W / 2 + (rx / rz * f - cpx * SPAZIO_PAR[st.l]) * zf, y = H / 2 + (ry / rz * f - cpy * SPAZIO_PAR[st.l]) * zf;
+      if (x < -2 || x > W + 2 || y < -2 || y > H + 2) continue;
+      g.globalAlpha = st.a * Math.min(1, (rz - 0.12) * 4);
+      g.fillStyle = st.c;
+      if (st.r > 2) { g.beginPath(); g.arc(x, y, st.r, 0, 6.2832); g.fill(); } else g.fillRect(x - st.r / 2, y - st.r / 2, st.r, st.r);
+    }
+    g.globalAlpha = 1; g.globalCompositeOperation = "source-over";
+    return anim;
+  }
 
   let net = null, focusId = null, active = false;
   let orbit = false;            // laboratorio 3D: un dito ruota la scena
@@ -719,6 +854,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       if (v.h !== v.th || v.grow !== 1) moving = true;
     }
 
+    if (drawSpace()) moving = true;
     draw();
     if (moving) raf = requestAnimationFrame(frame);
   }
@@ -1045,7 +1181,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
   }, { passive: false });
 
   // Schermo intero, rotazione: il riquadro cambia misura.
-  const measure = () => { W = container.clientWidth; H = container.clientHeight; kick(); };
+  const measure = () => { W = container.clientWidth; H = container.clientHeight; dimensionaSpazio(); kick(); };
   if (typeof ResizeObserver === "function") new ResizeObserver(measure).observe(container);
   else window.addEventListener("resize", measure);
 
@@ -1223,7 +1359,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       }
       kick();
     },
-    show() { active = true; container.classList.remove("hidden"); measure(); },
+    show() { active = true; container.classList.remove("hidden"); preparaSpazio(() => { spSig = null; kick(); }); measure(); },
     // Nascosta si svuota: tornando a Spaziale riparte allineata alla rete,
     // senza tenere in memoria un DOM che nessuno vede.
     hide() { active = false; container.classList.add("hidden"); clear(); },

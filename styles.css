@@ -1472,6 +1472,10 @@ body:has(.app.dna-schermo-intero #screen-tonight:not(.hidden)) .bottom-nav {
    (.dna-node, .dna-edge): qui cambia solo chi li posiziona — la transform la
    scrive il JS, con la proiezione e la scala della profondità. */
 .dna-spatial { position:absolute; inset:0; touch-action:none; }
+/* Sfondo della vista 3D: stelle e nubi lontane, con una vignettatura ai bordi, disegnate su un canvas (dna-spatial.js,
+   drawSpace) sotto agli archi e ai nodi. Non prende i tocchi. NIENTE elemento in più accanto (una vignettatura in un
+   <div> faceva annullare i gesti al browser: pointercancel). */
+.dna-spatial__space { position:absolute; inset:0; width:100%; height:100%; display:block; pointer-events:none; }
 .dna-spatial__edges {
   position:absolute; inset:0; width:100%; height:100%; overflow:visible; pointer-events:none;
 }

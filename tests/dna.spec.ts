@@ -1005,6 +1005,7 @@ test("Sfera: il tocco lungo su un nodo ci porta la camera sopra senza aprirlo", 
 // Lab 3D: un dito ruota la scena a 360° in verticale e in orizzontale, senza
 // blocchi: un giro completo riporta i nodi dov'erano.
 test("Sfera: la rotazione a un dito è libera a 360° e non si blocca", async ({ page }) => {
+  test.setTimeout(120_000);   // 16 trascinamenti di fila: con lo sfondo di spazio, su un browser senza scheda grafica, sfiorava i 60 s
   const scritture = soloLettura(page);
   const guasti = osserva(page);
   await entra(page);
@@ -1656,6 +1657,43 @@ test("3D: l'espansione di un nodo è simmetrica attorno a lui", async ({ page })
   expect(r.n, "pochi collegamenti per misurare la simmetria").toBeGreaterThanOrEqual(3);
   expect(r.maxGap, `angolo massimo fra vicini ${r.maxGap.toFixed(0)}° su ${r.n} nodi (regolare: ${(360 / r.n).toFixed(0)}°)`).toBeLessThan((360 / r.n) * 1.3);
   expect(r.margine, "un nodo troppo vicino al bordo").toBeGreaterThan(30);
+  expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
+  expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
+});
+
+
+// 3D: dietro ai nodi c'è lo sfondo di spazio (stelle e nubi, su un canvas). Deve disegnare davvero, stare sotto
+// a tutto e non rubare i tocchi (il gesto e i tocchi sui nodi restano quelli di sempre).
+test("3D: lo sfondo di spazio si disegna e non intercetta i tocchi", async ({ page }) => {
+  const guasti = osserva(page);
+  const scritture = soloLettura(page);
+  await entra(page);
+  await vaiA(page, "tonight");
+  await page.locator("#dnaNodes .dna-node.is-root").waitFor({ state: "visible", timeout: 30_000 });
+  await page.locator('#dnaViewToggle [data-dna-view="sphere"]').click();
+  await page.locator("#dnaSpatial .dna-node.is-root").waitFor({ state: "visible" });
+  await toccaNodo(page, "#dnaSpatial .dna-node.is-root");
+  await page.waitForTimeout(2500);
+  const r = await page.evaluate(() => {
+    const cv = document.querySelector<HTMLCanvasElement>(".dna-spatial__space")!;
+    const ctx = cv.getContext("2d")!;
+    const d = ctx.getImageData(0, 0, cv.width, cv.height).data;
+    let chiari = 0, colorati = 0;
+    for (let i = 0; i < d.length; i += 4 * 7) {
+      const lum = (d[i] + d[i + 1] + d[i + 2]) / 3;
+      if (lum > 150) chiari++;
+      if (Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2]) > 18) colorati++;
+    }
+    const st = document.getElementById("dnaSpatial")!.getBoundingClientRect();
+    // un punto vuoto del riquadro: chi sta in cima non dev'essere il canvas dello sfondo
+    const sopra = document.elementFromPoint(st.left + st.width * 0.12, st.top + st.height * 0.62);
+    return { chiari, colorati, w: cv.width, h: cv.height, pe: getComputedStyle(cv).pointerEvents, sopraCanvas: sopra === cv, visibile: cv.getBoundingClientRect().height > 100 };
+  });
+  expect(r.visibile, "il canvas dello sfondo non si vede").toBe(true);
+  expect(r.chiari, "nessuna stella disegnata").toBeGreaterThan(20);
+  expect(r.colorati, "nessuna nube colorata disegnata").toBeGreaterThan(300);
+  expect(r.pe, "il canvas dello sfondo prende i tocchi").toBe("none");
+  expect(r.sopraCanvas, "il canvas dello sfondo sta sopra ai nodi").toBe(false);
   expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
   expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
 });
