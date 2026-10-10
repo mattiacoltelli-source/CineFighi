@@ -268,15 +268,20 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
   // ─── sfondo: spazio (vedi in cima: stelle e nubi lontane) ───
   const spaceCv = container.querySelector(".dna-spatial__space");
   const spaceCtx = spaceCv ? spaceCv.getContext("2d", { alpha: false }) : null;
-  const spLayer = document.createElement("canvas"), spLx = spLayer.getContext("2d");   // fondo e nubi, a un quarto di risoluzione (sono morbide)
+  // Fondo e nubi stanno su un canvas a un quarto di risoluzione (sono morbide) che il browser ingrandisce da sé via CSS;
+  // le stelle su un secondo canvas nitido e trasparente. Niente copia a schermo intero in JavaScript: è quella che faceva scattare.
+  const spLx = spaceCtx;
+  const starsCv = spaceCv ? document.createElement("canvas") : null;
+  if (starsCv) { starsCv.className = "dna-spatial__space"; starsCv.setAttribute("aria-hidden", "true"); spaceCv.after(starsCv); }
+  const starsCtx = starsCv ? starsCv.getContext("2d") : null;
   const spAcc = { cyan: 1, orange: 0, violet: 0, gold: 0 };                            // quanto pesa il colore di ogni accento
-  let spSig = null, spDpr = 1;
+  let spSig = null, spNsig = null, spDpr = 1, spStarT = 0;
   function dimensionaSpazio() {
     if (!spaceCv) return;
     spDpr = 1;
-    spaceCv.width = Math.max(2, Math.round(W * spDpr)); spaceCv.height = Math.max(2, Math.round(H * spDpr));
-    spLayer.width = Math.max(2, Math.ceil(W / 4)); spLayer.height = Math.max(2, Math.ceil(H / 4));
-    spSig = null;
+    starsCv.width = Math.max(2, Math.round(W * spDpr)); starsCv.height = Math.max(2, Math.round(H * spDpr));
+    spaceCv.width = Math.max(2, Math.ceil(W / 4)); spaceCv.height = Math.max(2, Math.ceil(H / 4));
+    spSig = null; spNsig = null;
   }
   // Ridisegna lo sfondo solo se la camera si è mossa. Ritorna true finché il colore dell'accento sta ancora cambiando.
   function drawSpace() {
@@ -296,30 +301,38 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     // posizione della camera nel suo sistema: sposta lo sfondo in senso opposto, le stelle vicine di più
     const cpx = M[0] * cam.x + M[1] * cam.y + M[2] * cam.cz, cpy = M[3] * cam.x + M[4] * cam.y + M[5] * cam.cz;
     const roll = Math.atan2(M[3], M[0]), zf = 1 + (F / Math.max(1, F - cam.z) - 0.7) * 0.05;
-    spLx.setTransform(0.25, 0, 0, 0.25, 0, 0); spLx.globalCompositeOperation = "source-over"; spLx.globalAlpha = 1;
-    spLx.fillStyle = SPAZIO_FONDO; spLx.fillRect(0, 0, W, H);                              // fondo opaco: poi basta una sola copia a schermo intero
-    spLx.globalCompositeOperation = "lighter";
-    const nube = (c, sprite, alpha, par) => {
-      if (!sprite) return;
-      const rz = M[6] * c.d[0] + M[7] * c.d[1] + M[8] * c.d[2];
-      if (rz < 0.2) return;
-      const rx = M[0] * c.d[0] + M[1] * c.d[1] + M[2] * c.d[2], ry = M[3] * c.d[0] + M[4] * c.d[1] + M[5] * c.d[2];
-      const size = c.k * f * 1.5 / Math.max(0.5, rz), sx = W / 2 + (rx / rz * f - cpx * par) * zf, sy = H / 2 + (ry / rz * f - cpy * par) * zf;
-      if (sx < -size || sx > W + size || sy < -size || sy > H + size) return;
-      spLx.globalAlpha = alpha * Math.min(1, (rz - 0.2) * 3);
-      spLx.save(); spLx.translate(sx, sy); spLx.rotate(roll + c.rot); spLx.drawImage(sprite, -size / 2, -size / 2, size, size); spLx.restore();
-    };
-    for (const c of SPAZIO_NUBI) nube(c, spazioNubi.base[c.si], c.a * (fb[c.si] || 0), 0.02);
-    for (const k in spAcc) if (spAcc[k] > 0.02) nube(SPAZIO_ACCENTO, spazioNubi.accento[k], SPAZIO_ACCENTO.a * spAcc[k] * (fa[k] || 0), 0.03);
-    // vignettatura leggera ai bordi (sul livello a bassa risoluzione: un elemento in più nella pagina disturba i gesti)
-    spLx.globalCompositeOperation = "source-over"; spLx.globalAlpha = 1;
-    const vg = spLx.createRadialGradient(W / 2, H * 0.46, Math.min(W, H) * 0.3, W / 2, H * 0.46, Math.max(W, H) * 0.78);
-    vg.addColorStop(0, "rgba(2,4,8,0)"); vg.addColorStop(1, "rgba(2,4,8,0.6)");
-    spLx.fillStyle = vg; spLx.fillRect(0, 0, W, H);
-    const g = spaceCtx;
-    g.setTransform(spDpr, 0, 0, spDpr, 0, 0); g.globalCompositeOperation = "copy"; g.globalAlpha = 1;
-    g.imageSmoothingEnabled = true; g.drawImage(spLayer, 0, 0, W, H);
-    g.globalCompositeOperation = "lighter";
+    // Le nubi sono lontanissime: la camera le sposta di pochissimo (parallasse 0.02-0.03). Si ridisegnano solo quando
+    // la rotazione cambia, compare una dissolvenza o lo spostamento supera un pixel: durante un viaggio del tour
+    // (camera che scorre, nessuna rotazione) costano un fotogramma ogni tanti invece che tutti.
+    const nSig = [M[0], M[1], M[2], M[3], M[4], M[5], M[6], M[7], M[8], Math.round(cpx * zf * 0.02), Math.round(cpy * zf * 0.02), Math.round(cpx * zf * 0.03), Math.round(cpy * zf * 0.03), W, H, sig[15], spAcc.cyan, spAcc.orange, spAcc.violet, spAcc.gold];
+    if (!spNsig || !nSig.every((v, i) => v === spNsig[i])) {
+      spNsig = nSig;
+      spLx.setTransform(0.25, 0, 0, 0.25, 0, 0); spLx.globalCompositeOperation = "source-over"; spLx.globalAlpha = 1;
+      spLx.fillStyle = SPAZIO_FONDO; spLx.fillRect(0, 0, W, H);                              // fondo opaco
+      spLx.globalCompositeOperation = "lighter";
+      const nube = (c, sprite, alpha, par) => {
+        if (!sprite) return;
+        const rz = M[6] * c.d[0] + M[7] * c.d[1] + M[8] * c.d[2];
+        if (rz < 0.2) return;
+        const rx = M[0] * c.d[0] + M[1] * c.d[1] + M[2] * c.d[2], ry = M[3] * c.d[0] + M[4] * c.d[1] + M[5] * c.d[2];
+        const size = c.k * f * 1.5 / Math.max(0.5, rz), sx = W / 2 + (rx / rz * f - cpx * par) * zf, sy = H / 2 + (ry / rz * f - cpy * par) * zf;
+        if (sx < -size || sx > W + size || sy < -size || sy > H + size) return;
+        spLx.globalAlpha = alpha * Math.min(1, (rz - 0.2) * 3);
+        spLx.save(); spLx.translate(sx, sy); spLx.rotate(roll + c.rot); spLx.drawImage(sprite, -size / 2, -size / 2, size, size); spLx.restore();
+      };
+      for (const c of SPAZIO_NUBI) nube(c, spazioNubi.base[c.si], c.a * (fb[c.si] || 0), 0.02);
+      for (const k in spAcc) if (spAcc[k] > 0.02) nube(SPAZIO_ACCENTO, spazioNubi.accento[k], SPAZIO_ACCENTO.a * spAcc[k] * (fa[k] || 0), 0.03);
+      // vignettatura leggera ai bordi (sul livello a bassa risoluzione: un elemento in più nella pagina disturba i gesti)
+      spLx.globalCompositeOperation = "source-over"; spLx.globalAlpha = 1;
+      const vg = spLx.createRadialGradient(W / 2, H * 0.46, Math.min(W, H) * 0.3, W / 2, H * 0.46, Math.max(W, H) * 0.78);
+      vg.addColorStop(0, "rgba(2,4,8,0)"); vg.addColorStop(1, "rgba(2,4,8,0.6)");
+      spLx.fillStyle = vg; spLx.fillRect(0, 0, W, H);
+    }
+    // Nei viaggi del tour le stelle si spostano pianissimo: bastano 30 aggiornamenti al secondo (il canvas a schermo intero è la parte cara).
+    if (cam.viaggio && ora - spStarT < 30) { spSig = null; return true; }
+    spStarT = ora;
+    const g = starsCtx;
+    g.setTransform(spDpr, 0, 0, spDpr, 0, 0); g.clearRect(0, 0, W, H);
     for (const st of stelleSpazio()) {
       const rz = M[6] * st.d[0] + M[7] * st.d[1] + M[8] * st.d[2];
       if (rz < 0.12) continue;
@@ -330,7 +343,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       g.fillStyle = st.c;
       if (st.r > 2) { g.beginPath(); g.arc(x, y, st.r, 0, 6.2832); g.fill(); } else g.fillRect(x - st.r / 2, y - st.r / 2, st.r, st.r);
     }
-    g.globalAlpha = 1; g.globalCompositeOperation = "source-over";
+    g.globalAlpha = 1;
     return anim;
   }
 
@@ -814,7 +827,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     // obiettivo, così gli smorzamenti qui sotto non la rincorrono.
     if (cam.viaggio) {
       const v = cam.viaggio, u = Math.max(0, Math.min(1, (now - v.t0) / v.dur));
-      const e = u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
+      const e = u * u * u * (u * (u * 6 - 15) + 10);   // smootherstep: parte e frena più dolcemente di una cubica, senza picchi di velocità a metà
       const pt = v.curva ? v.curva(e) : { x: v.a.x + (v.b.x - v.a.x) * e, y: v.a.y + (v.b.y - v.a.y) * e, cz: v.a.cz + (v.b.cz - v.a.cz) * e };
       cam.tx = cam.x = pt.x;
       cam.ty = cam.y = pt.y;

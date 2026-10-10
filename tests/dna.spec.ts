@@ -1688,24 +1688,26 @@ test("3D: lo sfondo di spazio si disegna e non intercetta i tocchi", async ({ pa
   await toccaNodo(page, "#dnaSpatial .dna-node.is-root");
   await page.waitForTimeout(2500);
   const r = await page.evaluate(() => {
-    const cv = document.querySelector<HTMLCanvasElement>(".dna-spatial__space")!;
-    const ctx = cv.getContext("2d")!;
-    const d = ctx.getImageData(0, 0, cv.width, cv.height).data;
-    let chiari = 0, colorati = 0;
-    for (let i = 0; i < d.length; i += 4 * 7) {
-      const lum = (d[i] + d[i + 1] + d[i + 2]) / 3;
-      if (lum > 150) chiari++;
-      if (Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2]) > 18) colorati++;
-    }
+    // Due canvas: il fondo con le nubi (a bassa risoluzione, ingrandito via CSS) e le stelle (nitide, trasparenti)
+    const cvs = [...document.querySelectorAll<HTMLCanvasElement>(".dna-spatial__space")];
+    const conta = (cv: HTMLCanvasElement, f: (d: Uint8ClampedArray, i: number) => boolean) => {
+      const d = cv.getContext("2d")!.getImageData(0, 0, cv.width, cv.height).data;
+      let n = 0;
+      for (let i = 0; i < d.length; i += 4 * 7) if (f(d, i)) n++;
+      return n;
+    };
+    const chiari = conta(cvs[1], (d, i) => d[i + 3] > 30 && (d[i] + d[i + 1] + d[i + 2]) / 3 > 150);
+    const colorati = conta(cvs[0], (d, i) => Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2]) > 18);
     const st = document.getElementById("dnaSpatial")!.getBoundingClientRect();
-    // un punto vuoto del riquadro: chi sta in cima non dev'essere il canvas dello sfondo
+    // un punto vuoto del riquadro: chi sta in cima non dev'essere uno dei canvas dello sfondo
     const sopra = document.elementFromPoint(st.left + st.width * 0.12, st.top + st.height * 0.62);
-    return { chiari, colorati, w: cv.width, h: cv.height, pe: getComputedStyle(cv).pointerEvents, sopraCanvas: sopra === cv, visibile: cv.getBoundingClientRect().height > 100 };
+    return { n: cvs.length, chiari, colorati, pe: cvs.map(c => getComputedStyle(c).pointerEvents).join(), sopraCanvas: !!sopra && cvs.includes(sopra as HTMLCanvasElement), visibile: cvs[0].getBoundingClientRect().height > 100 };
   });
   expect(r.visibile, "il canvas dello sfondo non si vede").toBe(true);
   expect(r.chiari, "nessuna stella disegnata").toBeGreaterThan(8);
-  expect(r.colorati, "nessuna nube colorata disegnata").toBeGreaterThan(300);
-  expect(r.pe, "il canvas dello sfondo prende i tocchi").toBe("none");
+  expect(r.n, "i canvas dello sfondo sono due (fondo e stelle)").toBe(2);
+  expect(r.colorati, "nessuna nube colorata disegnata").toBeGreaterThan(20);
+  expect(r.pe, "i canvas dello sfondo prendono i tocchi").toBe("none,none");
   expect(r.sopraCanvas, "il canvas dello sfondo sta sopra ai nodi").toBe(false);
   expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
   expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
