@@ -161,10 +161,11 @@ const dirNorm = (x, y, z) => { const l = Math.hypot(x, y, z); return [x / l, y /
 const hash2 = (x, y, sd) => { let h = Math.imul(x, 374761393) ^ Math.imul(y, 668265263) ^ Math.imul(sd, 2147483647); h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
 const vnoise = (x, y, sd) => { const xi = Math.floor(x), yi = Math.floor(y), fx = x - xi, fy = y - yi, u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy); return lerpS(lerpS(hash2(xi, yi, sd), hash2(xi + 1, yi, sd), u), lerpS(hash2(xi, yi + 1, sd), hash2(xi + 1, yi + 1, sd), u), v); };
 const fbm = (x, y, sd, oct) => { let a = 0.5, f = 1, t = 0, n = 0; for (let i = 0; i < oct; i++) { t += a * vnoise(x * f, y * f, sd + i * 7); n += a; a *= 0.5; f *= 2.03; } return t / n; };
-function disegnaNube(seed, c1, c2, size) {
-  const cn = document.createElement("canvas"); cn.width = cn.height = size;
-  const g = cn.getContext("2d"), img = g.createImageData(size, size), px = img.data, h = size / 2;
-  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+// Una riga di pixel di una nube (rumore frattale). Gira in un Web Worker (fuori dal thread principale: calcolarla qui blocca
+// l'app per 60-150 ms su un telefono di fascia media, e si sentiva alle prime aperture); se il worker non c'è, a fette.
+function rigaNube(px, seed, c1, c2, size, y) {
+  const h = size / 2;
+  for (let x = 0; x < size; x++) {
     const nx = x / size * 3.4, ny = y / size * 3.4;
     const wx = fbm(nx + 5.2, ny + 1.3, seed, 3), wy = fbm(nx + 8.7, ny + 2.8, seed + 3, 3);   // le nubi si piegano su se stesse
     const v = fbm(nx + wx * 1.6, ny + wy * 1.6, seed + 11, 5);
@@ -173,8 +174,44 @@ function disegnaNube(seed, c1, c2, size) {
     const m = fbm(nx * 0.8 + 3, ny * 0.8, seed + 23, 3), o = (y * size + x) * 4;
     px[o] = lerpS(c1[0], c2[0], m); px[o + 1] = lerpS(c1[1], c2[1], m); px[o + 2] = lerpS(c1[2], c2[2], m); px[o + 3] = a * 235;
   }
-  g.putImageData(img, 0, 0);
+}
+let spazioWorker;   // undefined = non ancora provato, null = non disponibile
+const spazioAttese = new Map();   // id -> { size, fine }
+let spazioIdLavoro = 0;
+function nubeSulCanvas(buf, size) {
+  const cn = document.createElement("canvas"); cn.width = cn.height = size;
+  cn.getContext("2d").putImageData(new ImageData(new Uint8ClampedArray(buf), size, size), 0, 0);
   return cn;
+}
+function nubeAFette(seed, c1, c2, size, fine) {   // ripiego: sul thread principale, 3 ms per volta
+  const px = new Uint8ClampedArray(size * size * 4);
+  let y = 0;
+  const passo = () => {
+    const limite = performance.now() + 3;
+    while (y < size && performance.now() < limite) { rigaNube(px, seed, c1, c2, size, y); y++; }
+    if (y < size) setTimeout(passo, 6); else fine(nubeSulCanvas(px.buffer, size));
+  };
+  passo();
+}
+function avviaWorkerSpazio() {
+  try {
+    const codice = `const lerpS=${lerpS};const hash2=${hash2};const vnoise=${vnoise};const fbm=${fbm};const rigaNube=${rigaNube};
+onmessage=(e)=>{const m=e.data,px=new Uint8ClampedArray(m.size*m.size*4);for(let y=0;y<m.size;y++)rigaNube(px,m.seed,m.c1,m.c2,m.size,y);postMessage({id:m.id,buf:px.buffer},[px.buffer]);};`;
+    const w = new Worker(URL.createObjectURL(new Blob([codice], { type: "text/javascript" })));
+    w.onmessage = (e) => { const a = spazioAttese.get(e.data.id); if (!a) return; spazioAttese.delete(e.data.id); a.fine(nubeSulCanvas(e.data.buf, a.size)); };
+    w.onerror = () => {   // il worker non parte: quello che restava si calcola a fette
+      spazioWorker = null;
+      for (const [id, a] of [...spazioAttese]) { spazioAttese.delete(id); nubeAFette(a.seed, a.c1, a.c2, a.size, a.fine); }
+    };
+    return w;
+  } catch { return null; }
+}
+function disegnaNube(seed, c1, c2, size, fine) {
+  if (spazioWorker === undefined || spazioWorker === null) { if (spazioWorker === undefined) spazioWorker = avviaWorkerSpazio(); }
+  if (!spazioWorker) { nubeAFette(seed, c1, c2, size, fine); return; }
+  const id = ++spazioIdLavoro;
+  spazioAttese.set(id, { seed, c1, c2, size, fine });
+  spazioWorker.postMessage({ id, seed, c1, c2, size });
 }
 const SPAZIO_FONDO = "#060910";
 const SPAZIO_ACC = { cyan: [56, 189, 248], orange: [255, 157, 77], violet: [167, 139, 250], gold: [255, 209, 102] };
@@ -208,16 +245,13 @@ function stelleSpazio() {
   spazioStelle = Array.from({ length: 1100 }, (_, i) => { const big = rng(); return { d: dir(), l: i % 3, a: 0.22 + rng() * 0.62, r: big < 0.03 ? 2.1 : big < 0.22 ? 1.6 : 1.1, c: SPAZIO_STELLE_COL[(rng() * 4) | 0] }; });
   return spazioStelle;
 }
-// I disegni delle nubi sono condivisi e si preparano una volta (uno alla volta, per non bloccare l'avvio).
-const spazioNubi = { base: [], accento: {}, pronte: false, avviata: false };
+// I disegni delle nubi sono condivisi e si preparano una volta (in un worker, tutti insieme). `t*`: quando sono pronte (dissolvenza).
+const spazioNubi = { base: [], accento: {}, tBase: [], tAcc: {}, avviata: false };
 function preparaSpazio(quandoPronto) {
   if (spazioNubi.avviata) return;
   spazioNubi.avviata = true;
-  const lavori = [];
-  SPAZIO_BASE.forEach((c, i) => lavori.push(() => { spazioNubi.base[i] = disegnaNube(c.seed, c.pal[0], c.pal[1], 176); }));
-  Object.keys(SPAZIO_ACC).forEach((k, i) => lavori.push(() => { const c = SPAZIO_ACC[k]; spazioNubi.accento[k] = disegnaNube(71 + i * 5, c, [Math.min(255, c[0] + 60), Math.min(255, c[1] + 60), Math.min(255, c[2] + 60)], 192); }));
-  const avanti = () => { const j = lavori.shift(); if (j) { j(); quandoPronto(); setTimeout(avanti, 16); } else spazioNubi.pronte = true; };
-  setTimeout(avanti, 60);
+  SPAZIO_BASE.forEach((c, i) => disegnaNube(c.seed, c.pal[0], c.pal[1], 176, (cn) => { spazioNubi.base[i] = cn; spazioNubi.tBase[i] = performance.now(); quandoPronto(); }));
+  Object.keys(SPAZIO_ACC).forEach((k, i) => { const c = SPAZIO_ACC[k]; disegnaNube(71 + i * 5, c, [Math.min(255, c[0] + 60), Math.min(255, c[1] + 60), Math.min(255, c[2] + 60)], 192, (cn) => { spazioNubi.accento[k] = cn; spazioNubi.tAcc[k] = performance.now(); quandoPronto(); }); });
 }
 
 // container: il livello dentro al riquadro (#dnaSpatial).
@@ -239,7 +273,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
   let spSig = null, spDpr = 1;
   function dimensionaSpazio() {
     if (!spaceCv) return;
-    spDpr = Math.min(1.5, window.devicePixelRatio || 1);
+    spDpr = 1;
     spaceCv.width = Math.max(2, Math.round(W * spDpr)); spaceCv.height = Math.max(2, Math.round(H * spDpr));
     spLayer.width = Math.max(2, Math.ceil(W / 4)); spLayer.height = Math.max(2, Math.ceil(H / 4));
     spSig = null;
@@ -251,7 +285,11 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     const key = tipo === "genere" ? "orange" : tipo === "attore" ? "violet" : tipo === "film" ? "gold" : "cyan";   // persona e regista: ciano
     let anim = false;
     for (const k in spAcc) { const t = k === key ? 1 : 0, v = spAcc[k] + (t - spAcc[k]) * 0.08; spAcc[k] = Math.abs(v - t) < 0.01 ? t : v; if (spAcc[k] !== t) anim = true; }
-    const sig = [M[0], M[1], M[2], M[3], M[4], M[5], M[6], M[7], M[8], cam.x, cam.y, cam.cz, cam.z, W, H, spazioNubi.base.length + Object.keys(spazioNubi.accento).length, spAcc.cyan, spAcc.orange, spAcc.violet, spAcc.gold];
+    const ora = performance.now(), DISS = 700;   // ogni nube compare con una dissolvenza (DISS ms) quando è pronta
+    const fb = spazioNubi.tBase.map((t0) => Math.min(1, (ora - t0) / DISS)), fa = {};
+    for (const k in spazioNubi.tAcc) fa[k] = Math.min(1, (ora - spazioNubi.tAcc[k]) / DISS);
+    if (fb.some((v) => v < 1) || Object.values(fa).some((v) => v < 1)) anim = true;
+    const sig = [M[0], M[1], M[2], M[3], M[4], M[5], M[6], M[7], M[8], cam.x, cam.y, cam.cz, cam.z, W, H, fb.reduce((a, v) => a + v, 0) + Object.values(fa).reduce((a, v) => a + v, 0), spAcc.cyan, spAcc.orange, spAcc.violet, spAcc.gold];
     if (spSig && sig.every((v, i) => v === spSig[i])) return anim;
     spSig = sig;
     const f = Math.max(W, H) * 0.36;
@@ -271,8 +309,8 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       spLx.globalAlpha = alpha * Math.min(1, (rz - 0.2) * 3);
       spLx.save(); spLx.translate(sx, sy); spLx.rotate(roll + c.rot); spLx.drawImage(sprite, -size / 2, -size / 2, size, size); spLx.restore();
     };
-    for (const c of SPAZIO_NUBI) nube(c, spazioNubi.base[c.si], c.a, 0.02);
-    for (const k in spAcc) if (spAcc[k] > 0.02) nube(SPAZIO_ACCENTO, spazioNubi.accento[k], SPAZIO_ACCENTO.a * spAcc[k], 0.03);
+    for (const c of SPAZIO_NUBI) nube(c, spazioNubi.base[c.si], c.a * (fb[c.si] || 0), 0.02);
+    for (const k in spAcc) if (spAcc[k] > 0.02) nube(SPAZIO_ACCENTO, spazioNubi.accento[k], SPAZIO_ACCENTO.a * spAcc[k] * (fa[k] || 0), 0.03);
     // vignettatura leggera ai bordi (sul livello a bassa risoluzione: un elemento in più nella pagina disturba i gesti)
     spLx.globalCompositeOperation = "source-over"; spLx.globalAlpha = 1;
     const vg = spLx.createRadialGradient(W / 2, H * 0.46, Math.min(W, H) * 0.3, W / 2, H * 0.46, Math.max(W, H) * 0.78);
