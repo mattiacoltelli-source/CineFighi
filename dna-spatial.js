@@ -968,7 +968,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       if (ef && ef.k > 0 && !fuori) {   // fuori campo (o dietro la camera) resta nascosto: la sua proiezione non è valida
         if (o === 0) o = 0.05;
         o = o + (1 - o) * ef.k;                 // esce dalla nebbia
-        p.s *= 1 + 0.32 * ef.k;                  // e cresce
+        p.s *= 1 + 0.45 * ef.k;                  // e cresce
         p.z -= 2000 * ef.k;                     // e passa davanti a tutti
       }
       if (o < 0.04) o = 0;   // nella nebbia: né disegnato né toccabile

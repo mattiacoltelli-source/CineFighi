@@ -1490,7 +1490,7 @@ body:has(.app.dna-schermo-intero #screen-tonight:not(.hidden)) .bottom-nav {
 .dna-spatial .dna-edge { transition:none; }
 /* Tour: il nodo su cui vola la camera si stacca dagli altri — alone ciano sulla
    locandina/avatar (solo su di lui: costo trascurabile) e nome ben leggibile. */
-.dna-spatial .dna-node.is-tour-focus > :first-child { filter: drop-shadow(0 0 12px rgba(56,189,248,.85)); }
+.dna-spatial .dna-node.is-tour-focus > :first-child { filter: drop-shadow(0 0 16px rgba(56,189,248,.95)); }
 .dna-spatial .dna-node.is-tour-focus .dna-node__label {
   color: var(--text); font-weight:700; text-shadow: 0 0 6px var(--bg), 0 0 6px var(--bg);
 }

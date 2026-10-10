@@ -2028,11 +2028,10 @@ async function avviaTour(modo = 'mio') {
       via = percorso.slice(1, -1);
       if (via.length > 3) via = [via[0], via[Math.floor(via.length / 2)], via[via.length - 1]];
     }
-    // La camera va DIRITTO al nodo, senza ruotare la scena (altrimenti il nodo sembra
-    // allontanarsi): è dopo l'arrivo che la scena gli si assesta attorno, un po' di
-    // lato, alternando da una tappa all'altra — così la locandina si rivela.
-    const segno = i % 2 ? 1 : -1;
-    const yaw = i === 0 ? 0 : segno * 0.42, pitch = i === 0 ? 0 : -segno * 0.1;
+    // La camera va DIRITTO al nodo e la scena non ruota: a mettere in risalto la locandina
+    // ci pensa l'enfasi (più grande, davanti, con l'alone). Solo la prima tappa raddrizza la
+    // vista se chi guarda l'aveva inclinata.
+    const yaw = 0, pitch = 0;
     await spatial.tourVai(t.id, TOUR_VIAGGIO_MS, { via, yaw, pitch });   // viaggio continuo fino al nodo
     prec = t.id;
     if (mio !== tourToken) return;
