@@ -826,7 +826,14 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       // di destinazione finché non è centrato, quindi si avvicina SOLO alla fine; allontanarsi
       // lo accorcia, quindi si fa subito. Così il nodo si avvicina al centro in modo costante.
       const ez = v.b.z > v.a.z ? e * e * e : 1 - Math.pow(1 - e, 3);
-      cam.tz = cam.z = v.a.z + (v.b.z - v.a.z) * ez;
+      let zv = v.a.z + (v.b.z - v.a.z) * ez;
+      // Tappe lontane: a metà viaggio la camera si allontana (si vede la rete intorno) e poi rientra
+      // nel nodo. È un fattore sulla scala, così funziona a qualunque livello di zoom, e vale 1 alle due estremità.
+      if (v.dip < 1) {
+        const campana = Math.pow(Math.sin(Math.PI * e), 1.4), sc = F / Math.max(1, F - zv) * (1 - (1 - v.dip) * campana);
+        zv = Math.max(zMin(), F - F / sc);
+      }
+      cam.tz = cam.z = zv;
       if (v.qa) { cam.q = cam.tq = qSlerp(v.qa, v.qb, e); }
       moving = true;
       if (u >= 1) { const fine = v.fine; cam.viaggio = null; fine?.(); }
@@ -1334,8 +1341,11 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
         sulla.sort((m, n) => m.t - n.t);
         const punti = [a, ...sulla.map(x => x.p), { x: b.x, y: b.y, cz: b.cz }];
         const durata = lontano < 40 ? Math.min(ms, 600) : ms * (1 + Math.min(0.9, 0.45 * sulla.length));
+        // Se la tappa è lontana (rispetto a quanto si vede) il viaggio passa da uno zoom out leggero: più è lontana, più si apre.
+        const visto = Math.min(W, H) / (F / Math.max(1, F - b.z)), rapporto = lontano / Math.max(1, visto);
+        const dip = rapporto < 0.7 ? 1 : Math.max(0.4, Math.min(0.78, 0.84 - 0.12 * rapporto));
         cam.viaggio = {
-          a, b, t0: performance.now(), dur: durata, fine: risolvi,
+          a, b, t0: performance.now(), dur: durata, fine: risolvi, dip,
           curva: punti.length > 2 ? creaCurva(punti) : null
         };
         kick();

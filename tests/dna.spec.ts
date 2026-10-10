@@ -1489,7 +1489,7 @@ test("3D: nel tour la camera va diritta al nodo di destinazione", async ({ page 
   const arrivi = ev.filter(e => e[1]);
   const spenti = ev.filter(e => !e[1]).map(e => e[0]);
   const idDopo = (t: number) => { let id: string | null = null; for (const r of rec) { if (r[0] > t) break; if (r[2]) id = r[2]; } return id; };
-  let verificati = 0;
+  let verificati = 0, zoomOut = 1;
   for (const [t, nome] of arrivi.slice(1)) {   // la prima tappa è dove si è già
     const id = idDopo(t + 300);
     const inizio = [...spenti].filter(x => x < t).pop();
@@ -1497,11 +1497,24 @@ test("3D: nel tour la camera va diritta al nodo di destinazione", async ({ page 
     const d = rec.filter(r => r[0] >= inizio && r[0] <= t && r[1][id]).map(r => Math.hypot(r[1][id][0], r[1][id][1]));
     if (d.length < 20) continue;
     verificati++;
+    // Zoom out a metà viaggio: la dimensione della "nuvola" dei nodi presenti per tutta la tappa scende e poi risale.
+    const fr = rec.filter(r => r[0] >= inizio && r[0] <= t);
+    const comuni = Object.keys(fr[0][1]).filter(k => fr.every(r => r[1][k]));
+    if (comuni.length >= 3) {
+      const ampiezza = (m: Record<string, number[]>) => {
+        const cx = comuni.reduce((a, k) => a + m[k][0], 0) / comuni.length, cy = comuni.reduce((a, k) => a + m[k][1], 0) / comuni.length;
+        return comuni.reduce((a, k) => a + Math.hypot(m[k][0] - cx, m[k][1] - cy), 0);
+      };
+      const amp = fr.map(r => ampiezza(r[1]));
+      zoomOut = Math.min(zoomOut, Math.min(...amp) / Math.min(amp[0], amp[amp.length - 1]));
+    }
     const salita = Math.max(0, ...d.map(x => x - d[0]));
     expect(salita, `verso "${nome}" il nodo si è allontanato dal centro di ${salita.toFixed(0)}px prima di arrivare`).toBeLessThan(6);
     expect(d[d.length - 1], `la camera non è arrivata su "${nome}"`).toBeLessThan(25);
   }
   expect(verificati, "nessun viaggio verificato").toBeGreaterThanOrEqual(2);
+  console.log("zoomOut minimo", zoomOut.toFixed(2));
+  expect(zoomOut, "nessuna tappa ha fatto lo zoom out a metà viaggio").toBeLessThan(0.9);
   expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
 });
 
