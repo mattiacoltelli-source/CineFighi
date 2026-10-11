@@ -38,7 +38,10 @@ dall'ultimo diff (`git diff --stat` e individua le schermate), oppure una scherm
 - Esegui `node <cartella-di-questa-skill>/scripts/audit.mjs --url <URL> --out <cartella>`: screenshot a 390 px e 1280 px, tema chiaro e scuro,
   e misure (scroll orizzontale, bersagli < 44 px, testo < 12 px, contrasto, nomi accessibili, LCP/CLS/long task,
   errori in console, richieste fallite). Per arrivare dentro una schermata passa `--steps steps.json`.
-  Lo script blocca per default ogni richiesta che non sia GET. Playwright deve essere già installato: non installare nulla.
+  Scrivi `--out` FUORI dal repo (es. la cartella temporanea della sessione): così screenshot e `audit.json` non sporcano il lavoro e nessun commit è possibile per sbaglio.
+  `steps.json` è una lista di passi, es. `[{"click":"#tab-film"},{"wait":500},{"shot":"lista"}]`; un passo che fallisce viene riportato (`passi falliti`) senza fermare l'audit.
+  Lo script blocca per default ogni richiesta che non sia GET e i service worker; se l'app usa POST per leggere (es. RPC), quella schermata resterà vuota o in errore: dichiaralo in "Non verificato", non usare `--allow-writes`.
+  Il contrasto misurato è approssimato: confermalo guardando lo screenshot prima di citarlo come problema. Playwright deve essere già installato: non installare nulla.
 - Apri gli screenshot con lo strumento di lettura immagini: **guardali davvero**, schermata per schermata.
 - Percorri i compiti a mano (Playwright) contando tocchi e passaggi; forza gli stati (vuoto, errore, offline, testo lungo).
 

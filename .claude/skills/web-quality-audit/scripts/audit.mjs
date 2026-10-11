@@ -4,6 +4,8 @@
 //                      [--steps steps.json] [--allow-writes]
 // - Per default è SOLA LETTURA: ogni richiesta di rete che non sia GET/HEAD/OPTIONS viene bloccata e contata.
 // - steps.json (opzionale): [{"click":"selettore"},{"wait":500},{"goto":"/percorso"},{"shot":"nome"}] per arrivare in una schermata.
+// Service worker bloccati in sola lettura (altrimenti le sue richieste aggirano il blocco). Il contrasto è approssimato:
+// ignora sfondi a gradiente/immagine e opacità degli antenati, quindi i falsi positivi vanno verificati nello screenshot.
 // Richiede Playwright già installato (non installa nulla).
 import fs from "node:fs";
 import path from "node:path";
@@ -65,7 +67,7 @@ const pw = await loadPlaywright();
 const browser = await pw.chromium.launch();
 const report = { url, date: new Date().toISOString(), readOnly: !allowWrites, runs: [] };
 for (const vp of viewports) for (const theme of themes) {
-  const ctx = await browser.newContext({ viewport: { width: vp.w, height: vp.h }, colorScheme: theme, deviceScaleFactor: 2, hasTouch: vp.w < 700, isMobile: vp.w < 700 });
+  const ctx = await browser.newContext({ viewport: { width: vp.w, height: vp.h }, colorScheme: theme, deviceScaleFactor: 2, hasTouch: vp.w < 700, isMobile: vp.w < 700, serviceWorkers: allowWrites ? "allow" : "block" });
   const page = await ctx.newPage(); const run = { viewport: `${vp.w}x${vp.h}`, theme, console: [], pageErrors: [], failedRequests: [], blockedWrites: [], shots: [] };
   page.on("console", (m) => { if (m.type() === "error") run.console.push(m.text().slice(0, 200)); });
   page.on("pageerror", (e) => run.pageErrors.push(String(e).slice(0, 200)));
@@ -80,13 +82,14 @@ for (const vp of viewports) for (const theme of themes) {
   const base = `${vp.w}x${vp.h}-${theme}`;
   try {
     await page.goto(url, { waitUntil: "load", timeout: 45000 }); await page.waitForTimeout(800);
-    let n = 0;
-    for (const st of steps) {
-      if (st.goto) await page.goto(new URL(st.goto, url).href, { waitUntil: "load" });
-      if (st.click) await page.locator(st.click).first().click({ timeout: 8000 });
-      if (st.wait) await page.waitForTimeout(st.wait);
+    run.stepErrors = [];
+    for (const [i, st] of steps.entries()) {
+      try {
+        if (st.goto) await page.goto(new URL(st.goto, url).href, { waitUntil: "load" });
+        if (st.click) await page.locator(st.click).first().click({ timeout: 8000 });
+        if (st.wait) await page.waitForTimeout(st.wait);
+      } catch (e) { run.stepErrors.push(`passo ${i + 1} ${JSON.stringify(st)}: ${String(e).slice(0, 120)}`); }
       if (st.shot) { const f = `${base}-${st.shot}.png`; await page.screenshot({ path: path.join(out, f), fullPage: true }); run.shots.push(f); run["m_" + st.shot] = await page.evaluate(inPage); }
-      n++;
     }
     const f = `${base}.png`; await page.screenshot({ path: path.join(out, f), fullPage: true }); run.shots.push(f);
     run.metrics = await page.evaluate(inPage);
@@ -98,6 +101,6 @@ await browser.close();
 fs.writeFileSync(path.join(out, "audit.json"), JSON.stringify(report, null, 1));
 for (const r of report.runs) {
   const m = r.metrics || {}, p = r.perf || {};
-  console.log(`[${r.viewport} ${r.theme}] overflowX=${m.overflowX} tap<44=${m.tapSmallCount} font<12=${m.fontTiny} contrasto=${m.contrastCount} senzaNome=${m.noNameCount} imgSenzaAlt=${m.imgNoAlt} | LCP=${p.lcp}ms CLS=${p.cls} longtask=${p.long}(${p.longMs}ms) peso=${p.transferKB}KB | errori console=${r.console.length + r.pageErrors.length} richieste fallite=${r.failedRequests.length} scritture bloccate=${r.blockedWrites.length}${r.error ? " ERRORE: " + r.error : ""}`);
+  console.log(`[${r.viewport} ${r.theme}] overflowX=${m.overflowX} tap<44=${m.tapSmallCount} font<12=${m.fontTiny} contrasto=${m.contrastCount} senzaNome=${m.noNameCount} imgSenzaAlt=${m.imgNoAlt} | LCP=${p.lcp}ms CLS=${p.cls} longtask=${p.long}(${p.longMs}ms) peso=${p.transferKB}KB | errori console=${r.console.length + r.pageErrors.length} richieste fallite=${r.failedRequests.length} scritture bloccate=${r.blockedWrites.length} passi falliti=${(r.stepErrors || []).length}${r.error ? " ERRORE: " + r.error : ""}`);
 }
 console.log("Output in", out);
