@@ -80,7 +80,7 @@ body {
      barra stessa: con un valore fisso, su un telefono con la barra gesti il
      contenuto finisce sotto ai tasti. */
   padding: 0 0 calc(68px + env(safe-area-inset-bottom));
-  min-height: 100vh;
+  min-height: 100vh; min-height: 100dvh;
   -webkit-font-smoothing: antialiased;
   overscroll-behavior: none;
 }
@@ -811,7 +811,7 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
   content:""; position:absolute; left:0; right:0; bottom:0; height:28px;
   background: linear-gradient(to bottom, transparent, var(--bg)); pointer-events:none;
 }
-.user-picker__list { display:flex; flex-direction:column; gap:8px; max-height: 40vh; overflow-y:auto; }
+.user-picker__list { display:flex; flex-direction:column; gap:8px; max-height: 40vh; max-height: 40dvh; overflow-y:auto; }
 .user-pick-btn { display:flex; align-items:center; gap:12px; background: var(--surface); border:1px solid var(--border);
   border-radius: var(--radius-lg); padding:12px 16px; font-family: var(--font-display); font-weight:700; font-size:var(--fs-base); color: var(--text); }
 .user-pick-btn--recent { border-color: var(--cyan-a2); background: linear-gradient(var(--cyan-dim), var(--cyan-dim)), var(--surface); }
@@ -1158,7 +1158,7 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
    l'informazione (chi ha votato cosa) e deve stare nella stessa schermata,
    senza obbligare a scorrere per leggerlo. */
 .dna-stage {
-  position:relative; height:46vh; min-height:270px; max-height:410px;
+  position:relative; height:46vh; height:46dvh; min-height:270px; max-height:410px;
   border-radius: var(--radius-md); background: var(--surface); border:1px solid var(--surface3);
   overflow:hidden;
   /* Il gesto dentro il riquadro è nostro (vedi il trascinamento in
@@ -1175,7 +1175,7 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
    di aiuto. I valori restano tarati sul vincolo di sempre: il pannello qui
    sotto non finisce mai dietro la barra di navigazione. */
 .app.dna-esplorazione:has(#screen-tonight:not(.hidden)) .dna-stage {
-  height:55vh; min-height:320px; max-height:510px;
+  height:55vh; height:55dvh; min-height:320px; max-height:510px;
 }
 
 /* Su uno schermo corto il pannello sotto può diventare alto — con un titolo
@@ -1183,14 +1183,14 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
    barra di navigazione. Lì il riquadro della rete cede un po' di spazio:
    l'informazione sta tutta a schermo senza scorrere, che è quello che conta. */
 @media (max-height: 780px) {
-  .dna-stage { height:40vh; min-height:230px; }
-  .app.dna-esplorazione:has(#screen-tonight:not(.hidden)) .dna-stage { height:49vh; min-height:285px; }
+  .dna-stage { height:40vh; height:40dvh; min-height:230px; }
+  .app.dna-esplorazione:has(#screen-tonight:not(.hidden)) .dna-stage { height:49vh; height:49dvh; min-height:285px; }
 }
 /* Telefoni davvero piccoli: il riquadro cede ancora, e le pastiglie dei
    votanti si stringono. Qui lo spazio non basta per essere generosi. */
 @media (max-height: 680px) {
-  .dna-stage { height:34vh; min-height:190px; }
-  .app.dna-esplorazione:has(#screen-tonight:not(.hidden)) .dna-stage { height:44vh; min-height:255px; }
+  .dna-stage { height:34vh; height:34dvh; min-height:190px; }
+  .app.dna-esplorazione:has(#screen-tonight:not(.hidden)) .dna-stage { height:44vh; height:44dvh; min-height:255px; }
   .dna-intro { font-size:var(--fs-sm); padding:5px 0; }
   .dna-intro__full { font-size:var(--fs-sm); }
   .dna-panel { margin-top:9px; min-height:0; }
@@ -1257,7 +1257,7 @@ body:has(.app.dna-schermo-intero #screen-tonight:not(.hidden)) .bottom-nav {
   border: 1px solid var(--surface3); box-shadow: var(--shadow-lg);
 }
 .app.dna-schermo-intero:has(#screen-tonight:not(.hidden)) .dna-panel:not(.is-compact) {
-  max-height: min(56vh, 420px); overflow-y: auto;
+  max-height: min(56vh, 420px); max-height: min(56dvh, 420px); overflow-y: auto;
 }
 .app.dna-schermo-intero:has(#screen-tonight:not(.hidden)) .dna-panel:empty { display: none; }
 .dna-panel__peek {
