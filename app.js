@@ -6,7 +6,7 @@ import {
   average, escapeHtml, posterUrl,
   votingLeaderboard, mostAffinePair, mostDivergentPair, mostDivisive, mostUnanimous,
   groupMemberProfiles, groupProfileStats
-} from "./cine-core.js?v=024d71f";
+} from "./cine-core.js?v=47e4cbb";
 import {
   getCurrentUser, setCurrentUser, MAX_USERS,
   getLastSeenAt, setLastSeenAt, getGenreView, setGenreView,
@@ -15,16 +15,16 @@ import {
   upsertVote, removeVote,
   loadLatestReport, regenerateReport,
   loadLatestGroupReport, regenerateGroupReport
-} from "./storage.js?v=024d71f";
-import { tmdbFetchDetail, tmdbSearch } from "./tmdb.js?v=024d71f";
+} from "./storage.js?v=47e4cbb";
+import { tmdbFetchDetail, tmdbSearch } from "./tmdb.js?v=47e4cbb";
 import {
   showToast, avatarHtml, initScreens, switchScreen,
   renderShelf, renderSearchResults, renderLibraryList, renderGenreFilters,
   renderGenreBars, renderGenreBubbles, renderRanking, toggleRankingList, renderGroupReport, toggleUserCardFact,
   renderDetailCredits, renderVotesList, renderReportMeta, renderGroupReportMeta, renderReportContent, renderReportGate,
   haptic, animateValue
-} from "./ui.js?v=024d71f";
-import { initDnaView, showDna, resetDna } from "./dna-view.js?v=024d71f";
+} from "./ui.js?v=47e4cbb";
+import { initDnaView, showDna, resetDna } from "./dna-view.js?v=47e4cbb";
 
 const MIN_VOTED_FOR_REPORT = 50;
 let currentUser = null;
