@@ -157,3 +157,46 @@ jobs:
             --data-urlencode "chat_id=${TG_CHAT}" \
             --data-urlencode "disable_web_page_preview=true" \
             --data-urlencode "text=$MSG"
+
+  qualita:
+    # Lighthouse sul sito pubblicato (mobile, mediana di 3 prove). SOLO
+    # INFORMATIVO: non fa fallire il Guardiano e non manda Telegram, perche'
+    # i punteggi oscillano da una prova all'altra. Il risultato sta nel
+    # riepilogo del run e nel report scaricabile. Le soglie (warn) sono in
+    # .github/lighthouserc.json: da stringere dopo aver visto i primi giri.
+    # Un solo giro al giorno insieme a sito-vero, mai ad ogni push.
+    if: github.event_name != 'push' && !(github.event_name == 'workflow_dispatch' && inputs.prova_telegram)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Usa il Chrome del runner
+        run: echo "CHROME_PATH=$(command -v google-chrome || command -v chromium)" >> "$GITHUB_ENV"
+      - name: Lighthouse
+        run: npx --yes @lhci/cli@0.14.0 autorun --config=.github/lighthouserc.json
+      - name: Riepilogo punteggi
+        if: always()
+        run: |
+          node -e '
+            const fs = require("fs");
+            let m;
+            try { m = JSON.parse(fs.readFileSync(".lighthouseci/manifest.json", "utf8")); } catch { console.log("Nessun report"); process.exit(0); }
+            const r = m.find((x) => x.isRepresentativeRun) || m[0];
+            const f = (v) => Math.round(v * 100);
+            const s = r.summary;
+            const out = "### Lighthouse (mobile, mediana di 3)\n\n" +
+              "| Prestazioni | Accessibilita | Buone pratiche | SEO |\n|---|---|---|---|\n" +
+              `| ${f(s.performance)} | ${f(s.accessibility)} | ${f(s["best-practices"])} | ${f(s.seo)} |\n`;
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, out);
+            console.log(out);
+          '
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lighthouse
+          path: .lighthouseci/
+          retention-days: 14
+          if-no-files-found: ignore
