@@ -1699,6 +1699,7 @@ const TOUR_YAW = 0.3, TOUR_PITCH = -0.12;
 const TOUR_VIAGGIO_MS = 2200;   // il viaggio fra due tappe
 const TOUR_SOSTA_MS = 1400;     // la sosta a ogni tappa, con la didascalia
 const TOUR_ROTAZIONE_MS = 8000;
+const TOUR_GIRO_OGNI = 3, TOUR_GIRO_RAD = 0.95;   // un viaggio ogni 3 gira attorno alla rete (~54°), alternando il verso
 const TOUR_MAX_TAPPE = 12;
 let tourAttivo = false;
 let tourToken = 0;
@@ -2034,7 +2035,10 @@ async function avviaTour(modo = 'mio') {
     // tutto il tour (la prima tappa ci arriva con un assestamento), la profondità la dà la prospettiva.
     const yaw = TOUR_YAW, pitch = TOUR_PITCH;
     if (i === 0) spatial.tourOrienta(yaw, pitch, 900);
-    await spatial.tourVai(t.id, TOUR_VIAGGIO_MS, { via, yaw, pitch });   // viaggio continuo fino al nodo
+    // Ogni tre tappe (mai la prima né l'ultima, che è seguita dal giro finale), un viaggio lungo diventa un giro "da galassia".
+    const giro = i % TOUR_GIRO_OGNI === TOUR_GIRO_OGNI - 1 && i < tappe.length - 1 && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+      ? TOUR_GIRO_RAD * (i % (2 * TOUR_GIRO_OGNI) === TOUR_GIRO_OGNI - 1 ? 1 : -1) : 0;
+    await spatial.tourVai(t.id, TOUR_VIAGGIO_MS, { via, yaw, pitch, giro });   // viaggio continuo fino al nodo
     prec = t.id;
     if (mio !== tourToken) return;
     spatial.tourOrienta(yaw, pitch, 900);

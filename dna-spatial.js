@@ -849,6 +849,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       }
       cam.tz = cam.z = zv;
       if (v.qa) { cam.q = cam.tq = qSlerp(v.qa, v.qb, e); }
+      else if (v.giro) { const g = Math.sin(Math.PI * e); cam.q = cam.tq = qNorm(qMul(qAsseY(v.giro * g * g), v.qBase)); }
       moving = true;
       if (u >= 1) { const fine = v.fine; cam.viaggio = null; fine?.(); }
     }
@@ -1315,8 +1316,9 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     // Viaggia (piano, in `ms`) fino al nodo e inquadra i suoi collegamenti, senza
     // aprirlo né farlo diventare attivo. Risolve all'arrivo.
     // `via`: id dei nodi da sorvolare lungo i collegamenti, nell'ordine; `yaw`/`pitch`:
-    // la leggera rotazione con cui si arriva.
-    tourVai(id, ms, { via = [], yaw = 0, pitch = 0 } = {}) {
+    // la leggera rotazione con cui si arriva. `giro` (radianti, col segno): solo sui viaggi lunghi, a metà strada la scena
+    // ruota di tanto attorno alla rete mentre la camera si allontana, poi torna all'inclinazione di arrivo (effetto galassia).
+    tourVai(id, ms, { via = [], yaw = 0, pitch = 0, giro = 0 } = {}) {
       const w = worldPos(id);
       if (!w) return Promise.resolve();
       // Quello di prima si spegne, quello di arrivo emerge man mano che ci si avvicina.
@@ -1362,10 +1364,12 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
         // lenta per dare il tempo di vedere la rete intorno. Tappa vicina: solo lo spostamento, come prima.
         const visto = Math.min(W, H) / (F / Math.max(1, F - b.z)), rapporto = lontano / Math.max(1, visto);
         const lontana = lontano >= 40 && rapporto >= 0.45;
-        const dip = lontana ? Math.max(0.4, Math.min(0.78, 0.84 - 0.12 * rapporto)) : 1;
-        const durata = lontano < 40 ? Math.min(ms, 600) : ms * (1 + Math.min(0.9, 0.45 * sulla.length)) * (lontana ? 1.45 : 1);
+        const conGiro = !!giro && lontana && orbit;
+        const dip = conGiro ? 0.5 : lontana ? Math.max(0.4, Math.min(0.78, 0.84 - 0.12 * rapporto)) : 1;
+        const durata = (lontano < 40 ? Math.min(ms, 600) : ms * (1 + Math.min(0.9, 0.45 * sulla.length)) * (lontana ? 1.45 : 1)) * (conGiro ? 1.3 : 1);
         cam.viaggio = {
           a, b, t0: performance.now(), dur: durata, fine: risolvi, dip,
+          giro: conGiro ? giro : 0, qBase: cam.tq,
           curva: punti.length > 2 ? creaCurva(punti) : null
         };
         kick();
