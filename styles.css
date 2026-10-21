@@ -1619,4 +1619,5 @@ button.dna-path__chip { font-family:inherit; cursor:pointer; -webkit-tap-highlig
 /* Colori dei numeri nelle statistiche: cyan = mio (Io), arancione = media del gruppo. */
 #genreBars[data-mode="group"] .bar-row__vote { color: var(--orange); }
 #classificaSection[data-mode="group"] .podium-card__vote,
-#classificaSection[data-mode="group"] .rank-row__vote { color: var(--orange); background: var(--orange-dim); border-color: var(--orange-a2); }
+#classificaSection[data-mode="group"] .rank-row__vote,
+#classificaSection[data-mode="group"] .count-badge { color: var(--orange); background: var(--orange-dim); border-color: var(--orange-a2); }
