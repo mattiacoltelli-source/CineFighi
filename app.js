@@ -14,7 +14,8 @@ import {
   fetchLibrary, addTitle, addToWatchlist, removeFromWatchlist, ensureWatchlistMembership, updateTitleStatus, removeTitle,
   upsertVote, removeVote,
   loadLatestReport, regenerateReport,
-  loadLatestGroupReport, regenerateGroupReport
+  loadLatestGroupReport, regenerateGroupReport,
+  loadLibraryCache, saveLibraryCache, clearLibraryCache
 } from "./storage.js?v=0fe06bc";
 import { tmdbFetchDetail, tmdbSearch } from "./tmdb.js?v=0fe06bc";
 import {
@@ -46,6 +47,12 @@ const MIN_VOTED_FOR_REPORT = 50;
 let currentUser = null;
 let users = [];
 let db = [];               // libreria completa (titoli + voti)
+// Sincronizzazione con il server e copia locale (vedi storage.js::loadLibraryCache e reloadLibrary qui sotto).
+let libraryRaw = null;          // JSON di `db` com'era all'ultima sincronizzazione; null dopo una modifica fatta qui
+let localMutationSeq = 0;       // cresce ad ogni modifica fatta qui (voto, titolo, watchlist...): vedi reloadLibrary
+let libraryCacheSavedAt = 0;
+let libraryCacheTimer = null;
+let lastStatsSig = null;        // cosa mostrano genere e classifica, per non ridisegnarli se non è cambiato niente
 let libraryStatus = "all"; // all | watchlist | seen  (impostato dai "Vedi tutto")
 let libraryFilter = "all"; // all | movie | tv
 let libraryGenre = "all";
@@ -198,51 +205,160 @@ async function init() {
 
   currentUser = getCurrentUser();
 
-  // FIX: se fetchUsers fallisce (rete/Supabase giù), non trattiamo l'esito
-  // come "nessun utente" — altrimenti un utente già selezionato verrebbe
-  // rispedito alla schermata di scelta profilo solo per un errore di rete.
-  let usersFetchOk = true;
-  try {
-    users = await fetchUsers();
-  } catch (e) {
-    users = [];
-    usersFetchOk = false;
-    showToast("Impossibile contattare il server: controlla la connessione", "error");
-  }
-
-  if (!currentUser || (usersFetchOk && !users.includes(currentUser))) {
-    openUserPicker(true, { riusaUtenti: usersFetchOk });   // la lista l'abbiamo appena scaricata
-  } else {
-    document.getElementById("app").classList.remove("hidden");
-    updateUserChip();
-  }
-
   // Letto PRIMA di sovrascriverlo: è il confronto con cui questa sessione
   // deciderà quali titoli marcare come "nuovi" (vedi renderHome()).
   sessionLastSeenAt = getLastSeenAt();
   setLastSeenAt(new Date().toISOString());
 
-  await reloadLibrary();
+  // Utenti e libreria partono insieme (prima la libreria aspettava gli utenti: un giro di rete perso).
+  const usersFetch = fetchUsers().then(list => ({ list }), () => ({ list: null }));
+  const libraryFetch = startLibraryFetch();
+
+  // Riapertura: c'è la copia locale dell'ultima libreria vista (vedi storage.js::loadLibraryCache). L'app si
+  // disegna subito da lì, senza aspettare la rete, e i dati veri la aggiornano dopo (vedi reloadLibrary).
+  const copia = currentUser ? loadLibraryCache() : null;
+  let daCopia = !!copia && copia.users.includes(currentUser);
+  if (daCopia) {
+    try {
+      users = copia.users;
+      db = copia.db;
+      libraryRaw = copia.raw;
+      libraryCacheSavedAt = copia.savedAt;
+      document.getElementById("app").classList.remove("hidden");
+      updateUserChip();
+      renderAll();
+    } catch (e) {
+      // Una copia valida come JSON ma che fa inciampare il disegno non deve bloccare l'app sulla splash a
+      // ogni apertura: si butta e si riparte da zero, come alla prima volta.
+      console.error("Copia locale della libreria inutilizzabile, la scarto:", e);
+      clearLibraryCache();
+      daCopia = false;
+      users = [];
+      db = [];
+      libraryRaw = null;
+      libraryCacheSavedAt = 0;
+    }
+  }
+  if (daCopia) liftSplashWhenReady();
+
+  // FIX: se fetchUsers fallisce (rete/Supabase giù), non trattiamo l'esito
+  // come "nessun utente" — altrimenti un utente già selezionato verrebbe
+  // rispedito alla schermata di scelta profilo solo per un errore di rete.
+  const { list } = await usersFetch;
+  const usersFetchOk = list !== null;
+  if (usersFetchOk) {
+    if (daCopia && JSON.stringify(list) !== JSON.stringify(users)) scheduleLibraryCacheSave();
+    users = list;
+  } else {
+    if (!daCopia) users = [];
+    showToast("Impossibile contattare il server: controlla la connessione", "error");
+  }
+
+  if (!currentUser || (usersFetchOk && !users.includes(currentUser))) {
+    openUserPicker(true, { riusaUtenti: usersFetchOk });   // la lista l'abbiamo appena scaricata
+  } else if (!daCopia) {
+    document.getElementById("app").classList.remove("hidden");
+    updateUserChip();
+  }
+
+  await reloadLibrary(libraryFetch, { primoDisegno: !daCopia });
   lastLibraryRefreshAt = Date.now();
 
-  setTimeout(() => document.getElementById("splash")?.classList.add("hide"), 850);
+  if (!daCopia) setTimeout(hideSplash, 850);
   initUpdateCheck();
 }
 
-async function reloadLibrary() {
-  // FIX: se fetchLibrary fallisce, NON sovrascriviamo `db` con una lista
-  // vuota — altrimenti un semplice errore di rete svuota silenziosamente
-  // Home/Statistiche per tutti, facendo credere che i titoli siano spariti.
-  // Manteniamo lo stato precedente e avvisiamo l'utente.
-  let freshDb;
+function hideSplash() { document.getElementById("splash")?.classList.add("hide"); }
+
+// L'app è già a schermo (dalla copia locale): la splash si toglie appena le prime locandine e i font sono pronti,
+// al massimo dopo 1,2 s, invece di aspettare la rete. Mai prima di 350 ms: più breve sembrerebbe un lampo. Sotto
+// la splash le locandine e i font che arrivano in ritardo non si vedono: tolta troppo presto, le immagini
+// comparirebbero a una a una e il testo cambierebbe carattere (e misura) a metà.
+async function liftSplashWhenReady() {
   try {
-    freshDb = await fetchLibrary();
-  } catch (e) {
-    showToast("Impossibile aggiornare la libreria: controlla la connessione", "error");
+    const urls = [...document.querySelectorAll("#screen-home .shelf-card__poster")].slice(0, 6)
+      .map(el => /url\(["']?([^"')]+)/.exec(el.style.backgroundImage)?.[1]).filter(Boolean);
+    const locandine = urls.map(u => { const img = new Image(); img.src = u; return img.decode().catch(() => {}); });
+    const font = document.fonts ? ["700 1em Outfit", "400 1em Inter"].map(f => document.fonts.load(f).catch(() => {})) : [];
+    await Promise.all([
+      new Promise(r => setTimeout(r, 350)),
+      Promise.race([Promise.all([...locandine, ...font]), new Promise(r => setTimeout(r, 1200))])
+    ]);
+  } finally {
+    hideSplash();   // qualunque cosa succeda sopra, la splash non deve restare
+  }
+}
+
+// Lettura della libreria dal server. Si può far partire in anticipo (init) e aspettarla dopo: `seq` ricorda
+// quante modifiche locali c'erano quando è partita.
+function startLibraryFetch() {
+  const promise = fetchLibrary();
+  promise.catch(() => {});   // l'errore lo gestisce chi la aspetta (reloadLibrary)
+  return { seq: localMutationSeq, promise };
+}
+
+// Rilegge la libreria dal server e aggiorna lo schermo, ridisegnando il meno possibile (vedi applyFreshLibrary).
+// `started`: una lettura già partita (init); `primoDisegno`: non c'è nulla a schermo da non toccare, si
+// disegna tutto come sempre.
+async function reloadLibrary(started = startLibraryFetch(), { primoDisegno = false } = {}) {
+  for (let tentativo = 0; tentativo < 2; tentativo++) {
+    let fresh;
+    try {
+      fresh = await started.promise;
+    } catch (e) {
+      // FIX: se fetchLibrary fallisce, NON sovrascriviamo `db` con una lista
+      // vuota — altrimenti un semplice errore di rete svuota silenziosamente
+      // Home/Statistiche per tutti, facendo credere che i titoli siano spariti.
+      // Manteniamo lo stato precedente (la copia locale, se c'è) e avvisiamo l'utente.
+      showToast("Impossibile aggiornare la libreria: controlla la connessione", "error");
+      return false;
+    }
+    if (started.seq === localMutationSeq) { applyFreshLibrary(fresh, primoDisegno); return true; }
+    // Nel frattempo l'utente ha modificato qualcosa (un voto, un titolo...): una lettura partita prima potrebbe
+    // non contenerlo, e applicarla lo farebbe sparire e ricomparire. Meglio rileggere.
+    started = startLibraryFetch();
+  }
+  return false;
+}
+
+// Mette a schermo la libreria appena letta. Se è identica a quella già mostrata (la copia locale all'avvio, o
+// l'ultima lettura) non si tocca niente: nessun ridisegno, quindi nessuno sfarfallio. Se è cambiata si
+// ridisegna solo la schermata che si sta guardando (le altre si ridisegnano da sole quando ci si entra) e,
+// nella Home, solo le card che sono cambiate (vedi ui.js::patchHtml).
+function applyFreshLibrary(fresh, primoDisegno) {
+  const raw = JSON.stringify(fresh);
+  if (!primoDisegno && raw === currentLibraryRaw()) {
+    // Niente di nuovo. Ogni tanto si rinnova comunque la data della copia locale, che altrimenti scadrebbe.
+    if (Date.now() - libraryCacheSavedAt > LIBRARY_CACHE_REFRESH_MS) scheduleLibraryCacheSave();
     return;
   }
-  db = freshDb;
-  renderAfterLocalChange();
+  db = fresh;
+  libraryRaw = raw;
+  if (primoDisegno) renderAll();
+  else refreshVisibleScreen();
+  scheduleLibraryCacheSave();
+}
+
+function currentLibraryRaw() { return libraryRaw ??= JSON.stringify(db); }
+
+function refreshVisibleScreen() {
+  const screen = getVisibleScreen();
+  if (screen === "home") renderHome();
+  else if (screen === "stats") renderStats({ silent: true });
+}
+
+const LIBRARY_CACHE_REFRESH_MS = 3 * 24 * 60 * 60 * 1000;
+function scheduleLibraryCacheSave() {
+  clearTimeout(libraryCacheTimer);
+  libraryCacheTimer = setTimeout(() => {
+    const salva = () => { if (saveLibraryCache(currentLibraryRaw(), users)) libraryCacheSavedAt = Date.now(); };
+    if (window.requestIdleCallback) requestIdleCallback(salva, { timeout: 5000 }); else salva();
+  }, 1500);
+}
+
+function renderAll() {
+  renderHome();
+  renderStats();
 }
 
 // Ridisegna Home e Statistiche dopo una modifica già applicata a `db` in
@@ -251,8 +367,10 @@ async function reloadLibrary() {
 // non serve un altro giro di rete a rileggere tutta la libreria condivisa
 // solo per riflettere una modifica di cui conosciamo già il risultato.
 function renderAfterLocalChange() {
-  renderHome();
-  renderStats();
+  localMutationSeq++;
+  libraryRaw = null;
+  renderAll();
+  scheduleLibraryCacheSave();
 }
 
 // FIX: id arriva quasi sempre come stringa (es. card.dataset.id nel DOM),
@@ -794,7 +912,9 @@ function observeLibrarySentinel() {
 
 // ─── STATISTICHE (generi + classifica, con toggle Io/Gruppo) ─────────────────
 
-function renderStats() {
+// `silent`: aggiornamento dopo una nuova lettura dei dati mentre si guarda già la schermata. Se genere e classifica
+// non sono cambiati non si ridisegnano (le barre ripartirebbero da zero, la classifica si richiuderebbe).
+function renderStats({ silent = false } = {}) {
   document.querySelectorAll("#statsIoGruppoToggle .io-gruppo-btn").forEach(btn => {
     btn.classList.toggle("active", btn.dataset.mode === statsMode);
   });
@@ -859,7 +979,6 @@ function renderStats() {
       const avgVote = votes.length ? votes.reduce((a, b) => a + b, 0) / votes.length : null;
       return { label, value, avgVote };
     });
-  (genreView === "bubbles" ? renderGenreBubbles : renderGenreBars)(topGenres);
 
   const ranked = relevant
     .filter(item => item.media_type === rankingMedia)
@@ -871,6 +990,13 @@ function renderStats() {
     })
     .filter(item => Number.isFinite(item.__score))
     .sort((a, b) => b.__score - a.__score);
+
+  const sig = JSON.stringify([statsMode, rankingMedia, genreView, topGenres,
+    ranked.map(r => [r.id, r.title, r.year, r.poster_path, r.__score, r.__count])]);
+  if (silent && sig === lastStatsSig) return;
+  lastStatsSig = sig;
+
+  (genreView === "bubbles" ? renderGenreBubbles : renderGenreBars)(topGenres);
 
   // Colore dei numeri: cyan = mio (Io), arancione = gruppo (vedi styles.css, [data-mode]).
   document.getElementById("classificaSection").dataset.mode = statsMode === "me" ? "me" : "group";

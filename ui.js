@@ -129,6 +129,41 @@ export function switchScreen(name) {
   });
 }
 
+// ─── AGGIORNAMENTO "A PEZZI" ─────────────────────────────────────────────────
+
+// Mette `html` dentro `el` toccando solo ciò che è cambiato: i figli identici restano dove sono (la locandina
+// non lampeggia, lo scorrimento orizzontale resta com'è), quelli diversi si rifanno, quelli nuovi si inseriscono.
+// Un figlio si riconosce dal suo data-id; senza, dalla posizione. `html` deve contenere solo elementi (gli spazi
+// fra uno e l'altro non contano): con altro dentro si ricade sul semplice innerHTML.
+export function patchHtml(el, html) {
+  const tpl = document.createElement("template");
+  tpl.innerHTML = html;
+  const next = Array.from(tpl.content.children);
+  const soloElementi = Array.from(tpl.content.childNodes).every(n => n.nodeType === 1 || !n.textContent.trim());
+  if (!soloElementi || !el.firstElementChild) {
+    if (soloElementi) el.replaceChildren(...next); else el.innerHTML = html;
+    return;
+  }
+  Array.from(el.childNodes).forEach(n => { if (n.nodeType !== 1) n.remove(); });
+  const old = Array.from(el.children);
+  const key = c => c.dataset.id ?? null;
+  const byKey = new Map();
+  old.forEach(c => { const k = key(c); if (k !== null && !byKey.has(k)) byKey.set(k, c); });
+  const kept = new Set();
+  const finale = next.map((n, i) => {
+    const k = key(n);
+    const o = k !== null ? byKey.get(k) : old[i];
+    if (o && !kept.has(o) && o.outerHTML === n.outerHTML) { kept.add(o); return o; }
+    return n;
+  });
+  old.forEach(c => { if (!kept.has(c)) c.remove(); });
+  let cursor = el.firstChild;
+  for (const nodo of finale) {
+    if (nodo === cursor) cursor = cursor.nextSibling;
+    else el.insertBefore(nodo, cursor);
+  }
+}
+
 // ─── SHELVES (home) ──────────────────────────────────────────────────────────
 
 // lastSeenAt: quando presente, i titoli aggiunti dopo quel momento ricevono
@@ -145,7 +180,7 @@ export function switchScreen(name) {
 export function renderShelf(containerId, items, lastSeenAt, showAdder = false) {
   const el = document.getElementById(containerId);
   if (!el) return;
-  el.innerHTML = items.map(item => {
+  patchHtml(el, items.map(item => {
     const avg = average(item.votes);
     const voter = firstVoter(item.votes);
     const adder = showAdder ? firstOfNames(item.watchlist_by) : null;
@@ -180,7 +215,7 @@ export function renderShelf(containerId, items, lastSeenAt, showAdder = false) {
         </div>
       </div>
     `;
-  }).join("");
+  }).join(""));
 }
 
 // ─── SEARCH RESULTS ──────────────────────────────────────────────────────────

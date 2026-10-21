@@ -43,6 +43,64 @@ export function setGenreView(view) {
   try { localStorage.setItem(GENRE_VIEW_KEY, view === "bubbles" ? "bubbles" : "bars"); } catch {}
 }
 
+// ─── COPIA LOCALE DELLA LIBRERIA (solo sul dispositivo, per aprire l'app subito) ─
+// Alla riapertura l'app disegna subito l'ultima libreria vista (titoli, voti, watchlist e lista utenti) e la
+// aggiorna in sottofondo. È solo una copia per avere qualcosa a schermo mentre la rete risponde: il server resta
+// l'unica fonte di verità e tutte le scritture vanno comunque a lui.
+// - Legata alla versione dell'app: è il "?v=" con cui è caricato questo file, che cambia ad ogni rilascio (vedi
+//   bump-version.yml). Se in un rilascio cambia la forma dei dati non si può leggere una copia fatta col codice di
+//   prima, e così nessuno deve ricordarsi di invalidarla a mano: alla prima apertura dopo un rilascio non c'è
+//   copia, l'app parte come sempre e la rifà.
+// - Formato: una riga di intestazione JSON, poi a capo il JSON della libreria. Quella stringa serve anche ad
+//   accorgersi che i dati nuovi sono identici a quelli già a schermo (vedi app.js::applyFreshLibrary) senza
+//   doverla rifare. (Il JSON non contiene mai un a capo vero: dentro le stringhe è scritto \n.)
+// - Ogni difetto (illeggibile, vecchia, di un'altra versione, forma strana) vale come "nessuna copia".
+const LIBRARY_CACHE_KEY = "cinefighiLibraryCache";
+const LIBRARY_CACHE_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
+const APP_VERSION = new URL(import.meta.url).searchParams.get("v") || "dev";
+
+function isCachedTitle(t) {
+  return !!t && typeof t.title === "string" && t.id != null && typeof t.status === "string"
+    && !!t.votes && typeof t.votes === "object"
+    && Array.isArray(t.watchlist_by) && Array.isArray(t.genre_names) && Array.isArray(t.cast_names);
+}
+
+export function loadLibraryCache() {
+  try {
+    const s = localStorage.getItem(LIBRARY_CACHE_KEY);
+    if (!s) return null;
+    const nl = s.indexOf("\n");
+    const head = JSON.parse(s.slice(0, nl));
+    const raw = s.slice(nl + 1);
+    const db = JSON.parse(raw);
+    const valid = head.v === APP_VERSION
+      && Date.now() - head.at < LIBRARY_CACHE_MAX_AGE_MS
+      && Array.isArray(head.users) && head.users.every(u => typeof u === "string")
+      && Array.isArray(db) && db.length > 0 && db.every(isCachedTitle);
+    if (!valid) { localStorage.removeItem(LIBRARY_CACHE_KEY); return null; }
+    return { db, users: head.users, raw, savedAt: head.at };
+  } catch {
+    try { localStorage.removeItem(LIBRARY_CACHE_KEY); } catch {}
+    return null;
+  }
+}
+
+export function clearLibraryCache() {
+  try { localStorage.removeItem(LIBRARY_CACHE_KEY); } catch {}
+}
+
+// `raw` = JSON.stringify(libreria). Se lo spazio finisce non succede niente: la copia precedente (se c'è) resta
+// valida, oppure non c'è, e l'app parte come sempre.
+export function saveLibraryCache(raw, users) {
+  try {
+    localStorage.setItem(LIBRARY_CACHE_KEY, JSON.stringify({ v: APP_VERSION, at: Date.now(), users }) + "\n" + raw);
+    return true;
+  } catch (e) {
+    console.warn("Copia locale della libreria non salvata:", e);
+    return false;
+  }
+}
+
 // ─── UTENTI DEL GRUPPO (su Supabase, condivisi da tutti) ─────────────────────
 
 export async function fetchUsers() {
