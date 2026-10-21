@@ -111,7 +111,11 @@ function initUpdateCheck() {
   if (!("serviceWorker" in navigator)) return;
 
   navigator.serviceWorker.register("./sw.js").then(reg => {
-    reg.update(); // controlla subito se c'è una versione più recente
+    // Controllo "best effort": se il browser lo rifiuta (Chrome su Android risponde InvalidStateError quando ha
+    // già scartato la registrazione del service worker) non c'è niente da fare né da segnalare, si riprova alla
+    // prossima occasione. Senza il catch finiva in Sentry come errore non gestito (CINEFIGHI-5).
+    const checkForUpdate = () => { try { Promise.resolve(reg.update()).catch(() => {}); } catch {} };
+    checkForUpdate(); // controlla subito se c'è una versione più recente
 
     reg.addEventListener("updatefound", () => {
       const newWorker = reg.installing;
@@ -125,13 +129,13 @@ function initUpdateCheck() {
 
     // Installata da home screen, "chiudere e riaprire" spesso NON ricarica
     // davvero la pagina: iOS/Android la riprendono da dove era rimasta
-    // (bfcache) invece di rieseguire questo script, quindi reg.update() qui
+    // (bfcache) invece di rieseguire questo script, quindi checkForUpdate() qui
     // sopra non gira mai più — un aggiornamento reale può restare invisibile
     // a tempo indeterminato anche dopo un vero riavvio dell'app. pageshow
     // (con persisted=true proprio per il ripristino da bfcache) copre
     // questo caso; visibilitychange copre anche il semplice "torno dal
     // background" senza passare da bfcache.
-    const recheckForUpdate = () => { if (document.visibilityState === "visible") reg.update(); };
+    const recheckForUpdate = () => { if (document.visibilityState === "visible") checkForUpdate(); };
     window.addEventListener("pageshow", recheckForUpdate);
     document.addEventListener("visibilitychange", recheckForUpdate);
   }).catch(() => {});

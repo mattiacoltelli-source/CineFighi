@@ -61,3 +61,36 @@ test("il service worker si registra e prende il controllo della pagina", async (
   expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
   expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
 });
+
+// Il controllo "c'è una versione nuova?" (app.js::initUpdateCheck) è un best effort: quando il browser rifiuta
+// registration.update() non c'è niente da correggere né da segnalare. Succede davvero: Chrome su Android risponde
+// InvalidStateError ("The object is in an invalid state") se ha già scartato la registrazione del service worker
+// (Sentry CINEFIGHI-5, 21/10/2026). Senza un catch diventava un errore non gestito, finito in Sentry per niente.
+// Qui update() rifiuta come fa Chrome, sia all'avvio sia ai due "ritorni in primo piano" (pageshow, visibilitychange).
+test("se il browser rifiuta il controllo degli aggiornamenti non nascono errori non gestiti", async ({ page }) => {
+  const guasti = osserva(page);
+  const scritture = soloLettura(page);
+  await page.addInitScript(() => {
+    (window as any).__tentativiUpdate = 0;
+    ServiceWorkerRegistration.prototype.update = () => {
+      (window as any).__tentativiUpdate++;
+      return Promise.reject(new DOMException("Failed to update a ServiceWorker: The object is in an invalid state.", "InvalidStateError"));
+    };
+  });
+  await entra(page);
+  const supportato = await page.evaluate(() => "serviceWorker" in navigator);
+  test.skip(!supportato, "browser senza supporto service worker in questo ambiente");
+
+  // Il primo controllo parte a fine avvio (initUpdateCheck), dopo aver caricato la libreria.
+  await page.waitForFunction(() => (window as any).__tentativiUpdate >= 1, null, { timeout: 30_000 });
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event("pageshow"));
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  // Il test non è vuoto: l'app ha davvero richiamato update() anche ai due ritorni in primo piano.
+  await page.waitForFunction(() => (window as any).__tentativiUpdate >= 3, null, { timeout: 10_000 });
+  await page.waitForTimeout(500);   // il tempo che un rifiuto non gestito emerga come errore
+
+  expect(guasti, `guasti:\n${guasti.join("\n")}`).toEqual([]);
+  expect(scritture, `la suite ha tentato di scrivere:\n${scritture.join("\n")}`).toEqual([]);
+});
