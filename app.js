@@ -24,7 +24,23 @@ import {
   renderDetailCredits, renderVotesList, renderReportMeta, renderGroupReportMeta, renderReportContent, renderReportGate,
   haptic, animateValue
 } from "./ui.js?v=d5422b9";
-import { initDnaView, showDna, resetDna } from "./dna-view.js?v=d5422b9";
+
+// La schermata DNA (dna-view.js + dna.js + dna-spatial.js, ~80 KB compressi) serve solo quando la si apre: non
+// sta nel percorso di avvio, si scarica a parte (e, a app pronta, in un momento di calma, così alla prima
+// apertura è già lì).
+let dnaModulo = null;
+function caricaDna() {
+  if (!dnaModulo) {
+    dnaModulo = import("./dna-view.js?v=d5422b9").then(m => { m.initDnaView(); return m; })
+      .catch(e => { dnaModulo = null; throw e; });
+  }
+  return dnaModulo;
+}
+function mostraDna() {
+  caricaDna()
+    .then(m => { if (getVisibleScreen() === "tonight") m.showDna({ db, users, currentUser }); })
+    .catch(() => showToast("Impossibile caricare il DNA: riprova", "error"));
+}
 
 const MIN_VOTED_FOR_REPORT = 50;
 let currentUser = null;
@@ -195,7 +211,7 @@ async function init() {
   }
 
   if (!currentUser || (usersFetchOk && !users.includes(currentUser))) {
-    openUserPicker(true);
+    openUserPicker(true, { riusaUtenti: usersFetchOk });   // la lista l'abbiamo appena scaricata
   } else {
     document.getElementById("app").classList.remove("hidden");
     updateUserChip();
@@ -251,25 +267,27 @@ function updateUserChip() {
   chip.innerHTML = `${avatarHtml(currentUser, 24)}<span>${escapeHtml(currentUser)}</span>`;
 }
 
-function openUserPicker(blocking) {
+function openUserPicker(blocking, { riusaUtenti = false } = {}) {
   const overlay = document.getElementById("userPickerOverlay");
   overlay.classList.remove("hidden");
   overlay.dataset.blocking = blocking ? "1" : "0";
-  renderUserPickerList();
+  renderUserPickerList(!riusaUtenti);
 }
 
 function closeUserPicker() {
   document.getElementById("userPickerOverlay").classList.add("hidden");
 }
 
-async function renderUserPickerList() {
+async function renderUserPickerList(aggiorna = true) {
   // FIX: come reloadLibrary, non svuotiamo la lista utenti mostrata se
   // fetchUsers fallisce per un errore di rete.
-  try {
-    users = await fetchUsers();
-  } catch (e) {
-    showToast("Impossibile aggiornare la lista utenti", "error");
-    return;
+  if (aggiorna) {
+    try {
+      users = await fetchUsers();
+    } catch (e) {
+      showToast("Impossibile aggiornare la lista utenti", "error");
+      return;
+    }
   }
   const list = document.getElementById("userPickerList");
   // Chi ha già scelto un profilo su questo stesso dispositivo (currentUser,
@@ -365,7 +383,7 @@ function goToScreen(screen) {
   if (getVisibleScreen() === "home" && screen !== "home") markHomeSeen();
   switchScreen(screen);
   if (screen === "home") renderHome();
-  if (screen === "tonight") showDna({ db, users, currentUser });
+  if (screen === "tonight") mostraDna();
 }
 
 // Ultima attività "visto" su un titolo, in millisecondi: il piu' recente tra
@@ -1494,11 +1512,10 @@ function bindGlobalEvents() {
   // DNA (la schermata che prima era "Stasera"). Il tap sui nodi lo gestisce
   // dna-view.js in delega; qui resta solo il "Ricomincia da me", che ha
   // bisogno di db/users/currentUser e quindi vive di là da app.js.
-  initDnaView();
   document.getElementById("dnaResetBtn").addEventListener("click", () => {
-    resetDna();
-    showDna({ db, users, currentUser });
+    caricaDna().then(m => { m.resetDna(); m.showDna({ db, users, currentUser }); }).catch(() => {});
   });
+  (window.requestIdleCallback || (f => setTimeout(f, 3000)))(() => caricaDna().catch(() => {}), { timeout: 8000 });
 
   document.getElementById("detailBackBtn").addEventListener("click", () => { history.back(); });
   document.getElementById("detailVoteSlider").addEventListener("input", e => {

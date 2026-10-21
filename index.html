@@ -14,7 +14,21 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="apple-touch-icon" href="icon-192.png">
+  <!-- Avvio: le connessioni ai tre servizi esterni si aprono subito (TLS compreso), i font partono in parallelo al CSS
+       (prima erano un @import dentro styles.css, quindi solo dopo il suo arrivo) e i moduli del percorso di avvio
+       si scaricano insieme invece che uno dopo l'altro (app.js li scopre solo quando lo ha letto). -->
+  <link rel="preconnect" href="https://dxzukpujouayxlomwryc.supabase.co" crossorigin>
+  <link rel="preconnect" href="https://image.tmdb.org">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&family=Inter:wght@400;500;600&display=swap">
   <link rel="stylesheet" href="styles.css?v=d5422b9">
+  <link rel="modulepreload" href="supabase-sdk.js?v=d5422b9">
+  <link rel="modulepreload" href="supabase.js?v=d5422b9">
+  <link rel="modulepreload" href="storage.js?v=d5422b9">
+  <link rel="modulepreload" href="cine-core.js?v=d5422b9">
+  <link rel="modulepreload" href="tmdb.js?v=d5422b9">
+  <link rel="modulepreload" href="ui.js?v=d5422b9">
   <!-- Sentry: solo monitoraggio errori, nessun impatto sull'avvio se il CDN non risponde.
        Bundle SDK + init esplicito invece del Loader Script: il Loader
        (js.sentry-cdn.com/<chiave>.min.js) non serve mai il codice vero per le
