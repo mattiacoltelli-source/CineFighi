@@ -306,9 +306,30 @@
           <button type="button" class="genre-view-btn active" data-dna-view="flat" aria-pressed="true">Piatto</button>
           <button type="button" class="genre-view-btn" data-dna-view="sphere" aria-pressed="false">3D</button>
         </div>
+        <!-- Filtri (voto minimo, generi): accanto a Piatto/3D, nell'angolo del riquadro. -->
+        <button id="dnaFilterBtn" type="button" class="dna-view-all-btn dna-filter-btn" aria-haspopup="true" aria-expanded="false" aria-label="Filtri">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></svg>
+        </button>
         <!-- Il selettore delle persone copre il riquadro invece di spingere
              la pagina in basso: così aprirlo e chiuderlo non sposta niente. -->
         <p id="dnaStartHint" class="dna-start-hint hidden">tocca il tuo nodo per aprire</p>
+        <!-- Filtri: voto minimo e (al massimo 2) generi. Stesso foglio delle persone,
+             copre il riquadro invece di spingere la pagina. -->
+        <div id="dnaFilterSheet" class="dna-sheet hidden">
+          <div class="dna-sheet__head">
+            <strong>Filtri</strong>
+            <span class="dna-filter__actions">
+              <button id="dnaFilterResetBtn" type="button" class="btn-link-quiet">Azzera</button>
+              <button id="dnaFilterDoneBtn" type="button" class="btn-link-quiet">Fatto</button>
+            </span>
+          </div>
+          <div class="dna-filter">
+            <div class="dna-filter__label">Voto minimo</div>
+            <div id="dnaFilterVotes" class="dna-filter__chips" role="group" aria-label="Voto minimo"></div>
+            <div class="dna-filter__label">Generi <span class="dna-filter__hint">(al massimo 2)</span></div>
+            <div id="dnaFilterGenres" class="dna-filter__chips" role="group" aria-label="Generi"></div>
+          </div>
+        </div>
         <div id="dnaPeopleSheet" class="dna-sheet hidden">
           <div class="dna-sheet__head">
             <strong>Persone</strong>

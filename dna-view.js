@@ -10,7 +10,8 @@
 // soprattutto non fa ballare i nodi già piazzati ad ogni apertura.
 
 import {
-  buildIndex, createNetwork, expand, collapse, hopsFrom, sharedCountOf, remainingCount, LIKE_THRESHOLD
+  buildIndex, createNetwork, expand, collapse, hopsFrom, sharedCountOf, remainingCount, LIKE_THRESHOLD,
+  normalizeGenres
 } from "./dna.js?v=ad7aeae";
 import { escapeHtml } from "./cine-core.js?v=ad7aeae";
 import { avatarHtml } from "./ui.js?v=ad7aeae";
@@ -102,6 +103,17 @@ let panelExpanded = false;
 let ctx = null;
 let sheetOpen = false;
 
+// Filtri della rete: voto minimo (mai sotto LIKE_THRESHOLD) e fino a 2 generi.
+// Come selectedPeople, non sono un filtro grafico sui nodi già disegnati: la
+// rete viene costruita da zero dallo stesso motore (buildIndex), solo con meno
+// titoli. Stato solo in memoria: a ogni apertura dell'app si riparte da "tutto".
+const MAX_GENERI_FILTRO = 2;
+const VOTI_FILTRO = [7, 7.5, 8, 8.5];
+let filtro = { minVote: LIKE_THRESHOLD, genres: [] };
+let filterOpen = false;
+const filtroAttivo = () => filtro.minVote > LIKE_THRESHOLD || filtro.genres.length > 0;
+const votoIt = (n) => String(n).replace(".", ",");
+
 // Vista Piatta (questo file, quella di sempre) o 3D (dna-spatial.js):
 // stessa rete, stesso pannello, stesse persone — cambia solo come la si
 // guarda. Interruttore nell'angolo del riquadro; la scelta resta sul
@@ -176,7 +188,7 @@ function librarySignature(db, currentUser) {
   // La selezione entra nella firma: cambiarla deve ricostruire la rete, non
   // riusare quella di prima.
   const chi = selectedPeople ? selectedPeople.join(",") : "*";
-  return `${currentUser}|${chi}|${db.length}|${n}|${sum}`;
+  return `${currentUser}|${chi}|${db.length}|${n}|${sum}|${filtro.minVote}|${filtro.genres.join(",")}`;
 }
 
 // Quanti titoli ha amato ciascuno, su TUTTA la libreria: è una proprietà
@@ -236,14 +248,16 @@ export function showDna({ db, users, currentUser }) {
   const sig = librarySignature(db, currentUser);
   if (sig !== signature || !net) {
     signature = sig;
-    index = buildIndex(db, persone);
+    index = buildIndex(db, persone, filtroAttivo() ? filtro : null);
     const radice = rootUserFor(persone, currentUser);
     if (!radice) {
       net = null;
       renderPeopleControl();
-      renderMessage(selectedPeople
-        ? "Nessuno dei selezionati ha ancora votato un titolo 7 o più."
-        : "Vota almeno un titolo con 7 o più: la rete parte da lì.");
+      renderMessage(filtroAttivo()
+        ? "Nessun titolo corrisponde ai filtri: abbassa il voto minimo o cambia i generi."
+        : selectedPeople
+          ? "Nessuno dei selezionati ha ancora votato un titolo 7 o più."
+          : "Vota almeno un titolo con 7 o più: la rete parte da lì.");
       return;
     }
     net = createNetwork(index, radice);
@@ -308,10 +322,13 @@ function renderPeopleControl() {
   // dire che il conto è fatto solo su chi è stato scelto.
   const nota = el("dnaNote");
   if (nota) {
+    const soglia = votoIt(filtro.minVote);
+    const generi = filtro.genres.length ? `, solo di ${filtro.genres.join(" e ")}` : "";
     nota.textContent = selectedPeople
-      ? `Nella rete ci sono solo i titoli votati 7 o più da ${selectedPeople.length === 1 ? selectedPeople[0] : "almeno una delle persone scelte"}.`
-      : "Nella rete ci sono solo i titoli votati 7 o più da almeno una persona.";
+      ? `Nella rete ci sono solo i titoli votati ${soglia} o più da ${selectedPeople.length === 1 ? selectedPeople[0] : "almeno una delle persone scelte"}${generi}.`
+      : `Nella rete ci sono solo i titoli votati ${soglia} o più da almeno una persona${generi}.`;
   }
+  renderFilterControl();
 
   // Solo in modalità condivisa (2 o 3 persone): un numero secco, non una
   // percentuale — il denominatore di un "% di affinità" sarebbe arbitrario e
@@ -332,6 +349,59 @@ function renderPeopleControl() {
     }
     affinity.textContent = testo;
   }
+}
+
+// ─── FILTRI (voto minimo, generi) ────────────────────────────────────────────
+
+function renderFilterControl() {
+  const btn = el("dnaFilterBtn");
+  if (!btn) return;
+  btn.classList.toggle("is-active", filtroAttivo());
+  btn.setAttribute("aria-expanded", filterOpen ? "true" : "false");
+}
+
+// Generi presenti nella libreria, i più numerosi per primi: se ne scelgono
+// al massimo 2, quindi finiti due i restanti si disabilitano.
+function generiDisponibili() {
+  const conta = new Map();
+  for (const t of ctx?.db || []) {
+    for (const g of normalizeGenres(t.genre_names)) conta.set(g, (conta.get(g) || 0) + 1);
+  }
+  return [...conta.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([g]) => g);
+}
+
+function renderFilterSheet() {
+  const voti = el("dnaFilterVotes");
+  const generi = el("dnaFilterGenres");
+  if (!voti || !generi || !ctx) return;
+  voti.innerHTML = VOTI_FILTRO.map(v =>
+    `<button type="button" class="dna-filter__chip${filtro.minVote === v ? " is-active" : ""}" data-vote="${v}" aria-pressed="${filtro.minVote === v}">${votoIt(v)}</button>`
+  ).join("");
+  const pieni = filtro.genres.length >= MAX_GENERI_FILTRO;
+  generi.innerHTML = generiDisponibili().map(g => {
+    const on = filtro.genres.includes(g);
+    return `<button type="button" class="dna-filter__chip${on ? " is-active" : ""}" data-genre="${escapeHtml(g)}" aria-pressed="${on}"${pieni && !on ? " disabled" : ""}>${escapeHtml(g)}</button>`;
+  }).join("");
+}
+
+function openFilterSheet(apri) {
+  const sheet = el("dnaFilterSheet");
+  if (!sheet) return;
+  if (apri && sheetOpen) openSheet(false); // un solo foglio alla volta
+  filterOpen = apri;
+  if (apri) renderFilterSheet();
+  sheet.classList.toggle("hidden", !apri);
+  renderFilterControl();
+}
+
+function applicaFiltro() {
+  renderFilterSheet();
+  renderFilterControl();
+  // Rete da zero con i nuovi filtri (firma diversa), come per le persone.
+  resetDna();
+  if (ctx) showDna(ctx);
 }
 
 function renderPeopleSheet() {
@@ -374,6 +444,7 @@ function togglePerson(nome) {
 function openSheet(apri) {
   const sheet = el("dnaPeopleSheet");
   if (!sheet) return;
+  if (apri && filterOpen) openFilterSheet(false); // un solo foglio alla volta
   sheetOpen = apri;
   if (apri) renderPeopleSheet();
   sheet.classList.toggle("hidden", !apri);
@@ -1584,6 +1655,7 @@ export function initDnaView() {
 
   bindPan();
   bindPeople();
+  bindFilters();
   bindIntroToggle();
   bindFullView();
   bindFullscreenToggle();
@@ -2372,6 +2444,34 @@ function bindPan() {
     zoom = z;
     aggiornaZoom(false);
   }, { passive: false });
+}
+
+function bindFilters() {
+  el("dnaFilterBtn")?.addEventListener("click", () => openFilterSheet(!filterOpen));
+  el("dnaFilterDoneBtn")?.addEventListener("click", () => openFilterSheet(false));
+  el("dnaFilterResetBtn")?.addEventListener("click", () => {
+    if (!filtroAttivo()) return;
+    filtro = { minVote: LIKE_THRESHOLD, genres: [] };
+    applicaFiltro();
+  });
+  el("dnaFilterSheet")?.addEventListener("click", e => {
+    const voto = e.target.closest("[data-vote]");
+    const genere = e.target.closest("[data-genre]");
+    if (voto) {
+      filtro = { ...filtro, minVote: Number(voto.dataset.vote) };
+    } else if (genere && !genere.disabled) {
+      const g = genere.dataset.genre;
+      filtro = {
+        ...filtro,
+        genres: filtro.genres.includes(g)
+          ? filtro.genres.filter(x => x !== g)
+          : [...filtro.genres, g].slice(0, MAX_GENERI_FILTRO)
+      };
+    } else {
+      return;
+    }
+    applicaFiltro();
+  });
 }
 
 function bindPeople() {

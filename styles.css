@@ -940,6 +940,25 @@ textarea { min-height: 70px; resize: vertical; margin-top: 10px; }
 .dna-people-btn span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .dna-people-btn.is-active { border-color: var(--cyan-a3); color: var(--cyan); background: var(--cyan-dim); }
 
+/* Filtri del DNA (voto minimo, generi): un'icona nella riga del titolo, come
+   "vedi tutta la rete". Si colora come il filtro persone quando è attivo. */
+.dna-filter-btn { position:absolute; top:5px; left:112px; z-index:1; width:32px; height:32px; background: rgba(13,19,28,.82); backdrop-filter: blur(6px); }
+.dna-filter-btn.is-active { border-color: var(--cyan-a3); color: var(--cyan); background: var(--cyan-dim); }
+.dna-filter__actions { display:flex; align-items:center; gap:14px; }
+.dna-filter { flex:1; overflow-y:auto; padding:10px 14px 14px; overscroll-behavior:contain; }
+.dna-filter__label { font-family: var(--font-display); font-weight:700; font-size:var(--fs-sm); color: var(--text2); margin:14px 0 8px; }
+.dna-filter__label:first-child { margin-top:0; }
+.dna-filter__hint { font-weight:600; color: var(--text3); }
+.dna-filter__chips { display:flex; flex-wrap:wrap; gap:8px; }
+.dna-filter__chip {
+  min-height:36px; padding:0 14px; border-radius: var(--radius-pill);
+  background: var(--surface2); border:1px solid var(--border2); color: var(--text2);
+  font-family: var(--font-display); font-weight:700; font-size:var(--fs-md);
+  cursor:pointer; -webkit-tap-highlight-color: transparent;
+}
+.dna-filter__chip.is-active { background: var(--cyan-dim); border-color: var(--cyan-a3); color: var(--cyan); }
+.dna-filter__chip:disabled { opacity:.4; cursor:default; }
+
 /* Vedi tutta la rete: compare solo quando ha senso (modalità a 2/3 persone e
    rete già grande, vedi updateViewAllButton in dna-view.js). Icona sola,
    stesso riquadro tondo del filtro persone accanto: non è una funzione nuova

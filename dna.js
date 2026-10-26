@@ -76,9 +76,15 @@ function isModalitaCondivisa(users) {
   return !!(users && (users.length === 2 || users.length === 3));
 }
 
-export function buildIndex(db, users = null) {
+// filtro (facoltativo): { minVote, genres }. minVote alza la soglia di "amato"
+// (mai sotto LIKE_THRESHOLD), genres tiene solo i titoli di uno di quei generi
+// (al massimo 2, vedi dna-view.js). Senza filtro il comportamento è identico a
+// prima: stessa soglia, nessun titolo scartato.
+export function buildIndex(db, users = null, filtro = null) {
   const known = users && users.length ? new Set(users) : null;
   const condivisa = isModalitaCondivisa(users);
+  const soglia = Math.max(LIKE_THRESHOLD, Number(filtro?.minVote) || LIKE_THRESHOLD);
+  const soloGeneri = filtro?.genres?.length ? new Set(normalizeGenres(filtro.genres)) : null;
 
   const films = new Map();       // filmId -> { id, key, title, year, poster_path, media_type, director, genres, fans }
   const byPerson = new Map();    // nome    -> [{ id, w }]  film amati, con il voto come peso
@@ -96,11 +102,12 @@ export function buildIndex(db, users = null) {
 
   for (const t of db || []) {
     const genres = normalizeGenres(t.genre_names);
+    if (soloGeneri && !genres.some(g => soloGeneri.has(g))) continue;
 
     // I fan sono ordinati per nome: serve a rendere deterministico ogni
     // successivo ordinamento a parità di peso.
     const fans = Object.entries(t.votes || {})
-      .filter(([name, v]) => Number(v?.vote) >= LIKE_THRESHOLD && (!known || known.has(name)))
+      .filter(([name, v]) => Number(v?.vote) >= soglia && (!known || known.has(name)))
       .map(([name, v]) => ({ name, vote: Number(v.vote) }))
       .sort((a, b) => a.name.localeCompare(b.name));
 
