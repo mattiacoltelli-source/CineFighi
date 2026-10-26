@@ -101,8 +101,12 @@ export function buildIndex(db, users = null, filtro = null) {
   const actorFans = new Map();    // attore  -> Set(nome)
 
   for (const t of db || []) {
-    const genres = normalizeGenres(t.genre_names);
-    if (soloGeneri && !genres.some(g => soloGeneri.has(g))) continue;
+    // Con i generi scelti, di ogni titolo restano SOLO quei generi: gli altri
+    // (Animazione, Famiglia... di un film che è anche Western) non devono
+    // comparire né come nodi né come collegamenti.
+    const tuttiGeneri = normalizeGenres(t.genre_names);
+    const genres = soloGeneri ? tuttiGeneri.filter(g => soloGeneri.has(g)) : tuttiGeneri;
+    if (soloGeneri && !genres.length) continue;
 
     // I fan sono ordinati per nome: serve a rendere deterministico ogni
     // successivo ordinamento a parità di peso.
