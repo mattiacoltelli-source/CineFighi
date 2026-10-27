@@ -23,7 +23,7 @@
 // Tutta la logica di "chi si collega a chi" resta in dna.js; aprire e
 // richiudere resta in dna-view.js (onTap).
 
-import { hopsFrom } from "./dna.js?v=5e7e1ec";
+import { hopsFrom } from "./dna.js?v=3447575";
 
 const F_BASE = 560;                          // focale: più bassa = prospettiva più forte
 const F_ORBIT = 1400;                        // in orbita la prospettiva è più dolce: a 60° i nodi vicini non esplodono
@@ -53,7 +53,7 @@ const NEAR = 140;                            // sotto questa distanza un nodo è
 // (node.x/node.y) resta quella di sempre, e le altre viste non cambiano.
 const N_DIREZIONI = 120;                     // direzioni candidate sulla sfera
 const Z_SCHIACCIATA = 1.7;                   // la sfera si allunga in profondità (z) molto più che sullo schermo: è lì che c'è spazio
-const PESO_Z = 0.2;                         // quanto conta la distanza in profondità nello scegliere dove mettere un nodo
+const PESO_Z = 0.3;                          // quanto conta la distanza in profondità nello scegliere dove mettere un nodo
 const OPAC = [1, 1, .6, .34, .2];            // = .dna-h0..h4: panoramica e rete piatta
 const OPAC_ZONA = [1, 1, .5, .1, 0];         // a zoom normale: la tua zona, il resto nella nebbia
 const FOG_Z = 380;                           // quanto allontanarsi per diradare la nebbia
@@ -75,13 +75,13 @@ const PESO_LUNGHEZZA = 0.12;                 // piccolo costo per gli archi più
 const PESO_BARICENTRO = 0.25;                // quanto i nuovi nodi preferiscono i vuoti vicino al centro della rete
 // Rilassamento: dopo che nodi nuovi sono stati piazzati, i nodi troppo vicini sullo schermo si
 // respingono (la locandina è larga 62px più l'etichetta sotto) e si assestano con una piccola scivolata.
-const SPAZIO_NODO = 118;                     // distanza minima voluta fra due nodi in orizzontale: la locandina è larga 62px (+ margine) e la camera di solito sta a scala ~0,7
+const SPAZIO_NODO = 100;                     // distanza minima voluta fra due nodi in orizzontale: la locandina è larga 62px (+ margine) e la camera di solito sta a scala ~0,7
 const SPAZIO_ASPETTO = 0.8;                  // in verticale serve di più (c'è l'etichetta): 76 / 0.8
-const SPAZIO_PESO_Z = 0.18;                  // la profondità conta meno dello schermo: più è piccolo, più si preferisce spostare in z
-const RILASSA_PASSI = 70;
+const SPAZIO_PESO_Z = 0.3;                   // la profondità conta meno dello schermo: più è piccolo, più si preferisce spostare in z
+const RILASSA_PASSI = 40;
 const RILASSA_FORZA = 0.55;                  // quanto del sovrapposto si corregge a ogni passo
-const RILASSA_CASA = 0.03;                   // richiamo verso la posizione di partenza: la rete non si deforma troppo
-const RILASSA_MAX = 1.4;                     // spostamento massimo di un nodo, in raggi
+const RILASSA_CASA = 0.05;                   // richiamo verso la posizione di partenza: la rete non si deforma troppo
+const RILASSA_MAX = 1.0;                     // spostamento massimo di un nodo, in raggi
 const SCIVOLA_TAU = 260;                     // ms: i nodi già visibili scivolano nella nuova posizione
 const S_TARGET = 0.8;                        // scala a cui devono stare i collegamenti di un nodo (grandezza quasi normale)
 const S_FIT_MIN_PIATTA = 0.4;                 // "3D" usa il layout piatto di dna.js, che non si può comprimere: lì ci si allarga di più
