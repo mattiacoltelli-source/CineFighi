@@ -1504,6 +1504,11 @@ body:has(.app.dna-schermo-intero #screen-tonight:not(.hidden)) .bottom-nav {
    pressione rimpicciolisce il contenuto, stesso effetto a vista. */
 .dna-spatial .dna-node > :first-child { transition: transform var(--t-fast) var(--ease); }
 .dna-spatial .dna-node:active > :first-child { transform: scale(.94); }
+/* Vista pulita (?dna=pulito): i nodi lontani dal nodo attivo si rimpiccioliscono e perdono il "+N";
+   le persone non coperte dai film stanno un po' più piccole. Nessun nodo cambia posizione. */
+.dna-spatial .dna-node.is-leggero > :first-child { transform: scale(.5); }
+.dna-spatial .dna-node.is-leggero .dna-node__more { display:none; }
+.dna-spatial .dna-node.is-sotto > :first-child { transform: scale(.82); }
 .dna-spatial .dna-node.no-label .dna-node__label { visibility:hidden; }
 .dna-spatial .dna-edge { transition:none; }
 /* Tour: il nodo su cui vola la camera si stacca dagli altri — alone ciano sulla

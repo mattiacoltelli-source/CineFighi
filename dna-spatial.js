@@ -87,20 +87,26 @@ const S_TARGET = 0.8;                        // scala a cui devono stare i colle
 const S_FIT_MIN_PIATTA = 0.4;                 // "3D" usa il layout piatto di dna.js, che non si può comprimere: lì ci si allarga di più
 const S_FIT_TUTTI = 0.62;                    // limite dell'allargamento per vedere TUTTI i collegamenti di un nodo
 const S_FIT_MIN = 0.55;                      // quanto si può rimpicciolire per far stare un nodo aperto per intero
-// Interruttore di prova: la sfera 3D più larga (raggio 2,0 invece di 1,7) si
-// accende aprendo l'app con ?dna=ampio (resta sul dispositivo) e si spegne con
-// ?dna=normale. Spento di default: per chi non lo accende non cambia niente.
-// Con la sfera ampia un nodo molto connesso può non mostrare tutti i
-// collegamenti a schermo insieme (si ruota per vedere gli altri).
-const DNA_AMPIO_KEY = "cinefighiDnaAmpio";
-export const SFERA_AMPIA = (() => {
+// Interruttori di prova, spenti di default (per chi non li accende non cambia
+// niente). Si accendono aprendo l'app con ?dna=ampio, ?dna=pulito o entrambi
+// (?dna=ampio,pulito), restano sul dispositivo, e ?dna=normale li spegne tutti.
+//  - ampio: la sfera 3D più larga (raggio 2,0 invece di 1,7). Con la sfera ampia
+//    un nodo molto connesso può non mostrare tutti i collegamenti a schermo
+//    insieme (si ruota per vedere gli altri).
+//  - pulito: meno affollamento senza spostare nessun nodo: i nodi lontani dal
+//    nodo attivo si rimpiccioliscono e perdono l'etichetta, le etichette
+//    restano solo dove servono (nodo attivo e vicini), le persone stanno
+//    dietro ai film e un po' più piccole.
+function interruttore(nome, chiave) {
   try {
-    const q = new URLSearchParams(location.search).get("dna");
-    if (q === "ampio") { try { localStorage.setItem(DNA_AMPIO_KEY, "1"); } catch {} return true; }
-    if (q === "normale") { try { localStorage.removeItem(DNA_AMPIO_KEY); } catch {} return false; }
-    return localStorage.getItem(DNA_AMPIO_KEY) === "1";
+    const q = (new URLSearchParams(location.search).get("dna") || "").split(",");
+    if (q.includes("normale")) { try { localStorage.removeItem(chiave); } catch {} return false; }
+    if (q.includes(nome)) { try { localStorage.setItem(chiave, "1"); } catch {} return true; }
+    return localStorage.getItem(chiave) === "1";
   } catch { return false; }
-})();
+}
+export const SFERA_AMPIA = interruttore("ampio", "cinefighiDnaAmpio");
+export const VISTA_PULITA = interruttore("pulito", "cinefighiDnaPulito");
 const RAGGIO_SFERA = SFERA_AMPIA ? 2.0 : 1.7;                    // la sfera si apre più larga del ventaglio piatto
 const MAX_TILT = 0.14;                       // ~8°
 const DRAG_THRESHOLD = 8;                    // come la vista piatta
@@ -1016,9 +1022,19 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       setIf(c, "o", o.toFixed(2), x => { st.opacity = x; });
       // Ordine di sovrapposizione per profondità vera (anche ruotando), non per
       // salto: più lontano = sotto.
-      setIf(c, "z", String(Math.max(1, 5000 - Math.round(p.z))), x => { st.zIndex = x; });
+      let zi = Math.max(1, 5000 - Math.round(p.z));
+      const pulito = VISTA_PULITA && !(ef && ef.k > 0.3);
+      const sotto = pulito && n.type === "persona" && n.id !== focusId;
+      if (sotto) zi = Math.max(1, zi - 1500);      // le persone non coprono i film
+      setIf(c, "z", String(zi), x => { st.zIndex = x; });
+      if (VISTA_PULITA) {
+        setIf(c, "lg", pulito && v.th >= 3 && n.id !== focusId, x => { v.dom.classList.toggle("is-leggero", x); });
+        setIf(c, "sotto", sotto, x => { v.dom.classList.toggle("is-sotto", x); });
+      }
       setIf(c, "tf", !!ef && ef.k > 0.5, x => { v.dom.classList.toggle("is-tour-focus", x); });
-      setIf(c, "nl", p.s < LABEL_MIN_SCALE && !(ef && ef.k > 0.3), x => { v.dom.classList.toggle("no-label", x); });
+      // Vista pulita: l'etichetta serve sul nodo attivo e sui vicini (e sulle persone vicine); gli altri si leggono toccandoli.
+      const utile = n.id === focusId || v.th <= 1 || (n.type === "persona" && v.th <= 2);
+      setIf(c, "nl", (p.s < LABEL_MIN_SCALE || (VISTA_PULITA && !utile)) && !(ef && ef.k > 0.3), x => { v.dom.classList.toggle("no-label", x); });
     }
     for (const e of net.edges) {
       const a = proj.get(e.a), b = proj.get(e.b), line = edgeDom.get(edgeKey(e));
