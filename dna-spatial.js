@@ -87,6 +87,7 @@ const S_TARGET = 0.8;                        // scala a cui devono stare i colle
 const S_FIT_MIN_PIATTA = 0.4;                 // "3D" usa il layout piatto di dna.js, che non si può comprimere: lì ci si allarga di più
 const S_FIT_TUTTI = 0.62;                    // limite dell'allargamento per vedere TUTTI i collegamenti di un nodo
 const S_FIT_MIN = 0.55;                      // quanto si può rimpicciolire per far stare un nodo aperto per intero
+const MAX_ETICHETTE_3D = 14;                 // in 3D, con la rete aperta, si leggono al massimo tante etichette (le più vicine a chi guarda, più quella del nodo attivo)
 const MAX_NODI_3D = 60;                      // in 3D si disegnano al massimo tanti nodi: con la rete molto aperta gli altri sfumano nella nebbia (come nel Piatto, dove il tetto è 32)
 const RAGGIO_SFERA = 1.7;                    // la sfera si apre più larga del ventaglio piatto
 const MAX_TILT = 0.14;                       // ~8°
@@ -994,6 +995,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
   function draw() {
     const proj = new Map();
     const ammessi = nodiAmmessi();
+    const etichette = [];
     const soloUtili = sfera && !(enfasi.size || cam.viaggio || cam.crescita || nodeK !== 1 || nodeKT !== 1);
     // Tour: i nodi più lontani del nodo di tappa sbiadiscono (prospettiva atmosferica): è ciò che dà profondità alla scena.
     let zFuoco = 0, profondita = 0;
@@ -1027,10 +1029,20 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       // Il nodo attivo sta sempre sopra tutti gli altri: è quello che hai appena toccato, non deve restare coperto.
       setIf(c, "z", String(n.id === focusId ? 20000 : Math.max(1, 5000 - Math.round(p.z))), x => { st.zIndex = x; });
       setIf(c, "tf", !!ef && ef.k > 0.5, x => { v.dom.classList.toggle("is-tour-focus", x); });
-      // Con la rete aperta le etichette si coprono fra loro: si leggono quelle del nodo attivo, dei suoi vicini
-      // e delle persone vicine; gli altri nodi si leggono toccandoli. Nel tour e nei voli di camera restano tutte.
-      const utile = !soloUtili || n.id === focusId || v.th <= 1 || (n.type === "persona" && v.th <= 2);
-      setIf(c, "nl", (p.s < LABEL_MIN_SCALE || !utile) && !(ef && ef.k > 0.3), x => { v.dom.classList.toggle("no-label", x); });
+      // Con la rete aperta le etichette si coprono fra loro: si leggono quelle del nodo attivo e di una
+      // dozzina di vicini (le più vicine a chi guarda, e le persone); gli altri nodi si leggono toccandoli.
+      // Nel tour e nei voli di camera restano tutte (vedi soloUtili).
+      const troppoPiccola = p.s < LABEL_MIN_SCALE && !(ef && ef.k > 0.3);
+      if (!soloUtili) setIf(c, "nl", troppoPiccola, x => { v.dom.classList.toggle("no-label", x); });
+      else etichette.push({ id, v, s: p.s, piccola: troppoPiccola, foc: n.id === focusId, ok: v.th <= 1 || (n.type === "persona" && v.th <= 2), ef });
+    }
+    if (soloUtili) {
+      const scelte = new Set(etichette.filter(e => !e.piccola && !e.foc && e.ok)
+        .sort((x, y) => y.s - x.s).slice(0, MAX_ETICHETTE_3D).map(e => e.id));
+      for (const e of etichette) {
+        const nascosta = e.piccola || !(e.foc || scelte.has(e.id));
+        setIf(e.v.cache, "nl", nascosta && !(e.ef && e.ef.k > 0.3), x => { e.v.dom.classList.toggle("no-label", x); });
+      }
     }
     for (const e of net.edges) {
       const a = proj.get(e.a), b = proj.get(e.b), line = edgeDom.get(edgeKey(e));
