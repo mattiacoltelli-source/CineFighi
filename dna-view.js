@@ -15,7 +15,7 @@ import {
 } from "./dna.js?v=b1f64e1";
 import { escapeHtml } from "./cine-core.js?v=b1f64e1";
 import { avatarHtml } from "./ui.js?v=b1f64e1";
-import { createSpatial, SFERA_AMPIA } from "./dna-spatial.js?v=b1f64e1";
+import { createSpatial, SFERA_AMPIA, VISTA_PULITA } from "./dna-spatial.js?v=b1f64e1";
 
 // Quanti vicini apre un tap, e a che distanza dal genitore. Il tetto e' sempre
 // stato una questione di spazio, non di gusto: con cinque figli su un ventaglio
@@ -324,7 +324,8 @@ function renderPeopleControl() {
   if (nota) {
     const soglia = votoIt(filtro.minVote);
     const generi = filtro.genres.length ? `, solo di ${filtro.genres.join(" e ")}` : "";
-    const ampia = SFERA_AMPIA ? " Vista 3D ampia attiva (?dna=normale per spegnerla)." : "";
+    const prova = [SFERA_AMPIA ? "ampia" : "", VISTA_PULITA ? "pulita" : ""].filter(Boolean).join(" e ");
+    const ampia = prova ? ` Vista 3D ${prova} attiva (?dna=normale per spegnerla).` : "";
     nota.textContent = selectedPeople
       ? `Nella rete ci sono solo i titoli votati ${soglia} o più da ${selectedPeople.length === 1 ? selectedPeople[0] : "almeno una delle persone scelte"}${generi}.${ampia}`
       : `Nella rete ci sono solo i titoli votati ${soglia} o più da almeno una persona${generi}.${ampia}`;
