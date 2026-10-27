@@ -994,6 +994,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
   function draw() {
     const proj = new Map();
     const ammessi = nodiAmmessi();
+    const soloUtili = sfera && !(enfasi.size || cam.viaggio || cam.crescita || nodeK !== 1 || nodeKT !== 1);
     // Tour: i nodi più lontani del nodo di tappa sbiadiscono (prospettiva atmosferica): è ciò che dà profondità alla scena.
     let zFuoco = 0, profondita = 0;
     for (const [id, f] of enfasi) if (f.k > profondita) { const vv = vis.get(id), nn = net.nodes.get(id); if (vv && nn) { profondita = f.k; zFuoco = project(nn, vv).z; } }
@@ -1023,9 +1024,13 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       setIf(c, "o", o.toFixed(2), x => { st.opacity = x; });
       // Ordine di sovrapposizione per profondità vera (anche ruotando), non per
       // salto: più lontano = sotto.
-      setIf(c, "z", String(Math.max(1, 5000 - Math.round(p.z))), x => { st.zIndex = x; });
+      // Il nodo attivo sta sempre sopra tutti gli altri: è quello che hai appena toccato, non deve restare coperto.
+      setIf(c, "z", String(n.id === focusId ? 20000 : Math.max(1, 5000 - Math.round(p.z))), x => { st.zIndex = x; });
       setIf(c, "tf", !!ef && ef.k > 0.5, x => { v.dom.classList.toggle("is-tour-focus", x); });
-      setIf(c, "nl", p.s < LABEL_MIN_SCALE && !(ef && ef.k > 0.3), x => { v.dom.classList.toggle("no-label", x); });
+      // Con la rete aperta le etichette si coprono fra loro: si leggono quelle del nodo attivo, dei suoi vicini
+      // e delle persone vicine; gli altri nodi si leggono toccandoli. Nel tour e nei voli di camera restano tutte.
+      const utile = !soloUtili || n.id === focusId || v.th <= 1 || (n.type === "persona" && v.th <= 2);
+      setIf(c, "nl", (p.s < LABEL_MIN_SCALE || !utile) && !(ef && ef.k > 0.3), x => { v.dom.classList.toggle("no-label", x); });
     }
     for (const e of net.edges) {
       const a = proj.get(e.a), b = proj.get(e.b), line = edgeDom.get(edgeKey(e));
