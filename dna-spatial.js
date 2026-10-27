@@ -87,6 +87,7 @@ const S_TARGET = 0.8;                        // scala a cui devono stare i colle
 const S_FIT_MIN_PIATTA = 0.4;                 // "3D" usa il layout piatto di dna.js, che non si può comprimere: lì ci si allarga di più
 const S_FIT_TUTTI = 0.62;                    // limite dell'allargamento per vedere TUTTI i collegamenti di un nodo
 const S_FIT_MIN = 0.55;                      // quanto si può rimpicciolire per far stare un nodo aperto per intero
+const MAX_NODI_3D = 60;                      // in 3D si disegnano al massimo tanti nodi: con la rete molto aperta gli altri sfumano nella nebbia (come nel Piatto, dove il tetto è 32)
 const RAGGIO_SFERA = 1.7;                    // la sfera si apre più larga del ventaglio piatto
 const MAX_TILT = 0.14;                       // ~8°
 const DRAG_THRESHOLD = 8;                    // come la vista piatta
@@ -972,8 +973,27 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
     return mixG < 1 && cam.crescita ? cam.crescita.zoom + (normale - cam.crescita.zoom) * mixG : normale;
   }
 
+  // Con la rete molto aperta il 3D disegnava tutto (100+ nodi) e diventava illeggibile e meno fluido.
+  // Si tengono i più vicini al nodo attivo: prima per passi di collegamento, poi per distanza nello
+  // spazio (non nello schermo, così ruotando non compaiono e spariscono). Il nodo attivo e la radice
+  // restano sempre. Nel tour e nei voli di camera non si applica: lì la rete si mostra per intero.
+  function nodiAmmessi() {
+    if (!sfera || vis.size <= MAX_NODI_3D || !focusId) return null;
+    if (enfasi.size || cam.viaggio || cam.crescita || nodeK !== 1 || nodeKT !== 1) return null;
+    const f = mostrata(focusId);
+    const lista = [];
+    for (const [id, v] of vis) {
+      const q = mostrata(id);
+      const d = q && f ? Math.hypot(q.x - f.x, q.y - f.y, q.z - f.z) : 0;
+      lista.push({ id, k: (id === focusId || id === net.rootId ? -1 : v.th) * 1e6 + d });
+    }
+    lista.sort((a, b) => a.k - b.k);
+    return new Set(lista.slice(0, MAX_NODI_3D).map(x => x.id));
+  }
+
   function draw() {
     const proj = new Map();
+    const ammessi = nodiAmmessi();
     // Tour: i nodi più lontani del nodo di tappa sbiadiscono (prospettiva atmosferica): è ciò che dà profondità alla scena.
     let zFuoco = 0, profondita = 0;
     for (const [id, f] of enfasi) if (f.k > profondita) { const vv = vis.get(id), nn = net.nodes.get(id); if (vv && nn) { profondita = f.k; zFuoco = project(nn, vv).z; } }
@@ -991,6 +1011,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       }
       if (profondita > 0 && !(ef && ef.k > 0) && !p.dietro) o *= 1 - TOUR_SFUMA * profondita * Math.max(0, Math.min(1, (p.z - zFuoco) / TOUR_PROF));
       if (o < 0.04) o = 0;   // nella nebbia: né disegnato né toccabile
+      if (ammessi && !ammessi.has(id)) o = 0;   // oltre il tetto di nodi disegnati
       p.o = o;
       proj.set(id, p);
       const c = v.cache, st = v.dom.style;
