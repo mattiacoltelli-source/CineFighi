@@ -87,7 +87,21 @@ const S_TARGET = 0.8;                        // scala a cui devono stare i colle
 const S_FIT_MIN_PIATTA = 0.4;                 // "3D" usa il layout piatto di dna.js, che non si può comprimere: lì ci si allarga di più
 const S_FIT_TUTTI = 0.62;                    // limite dell'allargamento per vedere TUTTI i collegamenti di un nodo
 const S_FIT_MIN = 0.55;                      // quanto si può rimpicciolire per far stare un nodo aperto per intero
-const RAGGIO_SFERA = 1.7;                    // la sfera si apre più larga del ventaglio piatto
+// Interruttore di prova: la sfera 3D più larga (raggio 2,0 invece di 1,7) si
+// accende aprendo l'app con ?dna=ampio (resta sul dispositivo) e si spegne con
+// ?dna=normale. Spento di default: per chi non lo accende non cambia niente.
+// Con la sfera ampia un nodo molto connesso può non mostrare tutti i
+// collegamenti a schermo insieme (si ruota per vedere gli altri).
+const DNA_AMPIO_KEY = "cinefighiDnaAmpio";
+export const SFERA_AMPIA = (() => {
+  try {
+    const q = new URLSearchParams(location.search).get("dna");
+    if (q === "ampio") { try { localStorage.setItem(DNA_AMPIO_KEY, "1"); } catch {} return true; }
+    if (q === "normale") { try { localStorage.removeItem(DNA_AMPIO_KEY); } catch {} return false; }
+    return localStorage.getItem(DNA_AMPIO_KEY) === "1";
+  } catch { return false; }
+})();
+const RAGGIO_SFERA = SFERA_AMPIA ? 2.0 : 1.7;                    // la sfera si apre più larga del ventaglio piatto
 const MAX_TILT = 0.14;                       // ~8°
 const DRAG_THRESHOLD = 8;                    // come la vista piatta
 const CULL_MARGIN = 90;
