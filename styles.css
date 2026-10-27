@@ -1507,6 +1507,7 @@ body:has(.app.dna-schermo-intero #screen-tonight:not(.hidden)) .bottom-nav {
 /* Vista pulita (?dna=pulito): i nodi lontani dal nodo attivo si rimpiccioliscono e perdono il "+N";
    le persone non coperte dai film stanno un po' più piccole. Nessun nodo cambia posizione. */
 .dna-spatial .dna-node.is-leggero > :first-child { transform: scale(.5); }
+.dna-spatial .dna-node.is-medio > :first-child { transform: scale(.74); }
 .dna-spatial .dna-node.is-leggero .dna-node__more { display:none; }
 .dna-spatial .dna-node.is-sotto > :first-child { transform: scale(.82); }
 .dna-spatial .dna-node.no-label .dna-node__label { visibility:hidden; }

@@ -1030,6 +1030,7 @@ export function createSpatial({ container, nodeShell, edgeClass, onTap, onMore, 
       if (VISTA_PULITA) {
         setIf(c, "lg", pulito && v.th >= 3 && n.id !== focusId, x => { v.dom.classList.toggle("is-leggero", x); });
         setIf(c, "sotto", sotto, x => { v.dom.classList.toggle("is-sotto", x); });
+        setIf(c, "md", pulito && v.th === 2 && n.id !== focusId, x => { v.dom.classList.toggle("is-medio", x); });
       }
       setIf(c, "tf", !!ef && ef.k > 0.5, x => { v.dom.classList.toggle("is-tour-focus", x); });
       // Vista pulita: l'etichetta serve sul nodo attivo e sui vicini (e sulle persone vicine); gli altri si leggono toccandoli.
