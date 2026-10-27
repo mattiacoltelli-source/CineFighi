@@ -12,10 +12,10 @@
 import {
   buildIndex, createNetwork, expand, collapse, hopsFrom, sharedCountOf, remainingCount, LIKE_THRESHOLD,
   normalizeGenres
-} from "./dna.js?v=c6d7b70";
-import { escapeHtml } from "./cine-core.js?v=c6d7b70";
-import { avatarHtml } from "./ui.js?v=c6d7b70";
-import { createSpatial } from "./dna-spatial.js?v=c6d7b70";
+} from "./dna.js?v=0affd3e";
+import { escapeHtml } from "./cine-core.js?v=0affd3e";
+import { avatarHtml } from "./ui.js?v=0affd3e";
+import { createSpatial } from "./dna-spatial.js?v=0affd3e";
 
 // Quanti vicini apre un tap, e a che distanza dal genitore. Il tetto e' sempre
 // stato una questione di spazio, non di gusto: con cinque figli su un ventaglio
