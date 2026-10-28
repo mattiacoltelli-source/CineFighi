@@ -6,7 +6,7 @@ import {
   average, escapeHtml, posterUrl,
   votingLeaderboard, mostAffinePair, mostDivergentPair, mostDivisive, mostUnanimous,
   groupMemberProfiles, groupProfileStats
-} from "./cine-core.js?v=2745827";
+} from "./cine-core.js?v=4c3c19a";
 import {
   getCurrentUser, setCurrentUser, MAX_USERS,
   getLastSeenAt, setLastSeenAt, getGenreView, setGenreView,
@@ -16,15 +16,15 @@ import {
   loadLatestReport, regenerateReport,
   loadLatestGroupReport, regenerateGroupReport,
   loadLibraryCache, saveLibraryCache, clearLibraryCache
-} from "./storage.js?v=2745827";
-import { tmdbFetchDetail, tmdbSearch } from "./tmdb.js?v=2745827";
+} from "./storage.js?v=4c3c19a";
+import { tmdbFetchDetail, tmdbSearch } from "./tmdb.js?v=4c3c19a";
 import {
   showToast, avatarHtml, initScreens, switchScreen,
   renderShelf, renderSearchResults, renderLibraryList, renderGenreFilters,
   renderGenreBars, renderGenreBubbles, renderRanking, toggleRankingList, renderGroupReport, toggleUserCardFact,
   renderDetailCredits, renderVotesList, renderReportMeta, renderGroupReportMeta, renderReportContent, renderReportGate,
   haptic, animateValue
-} from "./ui.js?v=2745827";
+} from "./ui.js?v=4c3c19a";
 
 // La schermata DNA (dna-view.js + dna.js + dna-spatial.js, ~80 KB compressi) serve solo quando la si apre: non
 // sta nel percorso di avvio, si scarica a parte (e, a app pronta, in un momento di calma, così alla prima
@@ -32,7 +32,7 @@ import {
 let dnaModulo = null;
 function caricaDna() {
   if (!dnaModulo) {
-    dnaModulo = import("./dna-view.js?v=2745827").then(m => { m.initDnaView(); return m; })
+    dnaModulo = import("./dna-view.js?v=4c3c19a").then(m => { m.initDnaView(); return m; })
       .catch(e => { dnaModulo = null; throw e; });
   }
   return dnaModulo;
