@@ -1514,6 +1514,8 @@ async function handleRemove() {
 // ─── EVENTI ───────────────────────────────────────────────────────────────
 
 function bindGlobalEvents() {
+  // Pressione lunga su una locandina: su Android apriva il menu "scarica immagine" (iOS lo evita già col CSS).
+  document.addEventListener("contextmenu", e => { if (e.target instanceof HTMLImageElement) e.preventDefault(); });
   document.getElementById("userChip").addEventListener("click", () => openUserPicker(false));
   // Niente più bottone "✕" dedicato: un tap sullo sfondo scuro (fuori dalla
   // card) chiude, come un qualunque foglio/overlay — ma solo quando il
