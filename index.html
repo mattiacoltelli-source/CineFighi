@@ -360,12 +360,12 @@
           <button class="io-gruppo-btn" data-mode="gruppo">Gruppo</button>
         </div>
 
-        <div id="reportMetaLine" class="report-meta-line">Nessun report ancora generato.</div>
+        <div id="reportMetaLine" class="report-meta-line">&nbsp;</div>
 
         <div id="reportGate" class="empty-state hidden"></div>
 
         <div id="reportBody">
-          <p class="empty-hint">Tocca "Aggiorna" per generare il tuo primo report.</p>
+          <div class="report-skel" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
         </div>
 
         <!-- REPORT DI GRUPPO: le statistiche/podi sotto restano SEMPRE calcolate
@@ -376,7 +376,7 @@
              badge "scritto da Claude" (vedi renderGroupReport in ui.js);
              finché non è mai stato generato restano il testo templato
              calcolato qui, sempre disponibile come fallback. -->
-        <div id="groupReportMetaLine" class="report-meta-line hidden">Nessun report ancora generato.</div>
+        <div id="groupReportMetaLine" class="report-meta-line hidden">&nbsp;</div>
 
         <div id="groupReportBody">
           <div class="taste-block">

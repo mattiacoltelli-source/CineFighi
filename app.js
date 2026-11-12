@@ -270,6 +270,8 @@ async function init() {
 
   if (!daCopia) setTimeout(hideSplash, 850);
   initUpdateCheck();
+  // I report si leggono mentre si è ancora in Home: quando si apre la tab sono già pronti (vedi loadReports).
+  if (currentUser) setTimeout(() => loadReports(), 1200);
 }
 
 function hideSplash() { document.getElementById("splash")?.classList.add("hide"); }
@@ -1017,6 +1019,8 @@ function renderStats({ silent = false } = {}) {
 // volta generato per la prima volta, gli aggiornamenti successivi avvengono
 // da soli una volta all'anno (controllato qui, ad ogni apertura della tab).
 
+const REPORT_SKELETON_HTML = '<div class="report-skel" aria-hidden="true"><i></i><i></i><i></i><i></i></div>';
+
 let reportCache = null;
 let reportRefreshing = false;
 let groupReportCache = null;
@@ -1026,19 +1030,47 @@ function myVotedSeenCount() {
   return db.filter(x => x.status === "seen" && x.votes && x.votes[currentUser]).length;
 }
 
+// Legge insieme il report personale e quello di gruppo (copia locale subito, rete dopo, vedi storage.js). Parte
+// già all'avvio dell'app, così alla prima apertura della tab Report c'è già tutto. La lettura si rifà dopo 10
+// minuti (alla prossima apertura) e cambiando profilo. `reportsLoaded` distingue "non lo so ancora" (si mostra
+// uno scheletro) da "non esiste" (si mostra l'invito a generarlo): senza, per un istante si vedeva il testo
+// "Nessun report ancora generato" o il profilo di gruppo calcolato in locale, poi sostituiti da quello vero.
+const REPORTS_TTL_MS = 10 * 60 * 1000;
+let reportsLoaded = false, reportsPromise = null, reportsUser = null, reportsAt = 0;
+
+function loadReports() {
+  const scaduta = reportsPromise && Date.now() - reportsAt > REPORTS_TTL_MS;
+  if (reportsUser !== currentUser) {
+    reportsUser = currentUser;
+    reportsLoaded = false;
+    reportCache = null;
+    reportsPromise = null;
+  } else if (scaduta) {
+    reportsPromise = null;   // si rilegge, ma restano a schermo quelli che ci sono già
+  }
+  if (!reportsPromise) {
+    reportsAt = Date.now();
+    const user = currentUser;
+    reportsPromise = Promise.all([
+      loadLatestReport(user, updated => { if (user === currentUser) { reportCache = updated; renderReportScreen(); } }),
+      loadLatestGroupReport(updated => { groupReportCache = updated; renderGroupReportScreen(); }),
+    ]).then(([report, groupReport]) => {
+      if (user !== currentUser) return;
+      if (report) reportCache = report;
+      if (groupReport) groupReportCache = groupReport;
+      reportsLoaded = true;
+      // Senza rete e senza copia locale "non esiste" sarebbe una bugia: alla prossima apertura si riprova.
+      if (!report && !navigator.onLine) reportsPromise = null;
+    }, () => { reportsLoaded = true; });
+  }
+  return reportsPromise;
+}
+
 async function renderReport() {
-  const report = await loadLatestReport(currentUser, updated => {
-    reportCache = updated;
-    renderReportScreen();
-  });
-  if (report) reportCache = report;
-
-  const groupReport = await loadLatestGroupReport(updated => {
-    groupReportCache = updated;
-    renderGroupReportScreen();
-  });
-  if (groupReport) groupReportCache = groupReport;
-
+  // Prima si disegna subito quello che c'è già (o lo scheletro), poi, quando la lettura è finita, quello vero.
+  renderReportScreen();
+  renderGroupReportScreen();
+  await loadReports();
   renderReportScreen();
   renderGroupReportScreen();
   maybeAutoRefreshReport();
@@ -1054,13 +1086,19 @@ function renderReportScreen() {
   const hasReport = !!reportCache;
   const isIo = reportMode === "io";
 
-  renderReportMeta(reportCache);
-  renderReportContent(reportCache);
-  renderReportGate(votedCount, MIN_VOTED_FOR_REPORT);
+  const pending = !reportsLoaded && !hasReport;   // ancora non si sa se il report esiste
+  if (pending) {
+    document.getElementById("reportMetaLine").textContent = "\u00a0";
+    document.getElementById("reportBody").innerHTML = REPORT_SKELETON_HTML;
+  } else {
+    renderReportMeta(reportCache);
+    renderReportContent(reportCache);
+    renderReportGate(votedCount, MIN_VOTED_FOR_REPORT);
+  }
 
   document.getElementById("reportMetaLine").classList.toggle("hidden", !isIo);
-  document.getElementById("reportGate").classList.toggle("hidden", !isIo || hasReport || votedCount >= MIN_VOTED_FOR_REPORT);
-  document.getElementById("reportBody").classList.toggle("hidden", !isIo || (!hasReport && votedCount < MIN_VOTED_FOR_REPORT));
+  document.getElementById("reportGate").classList.toggle("hidden", pending || !isIo || hasReport || votedCount >= MIN_VOTED_FOR_REPORT);
+  document.getElementById("reportBody").classList.toggle("hidden", !isIo || (!pending && !hasReport && votedCount < MIN_VOTED_FOR_REPORT));
   document.getElementById("groupReportMetaLine").classList.toggle("hidden", isIo);
   document.getElementById("groupReportBody").classList.toggle("hidden", isIo);
 
@@ -1072,7 +1110,7 @@ function renderReportScreen() {
   // migrazione group_report_cron_4_months — maybeAutoRefreshGroupReport
   // qui resta solo come rete di sicurezza), o subito col gesto nascosto
   // dei 7 tap sul titolo "Report".
-  btn.classList.toggle("hidden", !isIo || hasReport || votedCount < MIN_VOTED_FOR_REPORT);
+  btn.classList.toggle("hidden", pending || !isIo || hasReport || votedCount < MIN_VOTED_FOR_REPORT);
 }
 
 // Report di Gruppo: le statistiche/podi restano SEMPRE ricalcolate al volo
@@ -1085,8 +1123,11 @@ function renderReportScreen() {
 // (Io/Gruppo) sia attiva al momento, così il toggle è sempre pronto senza
 // dover ricalcolare al click.
 function renderGroupReportScreen() {
-  renderGroupReportMeta(groupReportCache);
+  const pending = !reportsLoaded && !groupReportCache;
+  if (pending) document.getElementById("groupReportMetaLine").textContent = "\u00a0";
+  else renderGroupReportMeta(groupReportCache);
   renderGroupReport({
+    pending,
     groupStats: groupProfileStats(db, users),
     memberProfiles: groupMemberProfiles(db, users, { minVotes: MIN_VOTED_FOR_REPORT }),
     leaderboard: votingLeaderboard(db),
@@ -1473,6 +1514,8 @@ async function handleRemove() {
 // ─── EVENTI ───────────────────────────────────────────────────────────────
 
 function bindGlobalEvents() {
+  // Pressione lunga su una locandina: su Android apriva il menu "scarica immagine" (iOS lo evita già col CSS).
+  document.addEventListener("contextmenu", e => { if (e.target instanceof HTMLImageElement) e.preventDefault(); });
   document.getElementById("userChip").addEventListener("click", () => openUserPicker(false));
   // Niente più bottone "✕" dedicato: un tap sullo sfondo scuro (fuori dalla
   // card) chiude, come un qualunque foglio/overlay — ma solo quando il
