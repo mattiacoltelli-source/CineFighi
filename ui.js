@@ -779,7 +779,9 @@ export function toggleUserCardFact(btn) {
 
 const CLAUDE_BADGE = `<span class="by">scritto da Claude</span>`;
 
-export function renderGroupReport({ groupStats, memberProfiles, leaderboard, pair, divergentPair, divisive, unanimous, claudeReport }) {
+const SKELETON_HTML = '<div class="report-skel" aria-hidden="true"><i></i><i></i><i></i><i></i></div>';
+
+export function renderGroupReport({ groupStats, memberProfiles, leaderboard, pair, divergentPair, divisive, unanimous, claudeReport, pending = false }) {
   const wrap = document.getElementById("groupReportBody");
   if (!wrap) return;
 
@@ -796,10 +798,12 @@ export function renderGroupReport({ groupStats, memberProfiles, leaderboard, pai
   const profileTextHtml = claudeProfile?.length
     ? claudeProfile.map(p => `<p>${mdBold(escapeHtml(p))}</p>`).join("")
     : `${groupStats.curatorNote ? `<p>${groupStats.curatorNote}</p>` : ""}${groupStats.contributionNote ? `<p>${groupStats.contributionNote}</p>` : ""}`;
-  profileEl.innerHTML = `${profileTextHtml}${barsHtml}`;
+  // `pending`: non si sa ancora se esiste il testo scritto da Claude; mostrare ora quello calcolato in locale e
+  // poi cambiarlo sarebbe uno sfarfallio, quindi per un istante c'è lo scheletro.
+  profileEl.innerHTML = pending ? SKELETON_HTML : `${profileTextHtml}${barsHtml}`;
 
   const membersEl = document.getElementById("groupReportMembers");
-  membersEl.innerHTML = memberProfiles.length
+  membersEl.innerHTML = pending ? SKELETON_HTML : memberProfiles.length
     ? `<div class="user-grid">${memberProfiles.map(m => userCardHtml(m, claudeMembers.get(m.user))).join("")}</div>`
     : `<p class="empty-hint">Nessuno ha ancora votato abbastanza titoli per un profilo personale.</p>`;
 
